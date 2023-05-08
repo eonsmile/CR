@@ -1,2 +1,3 @@
 filelock
 yfinance
+scikit-learn
