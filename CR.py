@@ -8,6 +8,7 @@ from PIL import Image
 ###########
 # Constants
 ###########
+FN='CR.json'
 DT_FORMAT='%d%b%y'
 
 ######
@@ -18,7 +19,7 @@ st.title('Core Reporter')
 
 # Weights
 st.header('Weights')
-lastUpdateDict=ul.jLoad('lastUpdateDict')
+lastUpdateDict=ul.jLoad('lastUpdateDict',FN)
 dts=[]
 for v in lastUpdateDict.values():
   dts.append(datetime.datetime.strptime(v, DT_FORMAT))
@@ -28,7 +29,7 @@ st.write(f"Last Update: {lastUpdate}")
 dts=[f(dt) for dt in dts]
 
 l=list()
-d=ul.jLoad('IBSDict')
+d=ul.jLoad('IBSDict',FN)
 ep=1e-9
 ibsDict={'SPY':0,
          'QQQ':d['QQQ']+ep,
@@ -36,7 +37,7 @@ ibsDict={'SPY':0,
          'IEF':0,
          'GLD':0,
          'UUP':0}
-d=ul.jLoad('TPPDict')
+d=ul.jLoad('TPPDict',FN)
 tppDict={'SPY':d['SPY']+ep,
          'QQQ':d['QQQ']+ep,
          'TLT':0,
@@ -56,10 +57,10 @@ st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if r
 
 # Realized Performance
 st.header('Realized Performance')
-lastUpdate2=ul.jLoad('lastUpdateDict2')
+lastUpdate2=ul.jLoad('lastUpdateDict2',FN)
 st.write(f"Last Update: {lastUpdate2['realizedPerformance']}")
-st.write(f"MTD: {ul.jLoad('mtd'):.1%}")
-st.write(f"YTD: {ul.jLoad('ytd'):.1%}")
+st.write(f"MTD: {ul.jLoad('mtd',FN):.1%}")
+st.write(f"YTD: {ul.jLoad('ytd',FN):.1%}")
 
 # Backtest - Static
 st.header('Backtest - Static')
