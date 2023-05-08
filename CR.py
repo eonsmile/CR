@@ -108,20 +108,6 @@ if checkPassword():
   df[cols] = df[cols].applymap(lambda n:'' if n==0 else f"{n:.1%}")
   st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if row['Last Update']==lastUpdate else [''] * len(row), axis=1))
 
-  # Realized Performance
-  st.header('Realized Performance')
-  lastUpdate2=ul.jLoad('lastUpdateDict2',FN)
-  st.write(f"Last Update: {lastUpdate2['realizedPerformance']}")
-  st.write(f"MTD: {ul.jLoad('mtd',FN):.1%}")
-  st.write(f"YTD: {ul.jLoad('ytd',FN):.1%}")
-
-  # Backtest - Static
-  st.header('Backtest - Static')
-  st.write(f"Last Update: {lastUpdate2['backtestStatic']}")
-  image = Image.open('BacktestStatic.png')
-  st.image(image)
-  st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
-
   # Beta
   st.header('Beta (Return regressions of futures vs. ETFs)')
   tltTs = getYFinanceS('TLT')
@@ -135,6 +121,20 @@ if checkPassword():
   st.write(f"ZN_IEF beta: {zn_ief_beta:.3f} (Notional of futures to hold per 1x notional of ETF)")
   tn_ief_beta=getBeta(tnTs, iefTs, LOOKBACK_WINDOW)
   st.write(f"TN_IEF beta: {tn_ief_beta:.3f} (Notional of futures to hold per 1x notional of ETF)")
+
+  # Realized Performance
+  st.header('Realized Performance')
+  lastUpdate2=ul.jLoad('lastUpdateDict2',FN)
+  st.write(f"Last Update: {lastUpdate2['realizedPerformance']}")
+  st.write(f"MTD: {ul.jLoad('mtd',FN):.1%}")
+  st.write(f"YTD: {ul.jLoad('ytd',FN):.1%}")
+
+  # Backtest - Static
+  st.header('Backtest - Static')
+  st.write(f"Last Update: {lastUpdate2['backtestStatic']}")
+  image = Image.open('BacktestStatic.png')
+  st.image(image)
+  st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
 
   # Backtest - Live
   st.header('Backtest - Live')
