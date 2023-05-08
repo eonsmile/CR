@@ -1,6 +1,7 @@
-###############
-# Utils Library
-###############
+##############
+# Util Library
+##############
+import pandas as pd
 import pathlib
 import numpy as np
 import os
@@ -48,6 +49,14 @@ def jLoadDict(filename):
 
 ####################################################################################################
 
+# Merge two dataframes or series
+def merge(*args,how='inner'):
+  df=args[0]
+  for i in range(1,len(args)):
+    df2=args[i]
+    df=pd.merge(df,df2,how=how,left_index=True,right_index=True)
+  return df
+
 # Print dictionary
 def printDict(d, indent=0, isSort=True):
   keys=d.keys()
@@ -69,3 +78,4 @@ def printHeader(header=''):
   if len(header) > 0:
     print('['+header+']')
     print()
+
