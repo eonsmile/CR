@@ -44,7 +44,7 @@ def getWeightsDf():
     dts.append(datetime.datetime.strptime(v, DT_FORMAT))
   f = lambda dt: datetime.datetime.strftime(dt, DT_FORMAT)
   lastUpdate = f(np.max(dts))
-  st.write(f"Last Update: {lastUpdate}")
+  st.markdown(f"Last Update: <font color='red'>{lastUpdate}</font>", unsafe_allow_html=True)
   dts = [f(dt) for dt in dts]
 
   l = list()
@@ -116,22 +116,23 @@ if checkPassword():
   znTs = getYFinanceS('ZN=F')
   tnTs = getYFinanceS('TN=F')
   zb_tlt_beta=getBeta(zbTs, tltTs, LOOKBACK_WINDOW)
-  st.write(f"ZB_TLT beta: {zb_tlt_beta:.3f} (Notional of futures to hold per 1x notional of ETF)")
+  suffix=' (Notional of futures to hold per 1x notional of ETF)'
+  st.markdown(f"ZB_TLT beta: <font color='red'>{zb_tlt_beta:.3f}</font>{suffix}", unsafe_allow_html=True)
   zn_ief_beta=getBeta(znTs, iefTs, LOOKBACK_WINDOW)
-  st.write(f"ZN_IEF beta: {zn_ief_beta:.3f} (Notional of futures to hold per 1x notional of ETF)")
+  st.markdown(f"ZN_IEF beta: <font color='red'>{zn_ief_beta:.3f}</font>{suffix}", unsafe_allow_html=True)
   tn_ief_beta=getBeta(tnTs, iefTs, LOOKBACK_WINDOW)
-  st.write(f"TN_IEF beta: {tn_ief_beta:.3f} (Notional of futures to hold per 1x notional of ETF)")
+  st.markdown(f"TN_IEF beta: <font color='red'>{tn_ief_beta:.3f}</font>{suffix}", unsafe_allow_html=True)
 
   # Realized Performance
   st.header('Realized Performance')
   lastUpdate2=ul.jLoad('lastUpdateDict2',FN)
-  st.write(f"Last Update: {lastUpdate2['realizedPerformance']}")
-  st.write(f"MTD: {ul.jLoad('mtd',FN):.1%}")
-  st.write(f"YTD: {ul.jLoad('ytd',FN):.1%}")
+  st.markdown(f"Last Update: <font color='red'>{lastUpdate2['realizedPerformance']}</font>", unsafe_allow_html=True)
+  st.markdown(f"MTD: <font color='red'>{ul.jLoad('mtd',FN):.1%}</font>", unsafe_allow_html=True)
+  st.write(f"YTD: <font color='red'>{ul.jLoad('ytd',FN):.1%}</font>", unsafe_allow_html=True)
 
   # Backtest - Static
   st.header('Backtest - Static')
-  st.write(f"Last Update: {lastUpdate2['backtestStatic']}")
+  st.markdown(f"Last Update: <font color='red'>{lastUpdate2['backtestStatic']}</font>", unsafe_allow_html=True)
   image = Image.open('BacktestStatic.png')
   st.image(image)
   st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
