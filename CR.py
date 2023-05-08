@@ -139,5 +139,5 @@ if checkPassword():
 
   # Backtest - Live
   st.header('Backtest - Live')
-  st.markdown('[Link](https://colab.research.google.com/drive/1dLe29LuqDhMy_MaIgl-OApsuIBwx3kCE?usp=sharing#forceEdit=true&sandboxMode=true)')
+  st.markdown(f"[Link]({st.secrets['url_backtest']})")
 
