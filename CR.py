@@ -16,14 +16,18 @@ DT_FORMAT='%d%b%y'
 ###########
 def checkPassword():
   def m():
-    isOk=st.session_state['isPWOk']=st.session_state['pw'] == st.secrets['password_CR']
-    if isOk: del st.session_state['pw']
+    isPWOk=st.session_state['pw'] == st.secrets['password_CR']
+    st.session_state['isPWOk']=isPWOk
+    if isPWOk: del st.session_state['pw']
+  #####
+  def m2():
+    st.text_input('Password', type='password', on_change=m, key='pw')
   #####
   if 'isPWOk' not in st.session_state:
-    st.text_input('Password', type='password', on_change=m, key='pw')
+    m2()
     return False
   elif not st.session_state['isPWOk']:
-    st.text_input('Password', type='password', on_change=m, key='pw')
+    m2()
     st.error('😕 Password incorrect')
     return False
   else:    
