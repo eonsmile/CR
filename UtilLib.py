@@ -1,6 +1,7 @@
 ##############
 # Util Library
 ##############
+import streamlit as st
 import pandas as pd
 import numpy as np
 import os
@@ -8,10 +9,19 @@ import filelock
 import termcolor
 import json
 
+###########
+# Streamlit
+###########
+def stPageConfig(title):
+  st.set_page_config(page_title=title)
+  st.title(title)
+
+def stRed(label, z):
+  st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
+
 #######
 # Cache
 #######
-# Cache items in memory
 def cacheMemory(mode, key, value=None):
   if not hasattr(cacheMemory, 'd'):
     cacheMemory.d=dict()
@@ -29,28 +39,23 @@ def cacheMemory(mode, key, value=None):
 def jSetFFN(ffn):
   cacheMemory('w','json_ffn',ffn)
 
-# Dump a variable into json file
 def jDump(key, value):
   jDict = jLoadDict()
   jDict[key] = value
   jDumpDict(jDict)
 
-# Dump dict into json file
 def jDumpDict(jDict):
   ffn=cacheMemory('r','json_ffn')
   with filelock.FileLock(f"{ffn}.lock"):
     with open(ffn, 'w') as f:
       json.dump(jDict, f)
 
-# Empty out json file
 def jEmpty():
   jDumpDict(dict())
 
-# Load a variable from json file
 def jLoad(key):
   return jLoadDict().get(key, np.nan)
 
-# Load dict from json file
 def jLoadDict():
   ffn=cacheMemory('r','json_ffn')
   if os.path.exists(ffn):
@@ -63,7 +68,6 @@ def jLoadDict():
 
 ####################################################################################################
 
-# Merge two dataframes or series
 def merge(*args,how='inner'):
   df=args[0]
   for i in range(1,len(args)):
@@ -71,7 +75,6 @@ def merge(*args,how='inner'):
     df=pd.merge(df,df2,how=how,left_index=True,right_index=True)
   return df
 
-# Print dictionary
 def printDict(d, indent=0, isSort=True):
   keys=d.keys()
   if isSort:
@@ -84,7 +87,6 @@ def printDict(d, indent=0, isSort=True):
     else:
       print('\t' * (indent + 1) + str(value))
 
-# Print header
 def printHeader(header='',isCondensed=False,color=None):
   if not isCondensed: print()
   print('-' * 100)
@@ -96,3 +98,4 @@ def printHeader(header='',isCondensed=False,color=None):
     else:
       print(termcolor.colored(z,color))
     if not isCondensed: print()
+

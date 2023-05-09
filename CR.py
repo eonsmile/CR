@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import yfinance as yf
+import QuantLib as ql
 from sklearn.linear_model import LinearRegression
 
 ###########
@@ -95,9 +96,6 @@ def getBeta(ts1, ts2, lookbackWindow):
   #####
   return coef1 if mae1<mae2 else coef2
 
-def stRed(label, z):
-  st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
-
 ######
 # Init
 ######
@@ -110,8 +108,9 @@ ul.jSetFFN(FFN)
 ######
 # Main
 ######
-st.set_page_config(page_title='Core Reporter')
-st.title('Core Reporter')
+z='Core Reporter'
+st.set_page_config(page_title=z)
+st.title(z)
 
 if checkPassword():
 
@@ -138,18 +137,23 @@ if checkPassword():
   # Realized Performance
   st.header('Realized Performance')
   lastUpdate2=ul.jLoad('lastUpdateDict2')
-  stRed('Last Update',lastUpdate2['realizedPerformance'])
-  stRed('MTD',f"{ul.jLoad('mtd'):.1%}")
-  stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
+  ul.stRed('Last Update',lastUpdate2['realizedPerformance'])
+  ul.stRed('MTD',f"{ul.jLoad('mtd'):.1%}")
+  ul.stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
 
   # Backtest - Static
   st.header('Backtest - Static')
-  stRed('Last Update',lastUpdate2['backtestStatic'])
+  ul.stRed('Last Update',lastUpdate2['backtestStatic'])
   image = Image.open('BacktestStatic.png')
   st.image(image)
   st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
 
   # Backtest - Live
   st.header('Backtest - Live')
-  st.markdown(f"[Link]({st.secrets['url_backtest']})")
-
+  if st.button('Run'):
+    st.divider()
+    ql.runIBS()
+    st.divider()
+    ql.runTPP()
+    st.divider()
+    ql.runCore()
