@@ -1,4 +1,4 @@
 filelock
 yfinance
 scikit-learn
-termcolor
+quandl
