@@ -1,3 +1,4 @@
 filelock
 yfinance
 scikit-learn
+termcolor
