@@ -1,6 +1,8 @@
 import streamlit as st
 import UtilLib as ul
 import datetime
+import os
+import pathlib
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -38,7 +40,7 @@ def checkPassword():
 
 def getWeightsDf():
   DT_FORMAT = '%d%b%y'
-  lastUpdateDict = ul.jLoad('lastUpdateDict', FN)
+  lastUpdateDict = ul.jLoad('lastUpdateDict')
   dts = []
   for v in lastUpdateDict.values():
     dts.append(datetime.datetime.strptime(v, DT_FORMAT))
@@ -48,7 +50,7 @@ def getWeightsDf():
   dts = [f(dt) for dt in dts]
 
   l = list()
-  d = ul.jLoad('IBSDict', FN)
+  d = ul.jLoad('IBSDict')
   ep = 1e-9
   ibsDict = {'SPY': 0,
              'QQQ': d['QQQ'] + ep,
@@ -56,7 +58,7 @@ def getWeightsDf():
              'IEF': 0,
              'GLD': 0,
              'UUP': 0}
-  d = ul.jLoad('TPPDict', FN)
+  d = ul.jLoad('TPPDict')
   tppDict = {'SPY': d['SPY'] + ep,
              'QQQ': d['QQQ'] + ep,
              'TLT': 0,
@@ -93,6 +95,18 @@ def getBeta(ts1, ts2, lookbackWindow):
   #####
   return coef1 if mae1<mae2 else coef2
 
+def stRed(label, z):
+  st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
+
+######
+# Init
+######
+if 'OS' in os.environ and os.environ['OS'].startswith('Win'):
+  FFN=f"c:/onedrive/py4/{FN}"
+else:
+  FFN=pathlib.Path(os.path.dirname(__file__)) / FN
+ul.jSetFFN(FFN)
+
 ######
 # Main
 ######
@@ -115,24 +129,22 @@ if checkPassword():
   zbTs = getYFinanceS('ZB=F')
   znTs = getYFinanceS('ZN=F')
   tnTs = getYFinanceS('TN=F')
-  zb_tlt_beta=getBeta(zbTs, tltTs, LOOKBACK_WINDOW)
-  suffix=' (Notional of futures to hold per 1x notional of ETF)'
-  st.markdown(f"ZB_TLT beta: <font color='red'>{zb_tlt_beta:.3f}</font>{suffix}", unsafe_allow_html=True)
-  zn_ief_beta=getBeta(znTs, iefTs, LOOKBACK_WINDOW)
-  st.markdown(f"ZN_IEF beta: <font color='red'>{zn_ief_beta:.3f}</font>{suffix}", unsafe_allow_html=True)
-  tn_ief_beta=getBeta(tnTs, iefTs, LOOKBACK_WINDOW)
-  st.markdown(f"TN_IEF beta: <font color='red'>{tn_ief_beta:.3f}</font>{suffix}", unsafe_allow_html=True)
+  #####
+  def m(label, beta): st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
+  m('ZB_TLT beta',getBeta(zbTs, tltTs, LOOKBACK_WINDOW))
+  m('ZN_IEF beta', getBeta(znTs, iefTs, LOOKBACK_WINDOW))
+  m('TN_IEF beta', getBeta(tnTs, iefTs, LOOKBACK_WINDOW))
 
   # Realized Performance
   st.header('Realized Performance')
-  lastUpdate2=ul.jLoad('lastUpdateDict2',FN)
-  st.markdown(f"Last Update: <font color='red'>{lastUpdate2['realizedPerformance']}</font>", unsafe_allow_html=True)
-  st.markdown(f"MTD: <font color='red'>{ul.jLoad('mtd',FN):.1%}</font>", unsafe_allow_html=True)
-  st.write(f"YTD: <font color='red'>{ul.jLoad('ytd',FN):.1%}</font>", unsafe_allow_html=True)
+  lastUpdate2=ul.jLoad('lastUpdateDict2')
+  stRed('Last Update',lastUpdate2['realizedPerformance'])
+  stRed('MTD',f"{ul.jLoad('mtd'):.1%}")
+  stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
 
   # Backtest - Static
   st.header('Backtest - Static')
-  st.markdown(f"Last Update: <font color='red'>{lastUpdate2['backtestStatic']}</font>", unsafe_allow_html=True)
+  stRed('Last Update',lastUpdate2['backtestStatic'])
   image = Image.open('BacktestStatic.png')
   st.image(image)
   st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')

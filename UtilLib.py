@@ -2,46 +2,60 @@
 # Util Library
 ##############
 import pandas as pd
-import pathlib
 import numpy as np
 import os
 import filelock
+import termcolor
 import json
+
+#######
+# Cache
+#######
+# Cache items in memory
+def cacheMemory(mode, key, value=None):
+  if not hasattr(cacheMemory, 'd'):
+    cacheMemory.d=dict()
+  if mode=='w':
+    cacheMemory.d[key]=value
+  elif mode=='r':
+    try:
+      return cacheMemory.d[key]
+    except:
+      return None
 
 ######
 # JSON
 ######
-# Get full filname for a data file
-def getDataFN(fn):
-  return pathlib.Path(os.path.dirname(__file__)) / fn
+def jSetFFN(ffn):
+  cacheMemory('w','json_ffn',ffn)
 
 # Dump a variable into json file
-def jDump(key, value, filename):
-  jDict = jLoadDict(filename)
+def jDump(key, value):
+  jDict = jLoadDict()
   jDict[key] = value
-  jDumpDict(jDict, filename)
+  jDumpDict(jDict)
 
 # Dump dict into json file
-def jDumpDict(jDict,filename):
-  fn=getDataFN(filename)
-  with filelock.FileLock(f"{fn}.lock"):
-    with open(fn, 'w') as f:
+def jDumpDict(jDict):
+  ffn=cacheMemory('r','json_ffn')
+  with filelock.FileLock(f"{ffn}.lock"):
+    with open(ffn, 'w') as f:
       json.dump(jDict, f)
 
 # Empty out json file
-def jEmpty(filename):
-  jDumpDict(dict(),filename)
+def jEmpty():
+  jDumpDict(dict())
 
 # Load a variable from json file
-def jLoad(key,filename):
-  return jLoadDict(filename).get(key, np.nan)
+def jLoad(key):
+  return jLoadDict().get(key, np.nan)
 
 # Load dict from json file
-def jLoadDict(filename):
-  fn=getDataFN(filename)
-  if os.path.exists(fn):
-    with filelock.FileLock(f"{fn}.lock"):
-      with open(fn) as f:
+def jLoadDict():
+  ffn=cacheMemory('r','json_ffn')
+  if os.path.exists(ffn):
+    with filelock.FileLock(f"{ffn}.lock"):
+      with open(ffn) as f:
         jDict=json.load(f)
   else:
     jDict=dict()
@@ -71,11 +85,14 @@ def printDict(d, indent=0, isSort=True):
       print('\t' * (indent + 1) + str(value))
 
 # Print header
-def printHeader(header=''):
-  print()
+def printHeader(header='',isCondensed=False,color=None):
+  if not isCondensed: print()
   print('-' * 100)
-  print()
+  if not isCondensed: print()
   if len(header) > 0:
-    print('['+header+']')
-    print()
-
+    z=f"[{header}]"
+    if color is None:
+      print(z)
+    else:
+      print(termcolor.colored(z,color))
+    if not isCondensed: print()
