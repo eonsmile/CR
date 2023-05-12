@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import os
 import filelock
-import termcolor
 import json
 
 ###########
@@ -87,15 +86,10 @@ def printDict(d, indent=0, isSort=True):
     else:
       print('\t' * (indent + 1) + str(value))
 
-def printHeader(header='',isCondensed=False,color=None):
+def printHeader(header='',isCondensed=False):
   if not isCondensed: print()
   print('-' * 100)
   if not isCondensed: print()
   if len(header) > 0:
-    z=f"[{header}]"
-    if color is None:
-      print(z)
-    else:
-      print(termcolor.colored(z,color))
+    print(f"[{header}]")
     if not isCondensed: print()
-
