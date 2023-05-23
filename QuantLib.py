@@ -16,7 +16,7 @@ import quandl
 # Constants
 ###########
 FN='Quant.json'
-quandl.ApiConfig.api_key = st.secrets['quandl_api']
+quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 if 'OS' in os.environ and os.environ['OS'].startswith('Win'):
   FFN=f"c:/onedrive/py4/{FN}"
 else:
