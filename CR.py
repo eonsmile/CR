@@ -135,11 +135,11 @@ if checkPassword():
   m('TN_IEF beta', getBeta(tnTs, iefTs, LOOKBACK_WINDOW))
 
   # Realized Performance
-  st.header('Realized Performance')
-  lastUpdate2=ul.jLoad('lastUpdateDict2')
-  ul.stRed('Last Update',lastUpdate2['realizedPerformance'])
-  ul.stRed('MTD',f"{ul.jLoad('mtd'):.1%}")
-  ul.stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
+  #st.header('Realized Performance')
+  #lastUpdate2=ul.jLoad('lastUpdateDict2')
+  #ul.stRed('Last Update',lastUpdate2['realizedPerformance'])
+  #ul.stRed('MTD',f"{ul.jLoad('mtd'):.1%}")
+  #ul.stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
 
   # Backtest - Static
   st.header('Backtest - Static')
