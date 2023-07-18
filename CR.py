@@ -142,14 +142,14 @@ if checkPassword():
   #ul.stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
 
   # Backtest - Static
-  st.header('Backtest - Static')
-  ul.stRed('Last Update',lastUpdate2['backtestStatic'])
-  image = Image.open('BacktestStatic.png')
-  st.image(image)
-  st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
+  #st.header('Backtest - Static')
+  #ul.stRed('Last Update',lastUpdate2['backtestStatic'])
+  #image = Image.open('BacktestStatic.png')
+  #st.image(image)
+  #st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
 
-  # Backtest - Live
-  st.header('Backtest - Live')
+  # Backtest
+  st.header('Backtest')
   if st.button('Run'):
     st.divider()
     ql.runIBS()
