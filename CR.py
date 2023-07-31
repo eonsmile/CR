@@ -134,20 +134,6 @@ if checkPassword():
   m('ZN_IEF beta', getBeta(znTs, iefTs, LOOKBACK_WINDOW))
   m('TN_IEF beta', getBeta(tnTs, iefTs, LOOKBACK_WINDOW))
 
-  # Realized Performance
-  #st.header('Realized Performance')
-  #lastUpdate2=ul.jLoad('lastUpdateDict2')
-  #ul.stRed('Last Update',lastUpdate2['realizedPerformance'])
-  #ul.stRed('MTD',f"{ul.jLoad('mtd'):.1%}")
-  #ul.stRed('YTD',f"{ul.jLoad('ytd'):.1%}")
-
-  # Backtest - Static
-  #st.header('Backtest - Static')
-  #ul.stRed('Last Update',lastUpdate2['backtestStatic'])
-  #image = Image.open('BacktestStatic.png')
-  #st.image(image)
-  #st.markdown('YTD figures under **Realized Performance** can be different to those under **Backtest - Static** because of model changes implemented since the beginning of the year.')
-
   # Backtest
   st.header('Backtest')
   if st.button('Run'):

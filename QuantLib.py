@@ -329,6 +329,6 @@ def runCore():
   dp2 = dp.copy()
   dp2[script] = pd.read_json(ul.jLoad(script), typ='series')
   dp2 = dp2[[script] + strategies]
-  dp2 = dp2.loc[:datetime.datetime.today().date() + datetime.timedelta(days=-1)]
+  #dp2 = dp2.loc[:datetime.datetime.today().date() + datetime.timedelta(days=-1)]
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
   stWriteDf(dp2, isMaxHeight=True)
