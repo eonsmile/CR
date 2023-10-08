@@ -2,3 +2,5 @@ filelock
 yfinance
 scikit-learn
 quandl
+pendulum
+termcolor

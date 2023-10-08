@@ -5,8 +5,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import pendulum
 import filelock
 import json
+import termcolor
 
 ###########
 # Streamlit
@@ -67,6 +69,12 @@ def jLoadDict():
 
 ####################################################################################################
 
+def colored(z, color=None, on_color=None, attrs=None):
+  return termcolor.colored(z, color=color, on_color=on_color, attrs=attrs)
+
+def getCurrentTime(isCondensed=False):
+  return pendulum.now().format(f"{'' if isCondensed else 'YYYY-MM-DD'} HH:mm:ss")
+
 def merge(*args,how='inner'):
   df=args[0]
   for i in range(1,len(args)):
@@ -86,10 +94,14 @@ def printDict(d, indent=0, isSort=True):
     else:
       print('\t' * (indent + 1) + str(value))
 
-def printHeader(header='',isCondensed=False):
+def printHeader(header='',isCondensed=False,isAddTime=False, color=None):
   if not isCondensed: print()
   print('-' * 100)
   if not isCondensed: print()
   if len(header) > 0:
-    print(f"[{header}]")
+    z=f"[{header}{'' if not isAddTime else f' - {getCurrentTime()}'}]"
+    if color is None:
+      print(z)
+    else:
+      print(colored(z,color))
     if not isCondensed: print()

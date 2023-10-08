@@ -5,7 +5,6 @@ import os
 import pathlib
 import numpy as np
 import pandas as pd
-from PIL import Image
 import yfinance as yf
 import QuantLib as ql
 from sklearn.linear_model import LinearRegression
