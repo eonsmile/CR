@@ -53,8 +53,6 @@ def bt(script,dp,dw,yrStart=2011):
   dwAllOrNone(dw2)
   validRows = ~dw2.isnull().any(axis=1)
   dtOrigin = dw2[validRows].index[np.where(pendulum.parse(str(dw2[validRows].index)).year < yrStart)[0][-1]]
-  #validRows = ~dw2.isnull().any(axis=1)
-  #dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
   dp2 = dp2.iloc[dp2.index >= dtOrigin]
   dw2 = dw2.iloc[dw2.index >= dtOrigin]
   ecTs = dp2.iloc[:, 0].rename('Equity Curve') * 0
@@ -69,7 +67,6 @@ def bt(script,dp,dw,yrStart=2011):
       p = dp2.iloc[i]
       ec = ecTs[i]
   printCalendar(ecTs)
-  #nYears = (ecTs.index[-1] - ecTs.index[0]).days / 365
   nYears = pendulum.parse(str(ecTs.index[-1])).diff(pendulum.parse(str(ecTs.index[0]))).in_years()
   cagr = math.pow(ecTs[-1] / ecTs[0], 1 / nYears) - 1
   dd = ecTs / ecTs.cummax() - 1
@@ -129,8 +126,6 @@ def printCalendar(ts):
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
   df.index = pd.to_datetime(df.index)
-  #df['Year'] = df.index.strftime('%Y')
-  #df['Month'] = df.index.strftime('%b')
   df['Year'] = df.index.map(lambda x: pendulum.parse(str(x)).format('YYYY'))
   df['Month'] = df.index.map(lambda x: pendulum.parse(str(x)).format('MMM'))
   df = pd.pivot_table(data=df, index='Year', columns='Month', values='Returns', fill_value=0)
@@ -175,12 +170,7 @@ def EMA(ts,n):
   return ts.ewm(span=n,min_periods=n,adjust=False).mean().rename('EMA')
 
 # https://quantstrattrader.wordpress.com/author/ikfuntech/
-def endpoints(df, on='M', offset=0):
-  #if len(on) > 3:
-  #  on = on[0].capitalize()
-  #ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
-  if len(on) > 3:
-    on = on[0].capitalize()
+def endpoints(df, offset=0):
   ep_dates = pd.Series(df.index, index=df.index).apply(lambda x: pendulum.parse(str(x)).end_of('month'))
   date_idx = np.where(df.index.isin(ep_dates))
   date_idx = np.insert(date_idx, 0, 0)
@@ -205,7 +195,6 @@ def getHV(ts, n=32):
 
 # Get price history
 def getPriceHistory(und,yrStart=2009):
-  #dtStart=str(yrStart)+ '-1-1'
   dtStart = pendulum.datetime(yrStart, 1, 1).to_date_string()
   df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
   df = df[['date', 'adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']]
@@ -338,6 +327,5 @@ def runCore():
   dp2 = dp.copy()
   dp2[script] = pd.read_json(ul.jLoad(script), typ='series')
   dp2 = dp2[[script] + strategies]
-  #dp2 = dp2.loc[:datetime.datetime.today().date() + datetime.timedelta(days=-1)]
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
   stWriteDf(dp2, isMaxHeight=True)
