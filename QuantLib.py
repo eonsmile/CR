@@ -52,7 +52,7 @@ def bt(script,dp,dw,yrStart=2011):
   dw2 = dw.copy()
   dwAllOrNone(dw2)
   validRows = ~dw2.isnull().any(axis=1)
-  dtOrigin = dw2[validRows].index[np.where(pendulum.parse(str(dw2[validRows].index)).year < yrStart)[0][-1]]
+  dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
   dp2 = dp2.iloc[dp2.index >= dtOrigin]
   dw2 = dw2.iloc[dw2.index >= dtOrigin]
   ecTs = dp2.iloc[:, 0].rename('Equity Curve') * 0
@@ -67,7 +67,7 @@ def bt(script,dp,dw,yrStart=2011):
       p = dp2.iloc[i]
       ec = ecTs[i]
   printCalendar(ecTs)
-  nYears = pendulum.parse(str(ecTs.index[-1])).diff(pendulum.parse(str(ecTs.index[0]))).in_years()
+  nYears = (ecTs.index[-1] - ecTs.index[0]).days / 365
   cagr = math.pow(ecTs[-1] / ecTs[0], 1 / nYears) - 1
   dd = ecTs / ecTs.cummax() - 1
   upi = cagr / np.sqrt(np.power(dd, 2).mean())
@@ -126,8 +126,8 @@ def printCalendar(ts):
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
   df.index = pd.to_datetime(df.index)
-  df['Year'] = df.index.map(lambda x: pendulum.parse(str(x)).format('YYYY'))
-  df['Month'] = df.index.map(lambda x: pendulum.parse(str(x)).format('MMM'))
+  df['Year'] = df.index.strftime('%Y')
+  df['Month'] = df.index.strftime('%b')
   df = pd.pivot_table(data=df, index='Year', columns='Month', values='Returns', fill_value=0)
   df = df[['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']]
   df['Year'] = rgroup(r, r.index.year).values
@@ -154,14 +154,14 @@ def cleanTs(ts,isMonthlyRebal=True):
       if ts.iloc[i].equals(tmp.iloc[i]):
         ts.iloc[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts)
+      pe=endpoints(ts,'M')
       ts.iloc[pe]=ts.fillna(method='pad').iloc[pe]
   else:
     for i in range(1,len(ts)):
       if ts[i]==tmp[i]:
         ts[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts)
+      pe=endpoints(ts,'M')
       ts[pe]=ts.fillna(method='pad')[pe]
   return ts
 
@@ -170,8 +170,10 @@ def EMA(ts,n):
   return ts.ewm(span=n,min_periods=n,adjust=False).mean().rename('EMA')
 
 # https://quantstrattrader.wordpress.com/author/ikfuntech/
-def endpoints(df, offset=0):
-  ep_dates = pd.Series(df.index, index=df.index).apply(lambda x: pendulum.parse(str(x)).end_of('month'))
+def endpoints(df, on='M', offset=0):
+  if len(on) > 3:
+    on = on[0].capitalize()
+  ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
   date_idx = np.where(df.index.isin(ep_dates))
   date_idx = np.insert(date_idx, 0, 0)
   date_idx = np.append(date_idx, df.shape[0] - 1)
@@ -277,7 +279,7 @@ def runTPP():
   isOkDf = (ratioDf >= 1) * 1
   wDf = (1 / hv) * isOkDf
   rDf = np.log(dp / dp.shift(1))
-  for i in endpoints(rDf):
+  for i in endpoints(rDf, 'M'):
     origin = i - lookback + 1
     if origin >= 0:
       prTs = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
@@ -315,7 +317,7 @@ def runCore():
     dp[strategy] = pd.read_json(d[strategy], typ='series')
   dp = applyDates(dp, dp[strategies[1]]).fillna(method='pad')
   dw = dp * np.nan
-  pe = endpoints(dw)
+  pe = endpoints(dw, 'M')
   for i in range(len(weights)):
     dw[strategies[i]].iloc[pe] = weights[i]
   #####
