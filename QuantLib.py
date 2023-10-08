@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import math
 import quandl
+import pendulum
 
 ###########
 # Constants
@@ -51,7 +52,9 @@ def bt(script,dp,dw,yrStart=2011):
   dw2 = dw.copy()
   dwAllOrNone(dw2)
   validRows = ~dw2.isnull().any(axis=1)
-  dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
+  dtOrigin = dw2[validRows].index[np.where(pendulum.parse(str(dw2[validRows].index)).year < yrStart)[0][-1]]
+  #validRows = ~dw2.isnull().any(axis=1)
+  #dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
   dp2 = dp2.iloc[dp2.index >= dtOrigin]
   dw2 = dw2.iloc[dw2.index >= dtOrigin]
   ecTs = dp2.iloc[:, 0].rename('Equity Curve') * 0
@@ -66,7 +69,8 @@ def bt(script,dp,dw,yrStart=2011):
       p = dp2.iloc[i]
       ec = ecTs[i]
   printCalendar(ecTs)
-  nYears = (ecTs.index[-1] - ecTs.index[0]).days / 365
+  #nYears = (ecTs.index[-1] - ecTs.index[0]).days / 365
+  nYears = pendulum.parse(str(ecTs.index[-1])).diff(pendulum.parse(str(ecTs.index[0]))).in_years()
   cagr = math.pow(ecTs[-1] / ecTs[0], 1 / nYears) - 1
   dd = ecTs / ecTs.cummax() - 1
   upi = cagr / np.sqrt(np.power(dd, 2).mean())
@@ -125,8 +129,10 @@ def printCalendar(ts):
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
   df.index = pd.to_datetime(df.index)
-  df['Year'] = df.index.strftime('%Y')
-  df['Month'] = df.index.strftime('%b')
+  #df['Year'] = df.index.strftime('%Y')
+  #df['Month'] = df.index.strftime('%b')
+  df['Year'] = df.index.map(lambda x: pendulum.parse(str(x)).format('YYYY'))
+  df['Month'] = df.index.map(lambda x: pendulum.parse(str(x)).format('MMM'))
   df = pd.pivot_table(data=df, index='Year', columns='Month', values='Returns', fill_value=0)
   df = df[['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']]
   df['Year'] = rgroup(r, r.index.year).values
@@ -170,9 +176,12 @@ def EMA(ts,n):
 
 # https://quantstrattrader.wordpress.com/author/ikfuntech/
 def endpoints(df, on='M', offset=0):
+  #if len(on) > 3:
+  #  on = on[0].capitalize()
+  #ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
   if len(on) > 3:
     on = on[0].capitalize()
-  ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
+  ep_dates = pd.Series(df.index, index=df.index).apply(lambda x: pendulum.parse(str(x)).end_of('month'))
   date_idx = np.where(df.index.isin(ep_dates))
   date_idx = np.insert(date_idx, 0, 0)
   date_idx = np.append(date_idx, df.shape[0] - 1)
@@ -196,7 +205,8 @@ def getHV(ts, n=32):
 
 # Get price history
 def getPriceHistory(und,yrStart=2009):
-  dtStart=str(yrStart)+ '-1-1'
+  #dtStart=str(yrStart)+ '-1-1'
+  dtStart = pendulum.datetime(yrStart, 1, 1).to_date_string()
   df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
   df = df[['date', 'adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']]
   df = df.sort_values(by=['date'])
