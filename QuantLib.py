@@ -154,14 +154,14 @@ def cleanTs(ts,isMonthlyRebal=True):
       if ts.iloc[i].equals(tmp.iloc[i]):
         ts.iloc[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts,'M')
+      pe=endpoints(ts)
       ts.iloc[pe]=ts.fillna(method='pad').iloc[pe]
   else:
     for i in range(1,len(ts)):
       if ts[i]==tmp[i]:
         ts[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts,'M')
+      pe=endpoints(ts)
       ts[pe]=ts.fillna(method='pad')[pe]
   return ts
 
@@ -277,7 +277,7 @@ def runTPP():
   isOkDf = (ratioDf >= 1) * 1
   wDf = (1 / hv) * isOkDf
   rDf = np.log(dp / dp.shift(1))
-  for i in endpoints(rDf, 'M'):
+  for i in endpoints(rDf):
     origin = i - lookback + 1
     if origin >= 0:
       prTs = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
@@ -315,7 +315,7 @@ def runCore():
     dp[strategy] = pd.read_json(d[strategy], typ='series')
   dp = applyDates(dp, dp[strategies[1]]).fillna(method='pad')
   dw = dp * np.nan
-  pe = endpoints(dw, 'M')
+  pe = endpoints(dw)
   for i in range(len(weights)):
     dw[strategies[i]].iloc[pe] = weights[i]
   #####
