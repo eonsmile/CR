@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import math
 import quandl
-import pendulum
 
 ###########
 # Constants
@@ -197,7 +196,7 @@ def getHV(ts, n=32):
 
 # Get price history
 def getPriceHistory(und,yrStart=2009):
-  dtStart = pendulum.datetime(yrStart, 1, 1).to_date_string()
+  dtStart=str(yrStart)+ '-1-1'
   df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
   df = df[['date', 'adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']]
   df = df.sort_values(by=['date'])
