@@ -1,8 +1,6 @@
 import streamlit as st
 import UtilLib as ul
 import datetime
-import os
-import pathlib
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -12,7 +10,6 @@ from sklearn.linear_model import LinearRegression
 ###########
 # Constants
 ###########
-FN='CR.json'
 LOOKBACK_WINDOW=90
 FROM_YEAR=2022
 
@@ -40,7 +37,7 @@ def checkPassword():
 
 def getWeightsDf():
   DT_FORMAT = '%d%b%y'
-  lastUpdateDict = ul.jLoad('lastUpdateDict')
+  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
   dts = []
   for v in lastUpdateDict.values():
     dts.append(datetime.datetime.strptime(v, DT_FORMAT))
@@ -50,7 +47,7 @@ def getWeightsDf():
   dts = [f(dt) for dt in dts]
 
   l = list()
-  d = ul.jLoad('IBSDict')
+  d = ul.cachePersist('r', 'CR')['IBSDict']
   ep = 1e-9
   ibsDict = {'SPY': 0,
              'QQQ': d['QQQ'] + ep,
@@ -58,7 +55,7 @@ def getWeightsDf():
              'IEF': 0,
              'GLD': 0,
              'UUP': 0}
-  d = ul.jLoad('TPPDict')
+  d = ul.cachePersist('r', 'CR')['TPPDict']
   tppDict = {'SPY': d['SPY'] + ep,
              'QQQ': d['QQQ'] + ep,
              'TLT': 0,
@@ -94,15 +91,6 @@ def getBeta(ts1, ts2, lookbackWindow):
   mae2 = np.mean(abs(X - y * coef2))
   #####
   return coef1 if mae1<mae2 else coef2
-
-######
-# Init
-######
-if 'OS' in os.environ and os.environ['OS'].startswith('Win'):
-  FFN=f"c:/onedrive/py4/{FN}"
-else:
-  FFN=pathlib.Path(os.path.dirname(__file__)) / FN
-ul.jSetFFN(FFN)
 
 ######
 # Main

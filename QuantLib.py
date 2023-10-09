@@ -3,9 +3,6 @@
 ###############
 import UtilLib as ul
 import streamlit as st
-import sys
-import os
-import pathlib
 import numpy as np
 import pandas as pd
 import math
@@ -14,33 +11,13 @@ import quandl
 ###########
 # Constants
 ###########
-FN='Quant.json'
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
-if 'OS' in os.environ and os.environ['OS'].startswith('Win'):
-  FFN=f"c:/onedrive/py4/{FN}"
-else:
-  FFN=pathlib.Path(os.path.dirname(__file__)) / FN
-  pd.options.display.max_columns = 80
-ul.jSetFFN(FFN)
 
 #############################################################################################
 
 ###########
 # Functions
 ###########
-###########
-# Streamlit
-###########
-def stWriteDf(df,isMaxHeight=False):
-  df2 = df.copy()
-  if isinstance(df2.index, pd.DatetimeIndex):
-    df2.index = pd.to_datetime(df2.index).strftime('%Y-%m-%d')
-  if isMaxHeight:
-    height = (len(df2) + 1) * 35 + 3
-    st.dataframe(df2, height=height)
-  else:
-    st.write(df2)
-
 ##########
 # Backtest
 ##########
@@ -77,7 +54,7 @@ def bt(script,dp,dw,yrStart=2011):
   ul.stRed('MAR',f"{cagr/maxDD:.2f}")
   ul.stRed('Cagr',f"{cagr:.2%}")
   ul.stRed('MaxDD',f"{maxDD:.2%}")
-  ecSave(script, ecTs)
+  ul.cachePersist('w',script,ecTs)
 
 # Setup backtest
 def btSetup(tickers,hvN=32,applyDatesTs=None):
@@ -106,11 +83,7 @@ def dwAllOrNone(dw):
 
 # Nicer tail of dw
 def dwTail(dw,n=5):
-  stWriteDf(round(dw.dropna().tail(n), 3))
-
-# Save equity curves
-def ecSave(script,ecTs):
-  ul.jDump(script,ecTs.to_json())
+  ul.stWriteDf(round(dw.dropna().tail(n), 3))
 
 # Print calendar
 def printCalendar(ts):
@@ -170,8 +143,6 @@ def EMA(ts,n):
 
 # https://quantstrattrader.wordpress.com/author/ikfuntech/
 def endpoints(df, on='M', offset=0):
-  if len(on) > 3:
-    on = on[0].capitalize()
   ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
   date_idx = np.where(df.index.isin(ep_dates))
   date_idx = np.insert(date_idx, 0, 0)
@@ -208,7 +179,7 @@ def getPriceHistory(und,yrStart=2009):
 # Get stateTs based on entry and exit time series
 def getStateTs(isEntryTs,isExitTs,isCleaned=False):
   if len(isEntryTs)!=len(isExitTs):
-    sys.exit(1)
+    ul.iExit('getStateTs')
   stateTs=(isEntryTs*np.nan).rename('State')
   state=0
   for i in range(len(stateTs)):
@@ -253,7 +224,7 @@ def runIBS():
   #####
   def m(und, ibsTs, df, stateTs):
     st.subheader(und)
-    stWriteDf(ul.merge(round(ibsTs, 3), df['Close'], df['High'], stateTs.fillna(method='pad')).tail())
+    ul.stWriteDf(ul.merge(round(ibsTs, 3), df['Close'], df['High'], stateTs.fillna(method='pad')).tail())
   #####
   m(undE, ibsTsE, dfDict[undE], stateTsE)
   m(undB, ibsTsB, dfDict[undB], stateTsB)
@@ -286,9 +257,9 @@ def runTPP():
       dw.iloc[i] = wDf.iloc[i] * volTgt / pHv
   dw.clip(0, maxWgt, inplace=True)
   st.header('Prices')
-  stWriteDf(dp.tail())
+  ul.stWriteDf(dp.tail())
   st.header('Ratios')
-  stWriteDf(round(ratioDf, 4).tail())
+  ul.stWriteDf(round(ratioDf, 4).tail())
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
@@ -307,13 +278,12 @@ def runCore():
   st.header('Weights')
   z = zip(strategies, weights)
   df = pd.DataFrame(z, columns=['Strategy', 'Weight']).set_index('Strategy')
-  stWriteDf(df)
+  ul.stWriteDf(df)
   #####
   # Calcs
-  d = ul.jLoadDict()
   dp = pd.DataFrame()
   for strategy in strategies:
-    dp[strategy] = pd.read_json(d[strategy], typ='series')
+    dp[strategy] = ul.cachePersist('r',strategy)
   dp = applyDates(dp, dp[strategies[1]]).fillna(method='pad')
   dw = dp * np.nan
   pe = endpoints(dw, 'M')
@@ -326,7 +296,7 @@ def runCore():
   # Recent performance
   st.header('Recent Performance')
   dp2 = dp.copy()
-  dp2[script] = pd.read_json(ul.jLoad(script), typ='series')
+  dp2[script] = ul.cachePersist('r',script)
   dp2 = dp2[[script] + strategies]
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
-  stWriteDf(dp2, isMaxHeight=True)
+  ul.stWriteDf(dp2, isMaxHeight=True)

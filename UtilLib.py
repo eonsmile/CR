@@ -3,12 +3,21 @@
 ##############
 import streamlit as st
 import pandas as pd
-import numpy as np
+import pathlib
 import os
 import pendulum
-import filelock
-import json
+import pickle
+import time
 import termcolor
+from filelock import FileLock
+
+###########
+# Constants
+###########
+if 'OS' in os.environ and os.environ['OS'].startswith('Win'):
+  CACHE_DIR=f"c:/cache"
+else:
+  CACHE_DIR=pathlib.Path(os.path.dirname(__file__))
 
 ###########
 # Streamlit
@@ -19,6 +28,16 @@ def stPageConfig(title):
 
 def stRed(label, z):
   st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
+
+def stWriteDf(df,isMaxHeight=False):
+  df2 = df.copy()
+  if isinstance(df2.index, pd.DatetimeIndex):
+    df2.index = pd.to_datetime(df2.index).strftime('%Y-%m-%d')
+  if isMaxHeight:
+    height = (len(df2) + 1) * 35 + 3
+    st.dataframe(df2, height=height)
+  else:
+    st.write(df2)
 
 #######
 # Cache
@@ -34,46 +53,33 @@ def cacheMemory(mode, key, value=None):
     except:
       return None
 
-######
-# JSON
-######
-def jSetFFN(ffn):
-  cacheMemory('w','json_ffn',ffn)
+def cachePersist(mode, key, value=None, expireMins=1e9):
+  if mode=='r' and expireMins is None: iExit(f"cachePersist (mode=='{mode}'; key=='{key}'; expireMins=='{expireMins}')")
+  path = pathlib.Path(CACHE_DIR)
+  if not path.exists(): iExit(f"cachePersist (path=='{path}')")
+  ffn = path / f"{key}.pickle"
+  with FileLock(f"{ffn}.lock"):
+    if mode=='w':
+      with ffn.open('wb') as f: pickle.dump(value, f)
+    elif mode=='r':
+      if (not ffn.exists()) or (time.time() - ffn.lstat().st_mtime >= 60*expireMins): return None
+      with ffn.open('rb') as f: return pickle.load(f)
+    else:
+      iExit(f"cachePersist (mode=='{mode}')")
 
-def jDump(key, value):
-  jDict = jLoadDict()
-  jDict[key] = value
-  jDumpDict(jDict)
-
-def jDumpDict(jDict):
-  ffn=cacheMemory('r','json_ffn')
-  with filelock.FileLock(f"{ffn}.lock"):
-    with open(ffn, 'w') as f:
-      json.dump(jDict, f)
-
-def jEmpty():
-  jDumpDict(dict())
-
-def jLoad(key):
-  return jLoadDict().get(key, np.nan)
-
-def jLoadDict():
-  ffn=cacheMemory('r','json_ffn')
-  if os.path.exists(ffn):
-    with filelock.FileLock(f"{ffn}.lock"):
-      with open(ffn) as f:
-        jDict=json.load(f)
-  else:
-    jDict=dict()
-  return jDict
-
-####################################################################################################
-
+#####
+# Etc
+#####
 def colored(z, color=None, on_color=None, attrs=None):
   return termcolor.colored(z, color=color, on_color=on_color, attrs=attrs)
 
 def getCurrentTime(isCondensed=False):
   return pendulum.now().format(f"{'' if isCondensed else 'YYYY-MM-DD'} HH:mm:ss")
+
+def iExit(msg, isSuffix=True):
+  z=f"{msg}{' is invalid!' if isSuffix else ''}"
+  stRed('Abnormal termination',z)
+  os._exit(1)
 
 def merge(*args,how='inner'):
   df=args[0]
