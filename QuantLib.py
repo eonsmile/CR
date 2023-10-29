@@ -7,11 +7,16 @@ import numpy as np
 import pandas as pd
 import math
 import quandl
+import yfinance as yf
+from sklearn.linear_model import LinearRegression
+import datetime
 
 ###########
 # Constants
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
+FROM_YEAR=2022 # getYFinanceS
+LOOKBACK_WINDOW=90 # getCoreBetas
 
 #############################################################################################
 
@@ -21,7 +26,6 @@ quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 ##########
 # Backtest
 ##########
-# Run backtest
 def bt(script,dp,dw,yrStart=2011):
   st.header('Backtest')
   dp2 = dp.copy()
@@ -56,7 +60,6 @@ def bt(script,dp,dw,yrStart=2011):
   ul.stRed('MaxDD',f"{maxDD:.2%}")
   ul.cachePersist('w',script,ecTs)
 
-# Setup backtest
 def btSetup(tickers,hvN=32,applyDatesTs=None):
   dfDict=dict()
   for und in tickers:
@@ -76,16 +79,13 @@ def btSetup(tickers,hvN=32,applyDatesTs=None):
   else:
     return applyDates(dp,applyDatesTs),applyDates(dw,applyDatesTs),dfDict,applyDates(hv,applyDatesTs)
 
-# Set dw to all or no numerics per row
 def dwAllOrNone(dw):
   selection = dw.isnull().sum(axis=1).isin(list(range(1,len(dw.columns))))
   dw[selection] = dw.fillna(method='pad')[selection]
 
-# Nicer tail of dw
 def dwTail(dw,n=5):
   ul.stWriteDf(round(dw.dropna().tail(n), 3))
 
-# Print calendar
 def printCalendar(ts):
   # Returns grouping
   def rgroup(r, groups):
@@ -113,11 +113,9 @@ def printCalendar(ts):
 #####
 # Etc
 #####
-# Apply dates of b to a
 def applyDates(a,b):
   return a.reindex(b.index,method='pad').fillna(method='pad').copy()
 
-# Remove redundant entries in time series
 def cleanTs(ts,isMonthlyRebal=True):
   ts=ts.astype('float64').fillna(method='pad')
   tmp=ts.shift(1)
@@ -137,7 +135,6 @@ def cleanTs(ts,isMonthlyRebal=True):
       ts[pe]=ts.fillna(method='pad')[pe]
   return ts
 
-# Get EMA of time series
 def EMA(ts,n):
   return ts.ewm(span=n,min_periods=n,adjust=False).mean().rename('EMA')
 
@@ -154,7 +151,68 @@ def endpoints(df, on='M', offset=0):
   out = np.unique(date_idx)
   return out
 
-# Calculate HV time series using EWMA; default to RiskMetrics' 32 days
+def getBeta(ts1, ts2, lookbackWindow):
+  pcDf=ul.merge(ts1, ts2).pct_change().tail(lookbackWindow)
+  regressor = LinearRegression(fit_intercept=False)
+  X=pcDf.iloc[:,0].to_numpy().reshape(-1,1)
+  y=pcDf.iloc[:,1].to_numpy().reshape(-1,1)
+  #####
+  regressor.fit(X,y)
+  coef1 = regressor.coef_[0][0]
+  mae1=np.mean(abs(X - y * coef1))
+  #####
+  regressor.fit(y,X)
+  coef2 = 1/regressor.coef_[0][0]
+  mae2 = np.mean(abs(X - y * coef2))
+  #####
+  return coef1 if mae1<mae2 else coef2
+
+def getCoreBetas():
+  tltTs = getYFinanceS('TLT')
+  iefTs = getYFinanceS('IEF')
+  zbTs = getYFinanceS('ZB=F')
+  znTs = getYFinanceS('ZN=F')
+  tnTs = getYFinanceS('TN=F')
+  zb_tlt_beta=getBeta(zbTs, tltTs, LOOKBACK_WINDOW)
+  zn_ief_beta=getBeta(znTs, iefTs, LOOKBACK_WINDOW)
+  tn_ief_beta=getBeta(tnTs, iefTs, LOOKBACK_WINDOW)
+  return zb_tlt_beta,zn_ief_beta,tn_ief_beta
+
+def getCoreWeightsDf():
+  DT_FORMAT = '%d%b%y'
+  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
+  dts = []
+  for v in lastUpdateDict.values():
+    dts.append(datetime.datetime.strptime(v, DT_FORMAT))
+  f = lambda dt: datetime.datetime.strftime(dt, DT_FORMAT)
+  lastUpdate = f(np.max(dts))
+  dts = [f(dt) for dt in dts]
+
+  l = list()
+  d = ul.cachePersist('r', 'CR')['IBSDict']
+  ep = 1e-9
+  ibsDict = {'SPY': 0,
+             'QQQ': d['QQQ'] + ep,
+             'TLT': d['TLT'] + ep,
+             'IEF': 0,
+             'GLD': 0,
+             'UUP': 0}
+  d = ul.cachePersist('r', 'CR')['TPPDict']
+  tppDict = {'SPY': d['SPY'] + ep,
+             'QQQ': d['QQQ'] + ep,
+             'TLT': 0,
+             'IEF': d['IEF'] + ep,
+             'GLD': d['GLD'] + ep,
+             'UUP': d['UUP'] + ep}
+  i = 0
+  for und in ['SPY', 'QQQ', 'TLT', 'IEF', 'GLD', 'UUP']:
+    l.append([dts[i], und, (ibsDict[und] + tppDict[und]) / 2, ibsDict[und], tppDict[und]])
+    i += 1
+  df = pd.DataFrame(l)
+  df.columns = ['Last Update', 'ETF', 'Total Weight', 'IBS (1/2)', 'TPP (1/2)']
+  df.set_index(['ETF'], inplace=True)
+  return df,lastUpdate
+
 def getHV(ts, n=32):
   if isinstance(ts,pd.DataFrame):
     hv = ts.copy()
@@ -165,7 +223,6 @@ def getHV(ts, n=32):
     variances=(np.log(ts / ts.shift(1)))**2
     return (EMA(variances,n)**.5*(252**.5)).rename(ts.name)
 
-# Get price history
 def getPriceHistory(und,yrStart=2009):
   dtStart=str(yrStart)+ '-1-1'
   df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
@@ -176,7 +233,6 @@ def getPriceHistory(und,yrStart=2009):
   df = df[df['Volume'] != 0]  # Correction for erroneous zero volume days
   return df
 
-# Get stateTs based on entry and exit time series
 def getStateTs(isEntryTs,isExitTs,isCleaned=False):
   if len(isEntryTs)!=len(isExitTs):
     ul.iExit('getStateTs')
@@ -192,8 +248,16 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
     stateTs=cleanTs(stateTs)
   return stateTs.astype(float)
 
+def getYFinanceS(ticker):
+  from_date = f"{FROM_YEAR}-01-01"
+  to_date = datetime.datetime.today().strftime('%Y-%m-%d')
+  return yf.download(ticker, start=from_date, end=to_date)['Adj Close'].rename(ticker)
+
 #############################################################################################
 
+#########
+# Scripts
+#########
 def runIBS():
   yrStart = 2011
   undE = 'QQQ'
@@ -232,8 +296,6 @@ def runIBS():
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
 
-#############################################################################################
-
 def runTPP():
   yrStart = 2011
   tickers = ['SPY', 'QQQ', 'IEF', 'GLD', 'UUP']
@@ -263,8 +325,6 @@ def runTPP():
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
-
-#############################################################################################
 
 def runCore():
   yrStart = 2011

@@ -1,17 +1,5 @@
 import streamlit as st
-import UtilLib as ul
-import datetime
-import numpy as np
-import pandas as pd
-import yfinance as yf
 import QuantLib as ql
-from sklearn.linear_model import LinearRegression
-
-###########
-# Constants
-###########
-LOOKBACK_WINDOW=90
-FROM_YEAR=2022
 
 ###########
 # Functions
@@ -35,63 +23,6 @@ def checkPassword():
   else:    
     return True
 
-def getWeightsDf():
-  DT_FORMAT = '%d%b%y'
-  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
-  dts = []
-  for v in lastUpdateDict.values():
-    dts.append(datetime.datetime.strptime(v, DT_FORMAT))
-  f = lambda dt: datetime.datetime.strftime(dt, DT_FORMAT)
-  lastUpdate = f(np.max(dts))
-  st.markdown(f"Last Update: <font color='red'>{lastUpdate}</font>", unsafe_allow_html=True)
-  dts = [f(dt) for dt in dts]
-
-  l = list()
-  d = ul.cachePersist('r', 'CR')['IBSDict']
-  ep = 1e-9
-  ibsDict = {'SPY': 0,
-             'QQQ': d['QQQ'] + ep,
-             'TLT': d['TLT'] + ep,
-             'IEF': 0,
-             'GLD': 0,
-             'UUP': 0}
-  d = ul.cachePersist('r', 'CR')['TPPDict']
-  tppDict = {'SPY': d['SPY'] + ep,
-             'QQQ': d['QQQ'] + ep,
-             'TLT': 0,
-             'IEF': d['IEF'] + ep,
-             'GLD': d['GLD'] + ep,
-             'UUP': d['UUP'] + ep}
-  i = 0
-  for und in ['SPY', 'QQQ', 'TLT', 'IEF', 'GLD', 'UUP']:
-    l.append([dts[i], und, (ibsDict[und] + tppDict[und]) / 2, ibsDict[und], tppDict[und]])
-    i += 1
-  df = pd.DataFrame(l)
-  df.columns = ['Last Update', 'ETF', 'Total Weight', 'IBS (1/2)', 'TPP (1/2)']
-  df.set_index(['ETF'], inplace=True)
-  return df,lastUpdate
-
-def getYFinanceS(ticker):
-  from_date = f"{FROM_YEAR}-01-01"
-  to_date = datetime.datetime.today().strftime('%Y-%m-%d')
-  return yf.download(ticker, start=from_date, end=to_date)['Adj Close'].rename(ticker)
-
-def getBeta(ts1, ts2, lookbackWindow):
-  pcDf=ul.merge(ts1, ts2).pct_change().tail(lookbackWindow)
-  regressor = LinearRegression(fit_intercept=False)
-  X=pcDf.iloc[:,0].to_numpy().reshape(-1,1)
-  y=pcDf.iloc[:,1].to_numpy().reshape(-1,1)
-  #####
-  regressor.fit(X,y)
-  coef1 = regressor.coef_[0][0]
-  mae1=np.mean(abs(X - y * coef1))
-  #####
-  regressor.fit(y,X)
-  coef2 = 1/regressor.coef_[0][0]
-  mae2 = np.mean(abs(X - y * coef2))
-  #####
-  return coef1 if mae1<mae2 else coef2
-
 ######
 # Main
 ######
@@ -100,26 +31,21 @@ st.set_page_config(page_title=z)
 st.title(z)
 
 if checkPassword():
-
   # Weights
   st.header('Weights')
-  df,lastUpdate=getWeightsDf()
+  df,lastUpdate=ql.getCoreWeightsDf()
+  st.markdown(f"Last Update: <font color='red'>{lastUpdate}</font>", unsafe_allow_html=True)
   cols=['Total Weight','IBS (1/2)','TPP (1/2)']
   df[cols] = df[cols].applymap(lambda n:'' if n==0 else f"{n:.1%}")
   st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if row['Last Update']==lastUpdate else [''] * len(row), axis=1))
 
   # Beta
   st.header('Beta (Return regressions of futures vs. ETFs)')
-  tltTs = getYFinanceS('TLT')
-  iefTs = getYFinanceS('IEF')
-  zbTs = getYFinanceS('ZB=F')
-  znTs = getYFinanceS('ZN=F')
-  tnTs = getYFinanceS('TN=F')
-  #####
+  zb_tlt_beta, zn_ief_beta, tn_ief_beta = ql.getCoreBetas()
   def m(label, beta): st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
-  m('ZB_TLT beta',getBeta(zbTs, tltTs, LOOKBACK_WINDOW))
-  m('ZN_IEF beta', getBeta(znTs, iefTs, LOOKBACK_WINDOW))
-  m('TN_IEF beta', getBeta(tnTs, iefTs, LOOKBACK_WINDOW))
+  m('ZB_TLT beta',zb_tlt_beta)
+  m('ZN_IEF beta',zn_ief_beta)
+  m('TN_IEF beta',tn_ief_beta)
 
   # Backtest
   st.header('Backtest')
