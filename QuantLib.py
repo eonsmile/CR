@@ -7,16 +7,15 @@ import numpy as np
 import pandas as pd
 import math
 import quandl
+import pendulum
 import yfinance as yf
 from sklearn.linear_model import LinearRegression
-import datetime
 
 ###########
 # Constants
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
-FROM_YEAR=2022 # getYFinanceS
-LOOKBACK_WINDOW=90 # getCoreBetas
+YFINANCE_FROM_YEAR=2022
 
 #############################################################################################
 
@@ -97,7 +96,7 @@ def printCalendar(ts):
   r = ts.pct_change()[1:]
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
-  df.index = pd.to_datetime(df.index)
+  df.index = df.index.map(pendulum.parse)
   df['Year'] = df.index.strftime('%Y')
   df['Month'] = df.index.strftime('%b')
   df = pd.pivot_table(data=df, index='Year', columns='Month', values='Returns', fill_value=0)
@@ -151,7 +150,7 @@ def endpoints(df, on='M', offset=0):
   out = np.unique(date_idx)
   return out
 
-def getBeta(ts1, ts2, lookbackWindow):
+def getBeta(ts1, ts2, lookbackWindow=90):
   pcDf=ul.merge(ts1, ts2).pct_change().tail(lookbackWindow)
   regressor = LinearRegression(fit_intercept=False)
   X=pcDf.iloc[:,0].to_numpy().reshape(-1,1)
@@ -173,20 +172,25 @@ def getCoreBetas():
   zbTs = getYFinanceS('ZB=F')
   znTs = getYFinanceS('ZN=F')
   tnTs = getYFinanceS('TN=F')
-  zb_tlt_beta=getBeta(zbTs, tltTs, LOOKBACK_WINDOW)
-  zn_ief_beta=getBeta(znTs, iefTs, LOOKBACK_WINDOW)
-  tn_ief_beta=getBeta(tnTs, iefTs, LOOKBACK_WINDOW)
+  zb_tlt_beta=getBeta(zbTs, tltTs)
+  zn_ief_beta=getBeta(znTs, iefTs)
+  tn_ief_beta=getBeta(tnTs, iefTs)
   return zb_tlt_beta,zn_ief_beta,tn_ief_beta
 
 def getCoreWeightsDf():
-  DT_FORMAT = '%d%b%y'
   lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
+
+  '''
   dts = []
   for v in lastUpdateDict.values():
     dts.append(datetime.datetime.strptime(v, DT_FORMAT))
   f = lambda dt: datetime.datetime.strftime(dt, DT_FORMAT)
   lastUpdate = f(np.max(dts))
   dts = [f(dt) for dt in dts]
+  '''
+
+  dts = [pendulum.from_format(dt, 'DDMMMYY') for dt in lastUpdateDict.values()]
+  lastUpdate = max(dts).format('DDMMMYY')
 
   l = list()
   d = ul.cachePersist('r', 'CR')['IBSDict']
@@ -204,6 +208,7 @@ def getCoreWeightsDf():
              'IEF': d['IEF'] + ep,
              'GLD': d['GLD'] + ep,
              'UUP': d['UUP'] + ep}
+  dts=list(lastUpdateDict.values())
   i = 0
   for und in ['SPY', 'QQQ', 'TLT', 'IEF', 'GLD', 'UUP']:
     l.append([dts[i], und, (ibsDict[und] + tppDict[und]) / 2, ibsDict[und], tppDict[und]])
@@ -249,8 +254,8 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
   return stateTs.astype(float)
 
 def getYFinanceS(ticker):
-  from_date = f"{FROM_YEAR}-01-01"
-  to_date = datetime.datetime.today().strftime('%Y-%m-%d')
+  from_date = f"{YFINANCE_FROM_YEAR}-01-01"
+  to_date = pendulum.today().format('YYYY-MM-DD')
   return yf.download(ticker, start=from_date, end=to_date)['Adj Close'].rename(ticker)
 
 #############################################################################################
