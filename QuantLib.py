@@ -15,7 +15,7 @@ from sklearn.linear_model import LinearRegression
 # Constants
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
-YFINANCE_FROM_YEAR=2022
+YFINANCE_START_YEAR=2022
 
 #############################################################################################
 
@@ -52,11 +52,15 @@ def bt(script,dp,dw,yrStart=2011):
   upi = cagr / np.sqrt(np.power(dd, 2).mean())
   maxDD = -min(dd)
   vol = ((np.log(ecTs / ecTs.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
-  ul.stRed('UPI',f"{upi:.2f}")
-  ul.stRed('Sharpe',f"{cagr/vol:.2f}")
-  ul.stRed('MAR',f"{cagr/maxDD:.2f}")
-  ul.stRed('Cagr',f"{cagr:.2%}")
-  ul.stRed('MaxDD',f"{maxDD:.2%}")
+
+  m=lambda label,z: f"{label}: <font color='red'>{z}</font>"
+  sep='&nbsp;'*10
+  st.markdown(sep.join([
+    m('&nbsp;'*3+'UPI', f"{upi:.2f}"),
+    m('Sharpe', f"{cagr / vol:.2f}"),
+    m('Cagr', f"{cagr:.2%}"),
+    m('MaxDD', f"{maxDD:.2%}")
+  ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecTs)
 
 def btSetup(tickers,hvN=32,applyDatesTs=None):
@@ -86,13 +90,11 @@ def dwTail(dw,n=5):
   ul.stWriteDf(round(dw.dropna().tail(n), 3))
 
 def printCalendar(ts):
-  # Returns grouping
   def rgroup(r, groups):
     def rprod(n):
       return (n + 1).prod() - 1
     return r.groupby(groups).apply(rprod)
-
-  # Main
+  #####
   r = ts.pct_change()[1:]
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
@@ -100,11 +102,11 @@ def printCalendar(ts):
   df['Year'] = df.index.strftime('%Y')
   df['Month'] = df.index.strftime('%b')
   df = pd.pivot_table(data=df, index='Year', columns='Month', values='Returns', fill_value=0)
-  df = df[['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']]
+  df = df[ul.spl('Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec')]
   df['Year'] = rgroup(r, r.index.year).values
   df = df.applymap(lambda n:f"{n*100:.1f}")
   height = (len(df)+1) * 35 + 3
-  df=df.style.applymap(lambda z:f"color: {'red' if float(z)<0 else 'cyan'}")
+  df=df.style.applymap(lambda z:f"color: {'red' if float(z)<0 else '#228B22'}")
   st.dataframe(df,height=height)
 
 #############################################################################################
@@ -179,18 +181,9 @@ def getCoreBetas():
 
 def getCoreWeightsDf():
   lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
-
-  '''
-  dts = []
-  for v in lastUpdateDict.values():
-    dts.append(datetime.datetime.strptime(v, DT_FORMAT))
-  f = lambda dt: datetime.datetime.strftime(dt, DT_FORMAT)
-  lastUpdate = f(np.max(dts))
-  dts = [f(dt) for dt in dts]
-  '''
-
-  dts = [pendulum.from_format(dt, 'DDMMMYY') for dt in lastUpdateDict.values()]
-  lastUpdate = max(dts).format('DDMMMYY')
+  fmt='DDMMMYY'
+  dts = [pendulum.from_format(dt, fmt) for dt in lastUpdateDict.values()]
+  lastUpdate = max(dts).format(fmt)
 
   l = list()
   d = ul.cachePersist('r', 'CR')['IBSDict']
@@ -210,11 +203,11 @@ def getCoreWeightsDf():
              'UUP': d['UUP'] + ep}
   dts=list(lastUpdateDict.values())
   i = 0
-  for und in ['SPY', 'QQQ', 'TLT', 'IEF', 'GLD', 'UUP']:
+  for und in ul.spl('SPY,QQQ,TLT,IEF,GLD,UUP'):
     l.append([dts[i], und, (ibsDict[und] + tppDict[und]) / 2, ibsDict[und], tppDict[und]])
     i += 1
   df = pd.DataFrame(l)
-  df.columns = ['Last Update', 'ETF', 'Total Weight', 'IBS (1/2)', 'TPP (1/2)']
+  df.columns = ul.spl('Last Update,ETF,Total Weight,IBS (1/2),TPP (1/2)')
   df.set_index(['ETF'], inplace=True)
   return df,lastUpdate
 
@@ -231,10 +224,10 @@ def getHV(ts, n=32):
 def getPriceHistory(und,yrStart=2009):
   dtStart=str(yrStart)+ '-1-1'
   df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
-  df = df[['date', 'adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']]
+  df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
   df = df.sort_values(by=['date'])
   df = df.set_index('date')
-  df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df[df['Volume'] != 0]  # Correction for erroneous zero volume days
   return df
 
@@ -254,7 +247,7 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
   return stateTs.astype(float)
 
 def getYFinanceS(ticker):
-  from_date = f"{YFINANCE_FROM_YEAR}-01-01"
+  from_date = f"{YFINANCE_START_YEAR}-01-01"
   to_date = pendulum.today().format('YYYY-MM-DD')
   return yf.download(ticker, start=from_date, end=to_date)['Adj Close'].rename(ticker)
 
@@ -303,7 +296,7 @@ def runIBS():
 
 def runTPP():
   yrStart = 2011
-  tickers = ['SPY', 'QQQ', 'IEF', 'GLD', 'UUP']
+  tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
   lookback = 32
   volTgt = .16
   maxWgt = 3
@@ -333,7 +326,7 @@ def runTPP():
 
 def runCore():
   yrStart = 2011
-  strategies = ['IBS', 'TPP']
+  strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
   #####
   script = 'Core'
@@ -342,7 +335,7 @@ def runCore():
   # Weights
   st.header('Weights')
   z = zip(strategies, weights)
-  df = pd.DataFrame(z, columns=['Strategy', 'Weight']).set_index('Strategy')
+  df = pd.DataFrame(z, columns=ul.spl('Strategy,Weight')).set_index('Strategy')
   ul.stWriteDf(df)
   #####
   # Calcs

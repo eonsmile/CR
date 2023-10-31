@@ -14,18 +14,11 @@ from filelock import FileLock
 ###########
 # Constants
 ###########
-if 'OS' in os.environ and os.environ['OS'].startswith('Win'):
-  CACHE_DIR=f"c:/cache"
-else:
-  CACHE_DIR=pathlib.Path(os.path.dirname(__file__))
+CACHE_DIR = "c:/cache" if os.getenv('OS', '').startswith('Win') else pathlib.Path(os.path.dirname(__file__))
 
 ###########
 # Streamlit
 ###########
-def stPageConfig(title):
-  st.set_page_config(page_title=title)
-  st.title(title)
-
 def stRed(label, z):
   st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
 
@@ -111,3 +104,6 @@ def printHeader(header='',isCondensed=False,isAddTime=False, color=None):
     else:
       print(colored(z,color))
     if not isCondensed: print()
+
+def spl(z):
+  return [] if z == '' else z.split(',')
