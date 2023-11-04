@@ -153,7 +153,7 @@ def endpoints(df, on='M', offset=0):
   return out
 
 def getBeta(ts1, ts2, lookbackWindow=90):
-  pcDf=ul.merge(ts1, ts2).pct_change().tail(lookbackWindow)
+  pcDf=ul.merge(ts1, ts2,how='inner').pct_change().tail(lookbackWindow)
   regressor = LinearRegression(fit_intercept=False)
   X=pcDf.iloc[:,0].to_numpy().reshape(-1,1)
   y=pcDf.iloc[:,1].to_numpy().reshape(-1,1)
@@ -286,7 +286,7 @@ def runIBS():
   #####
   def m(und, ibsTs, df, stateTs):
     st.subheader(und)
-    ul.stWriteDf(ul.merge(round(ibsTs, 3), df['Close'], df['High'], stateTs.fillna(method='pad')).tail())
+    ul.stWriteDf(ul.merge(round(ibsTs, 3), df['Close'], df['High'], stateTs.fillna(method='pad'),how='inner').tail())
   #####
   m(undE, ibsTsE, dfDict[undE], stateTsE)
   m(undB, ibsTsB, dfDict[undB], stateTsB)

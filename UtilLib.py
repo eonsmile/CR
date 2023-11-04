@@ -74,7 +74,8 @@ def iExit(msg, isSuffix=True):
   stRed('Abnormal termination',z)
   os._exit(1)
 
-def merge(*args,how='inner'):
+def merge(*args,how=None):
+  if how is None: iExit('merge (how)')
   df=args[0]
   for i in range(1,len(args)):
     df2=args[i]
