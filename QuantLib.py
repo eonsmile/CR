@@ -58,8 +58,8 @@ def bt(script,dp,dw,yrStart=2011):
   st.markdown(sep.join([
     m('&nbsp;'*3+'UPI', f"{upi:.2f}"),
     m('Sharpe', f"{cagr / vol:.2f}"),
-    m('Cagr', f"{cagr:.2%}"),
-    m('MaxDD', f"{maxDD:.2%}")
+    m('Cagr', f"{cagr:.1%}"),
+    m('MaxDD', f"{maxDD:.1%}")
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecTs)
 
