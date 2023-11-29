@@ -211,15 +211,15 @@ def getCoreWeightsDf():
   df.set_index(['ETF'], inplace=True)
   return df,lastUpdate
 
-def getHV(ts, n=32):
+def getHV(ts, n=32, af=252):
   if isinstance(ts,pd.DataFrame):
     hv = ts.copy()
     for col in hv.columns:
-      hv[col].values[:] = getHV(hv[col], n=n)
+      hv[col].values[:] = getHV(hv[col], n=n, af=af)
     return hv
   else:
     variances=(np.log(ts / ts.shift(1)))**2
-    return (EMA(variances,n)**.5*(252**.5)).rename(ts.name)
+    return (EMA(variances,n)**.5*(af**.5)).rename(ts.name)
 
 def getPriceHistory(und,yrStart=2009):
   dtStart=str(yrStart)+ '-1-1'
