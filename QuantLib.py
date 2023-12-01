@@ -152,6 +152,17 @@ def endpoints(df, on='M', offset=0):
   out = np.unique(date_idx)
   return out
 
+def extend(df, df2):
+  dtAnchor=df['Close'].first_valid_index()
+  if df2.index[-1] >= dtAnchor:
+    ratio= df.loc[dtAnchor]['Close'] / df2.loc[dtAnchor]['Close']
+    df2= df2[:dtAnchor][:-1]
+    df2[ul.spl('Open,High,Low,Close')] *= ratio
+    df2['Volume'] /= ratio
+    return pd.concat([df2, df.loc[dtAnchor:]])
+  else:
+    return df
+
 def getBeta(ts1, ts2, lookbackWindow=90):
   pcDf=ul.merge(ts1, ts2,how='inner').pct_change().tail(lookbackWindow)
   regressor = LinearRegression(fit_intercept=False)
@@ -223,12 +234,21 @@ def getHV(ts, n=32, af=252):
 
 def getPriceHistory(und,yrStart=2009):
   dtStart=str(yrStart)+ '-1-1'
-  df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
-  df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
+  if und=='BTC':
+    df = pd.read_csv('https://www.cryptodatadownload.com/cdd/Bitfinex_BTCUSD_d.csv', skiprows=1)
+    df['date'] = pd.to_datetime(df['date'])
+    df = df[ul.spl('date,open,high,low,close,Volume USD')]
+    if yrStart <= 2015:
+      df2 = pd.read_csv('coincodex_BTC.csv').set_index('Date')
+      df2.index = pd.to_datetime(df2.index)
+      df = extend(df, df2)
+  else: # Quandl
+    df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
+    df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
+    df = df[df['adj_volume'] != 0]  # Correction for erroneous zero volume days
   df = df.sort_values(by=['date'])
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df[df['Volume'] != 0]  # Correction for erroneous zero volume days
   return df
 
 def getStateTs(isEntryTs,isExitTs,isCleaned=False):
@@ -358,3 +378,32 @@ def runCore():
   dp2 = dp2[[script] + strategies]
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
   ul.stWriteDf(dp2, isMaxHeight=True)
+
+def runBTS(yrStart=2016):
+  volTgt = .2
+  maxWgt = 1
+  und='BTC'
+  #####
+  script = 'BTS'
+  st.header(script)
+  #####
+  df=getPriceHistory(und,yrStart=yrStart)
+  dp=df[['Close']]
+  dp.columns=[und]
+  ratioTs=dp[und]/dp[und].shift(28)
+  ratioTs.rename('Ratio',inplace=True)
+  stateTs=(ratioTs>=1)*1
+  stateTs.rename('State',inplace=True)
+  #####
+  dw=dp.copy()
+  dw[und]=stateTs
+  dw=cleanTs(dw)
+  hv = getHV(dp,n=16,af=365)
+  dw = (dw * volTgt**3 / hv**3).clip(0, maxWgt)
+  #####
+  st.header('Table')
+  tableTs = ul.merge(df['Close'], round(ratioTs, 3), stateTs, how='inner')
+  ul.stWriteDf(tableTs.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart=yrStart)
