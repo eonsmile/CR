@@ -5,6 +5,8 @@ import UtilLib as ul
 import streamlit as st
 import numpy as np
 import pandas as pd
+import requests
+import datetime
 import math
 import quandl
 import pendulum
@@ -235,20 +237,33 @@ def getHV(ts, n=32, af=252):
 def getPriceHistory(und,yrStart=2009):
   dtStart=str(yrStart)+ '-1-1'
   if und=='BTC':
-    df = pd.read_csv('https://www.cryptodatadownload.com/cdd/Bitfinex_BTCUSD_d.csv', skiprows=1)
-    df['date'] = pd.to_datetime(df['date'])
-    df = df[ul.spl('date,open,high,low,close,Volume USD')]
-    if yrStart <= 2015:
-      df2 = pd.read_csv('coincodex_BTC.csv').set_index('Date')
-      df2.index = pd.to_datetime(df2.index)
-      df = extend(df, df2)
+    df = pd.DataFrame(requests.get(f'https://api-pub.bitfinex.com/v2/candles/trade:1D:tBTCUSD/hist?end={int(datetime.datetime.now().timestamp() * 1000)}&limit=5000').json())
+    df.columns = ul.spl('date,open,close,high,low,volume')
+    df=df[ul.spl('date,open,high,low,close,volume')]
+    df['date']=pd.to_datetime(df['date'], unit='ms')
   else: # Quandl
     df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
     df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
     df = df[df['adj_volume'] != 0]  # Correction for erroneous zero volume days
-  df = df.sort_values(by=['date'])
+  #####
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
+  #####
+  if und=='BTC': # data cleaning
+    d={
+      '2016-08-02': 513.4,
+      '2016-08-03':566.4,
+      '2016-08-04':576.2,
+      '2016-08-05':574.7,
+      '2016-08-06':586.5,
+      '2016-08-07':590.8,
+      '2016-08-08':589.2,
+      '2016-08-09':585.3
+    }
+    for k,v in d.items():
+      df.loc[datetime.datetime.strptime(k, '%Y-%m-%d')]=[v,v,v,v,1]
+  #####
+  df = df.sort_values(by=['date'])
   return df
 
 def getStateTs(isEntryTs,isExitTs,isCleaned=False):
@@ -379,7 +394,7 @@ def runCore():
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
   ul.stWriteDf(dp2, isMaxHeight=True)
 
-def runBTS(yrStart=2016):
+def runBTS(yrStart):
   volTgt = .2
   maxWgt = 1
   und='BTC'
