@@ -395,7 +395,7 @@ def runCore():
   ul.stWriteDf(dp2, isMaxHeight=True)
 
 def runBTS(yrStart):
-  volTgt = .2
+  volTgt = .24
   maxWgt = 1
   und='BTC'
   #####
