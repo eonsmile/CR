@@ -17,7 +17,7 @@ from sklearn.linear_model import LinearRegression
 # Constants
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
-YFINANCE_START_YEAR=2022
+YFINANCE_START_YEAR=2023
 
 #############################################################################################
 
@@ -27,7 +27,7 @@ YFINANCE_START_YEAR=2022
 ##########
 # Backtest
 ##########
-def bt(script,dp,dw,yrStart=2011):
+def bt(script,dp,dw,yrStart=2013):
   st.header('Backtest')
   dp2 = dp.copy()
   dw2 = dw.copy()
@@ -234,7 +234,7 @@ def getHV(ts, n=32, af=252):
     variances=(np.log(ts / ts.shift(1)))**2
     return (EMA(variances,n)**.5*(af**.5)).rename(ts.name)
 
-def getPriceHistory(und,yrStart=2009):
+def getPriceHistory(und,yrStart=2011):
   dtStart=str(yrStart)+ '-1-1'
   if und=='BTC':
     df = pd.DataFrame(requests.get(f'https://api-pub.bitfinex.com/v2/candles/trade:1D:tBTCUSD/hist?end={int(datetime.datetime.now().timestamp() * 1000)}&limit=5000').json())
@@ -292,7 +292,7 @@ def getYFinanceS(ticker):
 # Scripts
 #########
 def runIBS():
-  yrStart = 2011
+  yrStart = 2013
   undE = 'QQQ'
   undB = 'TLT'
   volTgt = .16
@@ -330,7 +330,7 @@ def runIBS():
   bt(script, dp, dw, yrStart=yrStart)
 
 def runTPP():
-  yrStart = 2011
+  yrStart = 2013
   tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
   lookback = 32
   volTgt = .16
@@ -360,7 +360,7 @@ def runTPP():
   bt(script, dp, dw, yrStart=yrStart)
 
 def runCore():
-  yrStart = 2011
+  yrStart = 2013
   strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
   #####
