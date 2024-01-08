@@ -359,41 +359,6 @@ def runTPP():
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
 
-def runCore():
-  yrStart = 2013
-  strategies = ul.spl('IBS,TPP')
-  weights = [1 / 2, 1 / 2]
-  #####
-  script = 'Core'
-  st.header(script)
-  #####
-  # Weights
-  st.header('Weights')
-  z = zip(strategies, weights)
-  df = pd.DataFrame(z, columns=ul.spl('Strategy,Weight')).set_index('Strategy')
-  ul.stWriteDf(df)
-  #####
-  # Calcs
-  dp = pd.DataFrame()
-  for strategy in strategies:
-    dp[strategy] = ul.cachePersist('r',strategy)
-  dp = applyDates(dp, dp[strategies[1]]).fillna(method='pad')
-  dw = dp * np.nan
-  pe = endpoints(dw, 'M')
-  for i in range(len(weights)):
-    dw[strategies[i]].iloc[pe] = weights[i]
-  #####
-  # Backtest
-  bt(script, dp, dw, yrStart)
-  #####
-  # Recent performance
-  st.header('Recent Performance')
-  dp2 = dp.copy()
-  dp2[script] = ul.cachePersist('r',script)
-  dp2 = dp2[[script] + strategies]
-  dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
-  ul.stWriteDf(dp2, isMaxHeight=True)
-
 def runBTS(yrStart):
   volTgt = .24
   maxWgt = 1
@@ -422,3 +387,49 @@ def runBTS(yrStart):
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
+
+#####
+
+def runAggregate(yrStart,strategies,weights,script):
+  st.header(script)
+  #####
+  # Weights
+  st.header('Weights')
+  z = zip(strategies, weights)
+  df = pd.DataFrame(z, columns=ul.spl('Strategy,Weight')).set_index('Strategy')
+  ul.stWriteDf(df)
+  #####
+  # Calcs
+  dp = pd.DataFrame()
+  for strategy in strategies:
+    dp[strategy] = ul.cachePersist('r', strategy)
+  dp = applyDates(dp, dp[strategies[1]]).fillna(method='pad')
+  dw = dp * np.nan
+  pe = endpoints(dw, 'M')
+  for i in range(len(weights)):
+    dw[strategies[i]].iloc[pe] = weights[i]
+  #####
+  # Backtest
+  bt(script, dp, dw, yrStart)
+  #####
+  # Recent performance
+  st.header('Recent Performance')
+  dp2 = dp.copy()
+  dp2[script] = ul.cachePersist('r', script)
+  dp2 = dp2[[script] + strategies]
+  dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
+  ul.stWriteDf(dp2, isMaxHeight=True)
+
+def runCore():
+  yrStart = 2013
+  strategies = ul.spl('IBS,TPP')
+  weights = [1 / 2, 1 / 2]
+  script = 'Core'
+  runAggregate(yrStart, strategies, weights, script)
+
+def runUnity():
+  yrStart = 2015
+  strategies = ul.spl('IBS,TPP,BTS')
+  weights = [1 / 3, 1 / 3, 1 / 3]
+  script = 'Unity'
+  runAggregate(yrStart, strategies, weights, script)
