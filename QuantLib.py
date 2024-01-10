@@ -291,8 +291,7 @@ def getYFinanceS(ticker):
 #########
 # Scripts
 #########
-def runIBS():
-  yrStart = 2013
+def runIBS(yrStart=2013):
   undE = 'QQQ'
   undB = 'TLT'
   volTgt = .16
@@ -329,8 +328,7 @@ def runIBS():
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
 
-def runTPP():
-  yrStart = 2013
+def runTPP(yrStart=2013):
   tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
   lookback = 32
   volTgt = .16
@@ -359,7 +357,7 @@ def runTPP():
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
 
-def runBTS(yrStart):
+def runBTS(yrStart=2015):
   volTgt = .24
   maxWgt = 1
   und='BTC'
@@ -403,7 +401,7 @@ def runAggregate(yrStart,strategies,weights,script):
   dp = pd.DataFrame()
   for strategy in strategies:
     dp[strategy] = ul.cachePersist('r', strategy)
-  dp = applyDates(dp, dp[strategies[1]]).fillna(method='pad')
+  dp = applyDates(dp, dp.iloc[:,-1]).fillna(method='pad')
   dw = dp * np.nan
   pe = endpoints(dw, 'M')
   for i in range(len(weights)):
@@ -420,15 +418,13 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
   ul.stWriteDf(dp2, isMaxHeight=True)
 
-def runCore():
-  yrStart = 2013
+def runCore(yrStart=2013):
   strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
   script = 'Core'
   runAggregate(yrStart, strategies, weights, script)
 
-def runUnity():
-  yrStart = 2015
+def runUnity(yrStart=2015):
   strategies = ul.spl('IBS,TPP,BTS')
   weights = [1 / 3, 1 / 3, 1 / 3]
   script = 'Unity'

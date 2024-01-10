@@ -40,7 +40,7 @@ if checkPassword():
   st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if row['Last Update']==lastUpdate else [''] * len(row), axis=1))
 
   # Beta
-  st.header('Beta (Return regressions of futures vs. ETFs)')
+  st.header('Betas (Return regressions of futures vs. ETFs)')
   zb_tlt_beta, zn_ief_beta, tn_ief_beta = ql.getCoreBetas()
   def m(label, beta): st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
   m('ZB_TLT beta',zb_tlt_beta)
