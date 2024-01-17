@@ -19,6 +19,25 @@ CACHE_DIR = "c:/cache" if os.getenv('OS', '').startswith('Win') else pathlib.Pat
 ###########
 # Streamlit
 ###########
+def stCheckPW(key):
+  def m():
+    isPWOk=st.session_state['pw'] == st.secrets[key]
+    st.session_state['isPWOk']=isPWOk
+    if isPWOk: del st.session_state['pw']
+  #####
+  def m2():
+    st.text_input('Password', type='password', on_change=m, key='pw')
+  #####
+  if 'isPWOk' not in st.session_state:
+    m2()
+    return False
+  elif not st.session_state['isPWOk']:
+    m2()
+    st.error('😕 Password incorrect')
+    return False
+  else:
+    return True
+
 def stRed(label, z):
   st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
 

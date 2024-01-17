@@ -357,13 +357,14 @@ def runTPP(yrStart=2013):
   dwTail(dw)
   bt(script, dp, dw, yrStart=yrStart)
 
-def runBTS(yrStart=2015):
+def runBTS(yrStart=2015, isSkipTitle=False):
   volTgt = .24
   maxWgt = 1
   und='BTC'
   #####
   script = 'BTS'
-  st.header(script)
+  if not isSkipTitle:
+    st.header(script)
   #####
   df=getPriceHistory(und,yrStart=yrStart)
   dp=df[['Close']]

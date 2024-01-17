@@ -1,5 +1,6 @@
 import streamlit as st
 import QuantLib as ql
+import UtilLib as ul
 
 ###########
 # Functions
@@ -30,7 +31,7 @@ z='Core Reporter'
 st.set_page_config(page_title=z)
 st.title(z)
 
-if checkPassword():
+if ul.stCheckPW('password_CR'):
   # Weights
   st.header('Weights')
   df,lastUpdate=ql.getCoreWeightsDf()
