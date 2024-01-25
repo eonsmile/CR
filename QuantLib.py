@@ -17,7 +17,12 @@ from sklearn.linear_model import LinearRegression
 # Constants
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
+GET_PRICE_HISTORY_START_YEAR=2011
 YFINANCE_START_YEAR=2023
+IBS_START_YEAR=2013
+TPP_START_YEAR=2013
+CORE_START_YEAR=2013
+BTS_START_YEAR=2015
 
 #############################################################################################
 
@@ -27,7 +32,7 @@ YFINANCE_START_YEAR=2023
 ##########
 # Backtest
 ##########
-def bt(script,dp,dw,yrStart=2013):
+def bt(script,dp,dw,yrStart):
   st.header('Backtest')
   dp2 = dp.copy()
   dw2 = dw.copy()
@@ -234,7 +239,7 @@ def getHV(ts, n=32, af=252):
     variances=(np.log(ts / ts.shift(1)))**2
     return (EMA(variances,n)**.5*(af**.5)).rename(ts.name)
 
-def getPriceHistory(und,yrStart=2011):
+def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   dtStart=str(yrStart)+ '-1-1'
   if und=='BTC':
     df = pd.DataFrame(requests.get(f'https://api-pub.bitfinex.com/v2/candles/trade:1D:tBTCUSD/hist?end={int(datetime.datetime.now().timestamp() * 1000)}&limit=5000').json())
@@ -291,7 +296,7 @@ def getYFinanceS(ticker):
 #########
 # Scripts
 #########
-def runIBS(yrStart=2013):
+def runIBS(yrStart=IBS_START_YEAR):
   undE = 'QQQ'
   undB = 'TLT'
   volTgt = .16
@@ -326,9 +331,9 @@ def runIBS(yrStart=2013):
   m(undB, ibsTsB, dfDict[undB], stateTsB)
   st.header('Weights')
   dwTail(dw)
-  bt(script, dp, dw, yrStart=yrStart)
+  bt(script, dp, dw, yrStart)
 
-def runTPP(yrStart=2013):
+def runTPP(yrStart=TPP_START_YEAR):
   tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
   lookback = 32
   volTgt = .16
@@ -355,9 +360,9 @@ def runTPP(yrStart=2013):
   ul.stWriteDf(round(ratioDf, 4).tail())
   st.header('Weights')
   dwTail(dw)
-  bt(script, dp, dw, yrStart=yrStart)
+  bt(script, dp, dw, yrStart)
 
-def runBTS(yrStart=2015, isSkipTitle=False):
+def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   volTgt = .24
   maxWgt = 1
   und='BTC'
@@ -366,7 +371,7 @@ def runBTS(yrStart=2015, isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
-  df=getPriceHistory(und,yrStart=yrStart)
+  df=getPriceHistory(und,yrStart)
   dp=df[['Close']]
   dp.columns=[und]
   ratioTs=dp[und]/dp[und].shift(28)
@@ -385,7 +390,7 @@ def runBTS(yrStart=2015, isSkipTitle=False):
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
-  bt(script, dp, dw, yrStart=yrStart)
+  bt(script, dp, dw, yrStart)
 
 #####
 
@@ -419,14 +424,8 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
   ul.stWriteDf(dp2, isMaxHeight=True)
 
-def runCore(yrStart=2013):
+def runCore(yrStart=CORE_START_YEAR):
   strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
   script = 'Core'
-  runAggregate(yrStart, strategies, weights, script)
-
-def runUnity(yrStart=2015):
-  strategies = ul.spl('IBS,TPP,BTS')
-  weights = [1 / 3, 1 / 3, 1 / 3]
-  script = 'Unity'
   runAggregate(yrStart, strategies, weights, script)
