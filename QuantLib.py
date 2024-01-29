@@ -376,8 +376,14 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   dp.columns=[und]
   ratioTs=dp[und]/dp[und].shift(28)
   ratioTs.rename('Ratio',inplace=True)
-  stateTs=(ratioTs>=1)*1
-  stateTs.rename('State',inplace=True)
+  #####
+  tomTs=dp[und]*0
+  for i in range(-4, 4):
+    tomTs[endpoints(tomTs, offset=i)] = 1
+  tomTs.rename('TOM',inplace=True)
+  #####
+  stateTs = (((ratioTs>1)*1) | (tomTs==1))*1
+  stateTs.rename('State', inplace=True)
   #####
   dw=dp.copy()
   dw[und]=stateTs
@@ -386,7 +392,7 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   dw = (dw * volTgt**3 / hv**3).clip(0, maxWgt)
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], round(ratioTs, 3), stateTs, how='inner')
+  tableTs = ul.merge(df['Close'], round(ratioTs, 3), tomTs, stateTs, how='inner')
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
