@@ -374,25 +374,28 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   df=getPriceHistory(und,yrStart)
   dp=df[['Close']]
   dp.columns=[und]
-  ratioTs=dp[und]/dp[und].shift(28)
-  ratioTs.rename('Ratio',inplace=True)
+  ratio1Ts=dp[und]/dp[und].shift(28)
+  ratio1Ts.rename('Ratio 1',inplace=True)
+  ratio2Ts=dp[und]/dp[und].rolling(5).mean()
+  ratio2Ts.rename('Ratio 2', inplace=True)
   #####
-  tomTs=dp[und]*0
+  isTomTs=dp[und]*0
   for i in range(-4, 4):
-    tomTs[endpoints(tomTs, offset=i)] = 1
-  tomTs.rename('TOM',inplace=True)
+    isTomTs[endpoints(isTomTs, offset=i)] = 1
+  isTomTs.rename('TOM?',inplace=True)
   #####
-  stateTs = (((ratioTs>1)*1) | (tomTs==1))*1
+  momScoreTs=(ratio1Ts>=1)*1+(ratio2Ts>=1)*1
+  stateTs = ((momScoreTs==2)*1 | (isTomTs==1)*1)*1
   stateTs.rename('State', inplace=True)
   #####
   dw=dp.copy()
   dw[und]=stateTs
   dw=cleanTs(dw)
   hv = getHV(dp,n=16,af=365)
-  dw = (dw * volTgt**3 / hv**3).clip(0, maxWgt)
+  dw = (dw * volTgt**2 / hv**2).clip(0, maxWgt)
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], round(ratioTs, 3), tomTs, stateTs, how='inner')
+  tableTs = ul.merge(df['Close'], round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs, how='inner')
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
