@@ -6,7 +6,6 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import requests
-import datetime
 import math
 import quandl
 import pendulum
@@ -17,6 +16,7 @@ from sklearn.linear_model import LinearRegression
 # Constants
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
+CC_API_KEY = st.secrets['cc_api_key']
 GET_PRICE_HISTORY_START_YEAR=2011
 YFINANCE_START_YEAR=2023
 IBS_START_YEAR=2013
@@ -242,10 +242,21 @@ def getHV(ts, n=32, af=252):
 def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   dtStart=str(yrStart)+ '-1-1'
   if und=='BTC':
-    df = pd.DataFrame(requests.get(f'https://api-pub.bitfinex.com/v2/candles/trade:1D:tBTCUSD/hist?end={int(datetime.datetime.now().timestamp() * 1000)}&limit=5000').json())
-    df.columns = ul.spl('date,open,close,high,low,volume')
-    df=df[ul.spl('date,open,high,low,close,volume')]
-    df['date']=pd.to_datetime(df['date'], unit='ms')
+    def m(toTs=None):
+      z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym=BTC&tsym=USD&limit=2000&api_key={CC_API_KEY}"
+      if toTs is not None:
+        z = f"{z}&toTs={toTs}"
+      data = requests.get(z).json()['Data']
+      return pd.DataFrame(data['Data']), data['TimeFrom']
+    #####
+    df, toTs = m()
+    for i in range(2 if yrStart<2015 else 1):
+      df2, toTs = m(toTs)
+      df = pd.concat([df2.drop(df2.index[-1]), df])
+    df['date'] = [pendulum.from_timestamp(ts).naive() for ts in df['time']]
+    df = df[df['date'] > '2010-7-16']
+    df['open'] = df['close'].shift()
+    df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
   else: # Quandl
     df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
     df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
@@ -253,21 +264,6 @@ def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   #####
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
-  #####
-  if und=='BTC': # data cleaning
-    d={
-      '2016-08-02': 513.4,
-      '2016-08-03':566.4,
-      '2016-08-04':576.2,
-      '2016-08-05':574.7,
-      '2016-08-06':586.5,
-      '2016-08-07':590.8,
-      '2016-08-08':589.2,
-      '2016-08-09':585.3
-    }
-    for k,v in d.items():
-      df.loc[datetime.datetime.strptime(k, '%Y-%m-%d')]=[v,v,v,v,1]
-  #####
   df = df.sort_values(by=['date'])
   return df
 
