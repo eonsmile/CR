@@ -241,9 +241,9 @@ def getHV(ts, n=32, af=252):
 
 def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   dtStart=str(yrStart)+ '-1-1'
-  if und=='BTC':
+  if und in ul.spl('BTC,ETH'):
     def m(toTs=None):
-      z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym=BTC&tsym=USD&limit=2000&api_key={CC_API_KEY}"
+      z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={CC_API_KEY}"
       if toTs is not None:
         z = f"{z}&toTs={toTs}"
       data = requests.get(z).json()['Data']
@@ -281,6 +281,15 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
   if isCleaned:
     stateTs=cleanTs(stateTs)
   return stateTs.astype(float)
+
+def getTomTs(ts, offsetFrom, offsetTo):
+  ts=ts.copy()
+  for i in range(31):
+    ts[pendulum.instance(ts.index[-1]).add(days=1).to_datetime_string()]=None
+  ts[:]=0
+  for i in range(offsetFrom, offsetTo+1):
+    ts[endpoints(ts, offset=i)]=1
+  return ts.iloc[:-31]
 
 def getYFinanceS(ticker):
   from_date = f"{YFINANCE_START_YEAR}-01-01"
@@ -375,10 +384,7 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   ratio2Ts=dp[und]/dp[und].rolling(5).mean()
   ratio2Ts.rename('Ratio 2', inplace=True)
   #####
-  isTomTs=dp[und]*0
-  for i in range(-4, 4):
-    isTomTs[endpoints(isTomTs, offset=i)] = 1
-  isTomTs.rename('TOM?',inplace=True)
+  isTomTs = getTomTs(dp[und],-4,3).rename('TOM?')
   #####
   momScoreTs=(ratio1Ts>=1)*1+(ratio2Ts>=1)*1
   stateTs = ((momScoreTs==2)*1 | (isTomTs==1)*1)*1
