@@ -282,12 +282,12 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
     stateTs=cleanTs(stateTs)
   return stateTs.astype(float)
 
-def getTomTs(ts, offsetFrom, offsetTo):
+def getTomTs(ts, offsetBegin, offsetEnd): # 0,0 means hold one day starting from monthend
   ts=ts.copy()
   for i in range(31):
     ts[pendulum.instance(ts.index[-1]).add(days=1).to_datetime_string()]=None
   ts[:]=0
-  for i in range(offsetFrom, offsetTo+1):
+  for i in range(offsetBegin, offsetEnd+1):
     ts[endpoints(ts, offset=i)]=1
   return ts.iloc[:-31]
 
