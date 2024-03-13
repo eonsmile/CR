@@ -8,9 +8,10 @@ import os
 import pendulum
 import pickle
 import time
-import termcolor
+import colorama
 from filelock import FileLock
 import pretty_errors # keep here
+colorama.init()
 
 ###########
 # Constants
@@ -20,6 +21,13 @@ CACHE_DIR = "c:/cache" if os.getenv('OS', '').startswith('Win') else pathlib.Pat
 ###########
 # Streamlit
 ###########
+def isSt():
+  try:
+    instance = st.runtime.get_instance()
+    return True if instance else False
+  except:
+    return False
+
 def stCheckPW(key):
   def m():
     isPWOk=st.session_state['pw'] == st.secrets[key]
@@ -84,14 +92,21 @@ def cachePersist(mode, key, value=None, expireMins=1e9):
 # Etc
 #####
 def colored(z, color=None, on_color=None, attrs=None):
-  return termcolor.colored(z, color=color, on_color=on_color, attrs=attrs)
+  if color=='red':
+    prefix=colorama.Fore.RED
+  else:
+    prefix=''
+  return f"{prefix}{z}"
 
 def getCurrentTime(isCondensed=False):
   return pendulum.now().format(f"{'' if isCondensed else 'YYYY-MM-DD'} HH:mm:ss")
 
 def iExit(msg, isSuffix=True):
   z=f"{msg}{' is invalid!' if isSuffix else ''}"
-  stRed('Abnormal termination',z)
+  if isSt():
+    stRed('Abnormal termination', z)
+  else:
+    tcPrint(z,'red')
   os._exit(1)
 
 def merge(*args,how=None):
@@ -114,17 +129,23 @@ def printDict(d, indent=0, isSort=True):
     else:
       print('\t' * (indent + 1) + str(value))
 
-def printHeader(header='',isCondensed=False,isAddTime=False, color=None):
+def printHeader(header='',isCondensed=False,isAddTime=False):
   if not isCondensed: print()
   print('-' * 100)
   if not isCondensed: print()
   if len(header) > 0:
     z=f"[{header}{'' if not isAddTime else f' - {getCurrentTime()}'}]"
-    if color is None:
-      print(z)
-    else:
-      print(colored(z,color))
+    print(z)
     if not isCondensed: print()
 
 def spl(z):
   return [] if z == '' else z.split(',')
+
+def timeTag(z):
+  return f"{getCurrentTime()}: {z}"
+
+def tPrint(z, end='\n'):
+  print(timeTag(z),end=end)
+
+def tcPrint(z, color, attrs=None, end='\n'):
+  print(timeTag(colored(z, color, attrs=attrs)), end=end)
