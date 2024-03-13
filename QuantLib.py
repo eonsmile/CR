@@ -22,6 +22,7 @@ YFINANCE_START_YEAR=2023
 IBS_START_YEAR=2013
 TPP_START_YEAR=2013
 CORE_START_YEAR=2013
+CSS_START_YEAR=2013
 BTS_START_YEAR=2015
 
 #############################################################################################
@@ -70,10 +71,10 @@ def bt(script,dp,dw,yrStart):
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecTs)
 
-def btSetup(tickers,hvN=32,applyDatesTs=None):
+def btSetup(tickers,hvN=32,yrStart=GET_PRICE_HISTORY_START_YEAR,applyDatesTs=None):
   dfDict=dict()
   for und in tickers:
-    df=getPriceHistory(und)
+    df=getPriceHistory(und,yrStart=yrStart)
     cTs=df['Close'].rename(und).to_frame()
     if not dfDict:
       dp=cTs
@@ -363,6 +364,33 @@ def runTPP(yrStart=TPP_START_YEAR):
   ul.stWriteDf(dp.tail())
   st.header('Ratios')
   ul.stWriteDf(round(ratioDf, 4).tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
+  und = 'FXI'
+  #####
+  script = 'CSS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  dp, dw, dfDict, hv = btSetup([und])
+  df = round(dfDict[und], 10)
+  ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+  ibsTs.rename('IBS', inplace=True)
+  ratioTs = df['Close'] / df['Close'].shift(5)
+  ratioTs.rename('Ratio', inplace=True)
+  isTomTs = getTomTs(dp[und], -1, 1).rename('TOM?')
+  isEntryTs = (ibsTs > .9) & (ratioTs > 1) & (isTomTs == 0)
+  isExitTs = ibsTs < .25
+  stateTs = getStateTs(isEntryTs, isExitTs)
+  dw[und] = -cleanTs(stateTs, isMonthlyRebal=False)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  st.header('Table')
+  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratioTs, 3), isTomTs, stateTs, how='inner')
+  ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
