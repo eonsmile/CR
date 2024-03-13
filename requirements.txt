@@ -4,3 +4,4 @@ scikit-learn
 quandl
 pendulum
 termcolor
+pretty_errors

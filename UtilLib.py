@@ -10,6 +10,7 @@ import pickle
 import time
 import termcolor
 from filelock import FileLock
+import pretty_errors # keep here
 
 ###########
 # Constants
