@@ -10,6 +10,7 @@ import math
 import quandl
 import pendulum
 import yfinance as yf
+import pandas_market_calendars
 from sklearn.linear_model import LinearRegression
 
 ###########
@@ -283,14 +284,20 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
     stateTs=cleanTs(stateTs)
   return stateTs.astype(float)
 
-def getTomTs(ts, offsetBegin, offsetEnd): # 0,0 means hold one day starting from monthend
+def getTomTs(ts, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
   ts=ts.copy()
-  for i in range(31):
-    ts[pendulum.instance(ts.index[-1]).add(days=1).to_datetime_string()]=None
+  dtLast=ts.index[-1]
+  dtLast2=pendulum.instance(dtLast)
+  if isNYSE:
+    dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=31)).index
+  else:
+    dts = [dtLast2.add(days=i).date() for i in range(31)]
+    dts = pd.DatetimeIndex(pd.to_datetime(dts))
+  ts = ts.reindex(ts.index.union(dts))
   ts[:]=0
   for i in range(offsetBegin, offsetEnd+1):
     ts[endpoints(ts, offset=i)]=1
-  return ts.iloc[:-31]
+  return ts[ts.index<=dtLast]
 
 def getYFinanceS(ticker):
   from_date = f"{YFINANCE_START_YEAR}-01-01"

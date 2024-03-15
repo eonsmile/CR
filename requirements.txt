@@ -4,3 +4,4 @@ scikit-learn
 quandl
 pendulum
 pretty_errors
+pandas_market_calendars
