@@ -8,5 +8,5 @@ import streamlit as st
 z='CSS'
 st.set_page_config(page_title=z)
 st.title(z)
-#if ul.stCheckPW('password_CSS'):
-ql.runCSS(isSkipTitle=True)
+if ul.stCheckPW('password_CSS'):
+  ql.runCSS(isSkipTitle=True)
