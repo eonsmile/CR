@@ -9,6 +9,7 @@ import requests
 import math
 import quandl
 import pendulum
+import pykalman
 import yfinance as yf
 import pandas_market_calendars
 from sklearn.linear_model import LinearRegression
@@ -241,6 +242,17 @@ def getHV(ts, n=32, af=252):
     variances=(np.log(ts / ts.shift(1)))**2
     return (EMA(variances,n)**.5*(af**.5)).rename(ts.name)
 
+def getKFMeans(ts):
+  kf = pykalman.KalmanFilter(n_dim_obs=1, n_dim_state=1,
+                    initial_state_mean=0,
+                    initial_state_covariance=1,
+                    transition_matrices=[1],
+                    observation_matrices=[1],
+                    observation_covariance=1,
+                    transition_covariance=0.05)
+  means, _ = kf.filter(ts)
+  return pd.Series(means.flatten(), index=ts.index)
+
 def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   dtStart=str(yrStart)+ '-1-1'
   if und in ul.spl('BTC,ETH'):
@@ -386,17 +398,19 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   df = round(dfDict[und], 10)
   ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
   ibsTs.rename('IBS', inplace=True)
-  ratioTs = df['Close'] / df['Close'].shift(5)
-  ratioTs.rename('Ratio', inplace=True)
-  isTomTs = getTomTs(dp[und], -1, 1).rename('TOM?')
-  isEntryTs = (ibsTs > .9) & (ratioTs > 1) & (isTomTs == 0)
+  ratio1Ts = df['Close'] / df['Close'].shift(5)
+  ratio1Ts.rename('Ratio 1', inplace=True)
+  ratio2Ts = df['Close']/getKFMeans(df['Close'])
+  ratio2Ts.rename('Ratio 2', inplace=True)
+  isTomTs = getTomTs(dp[und], 0, 2,isNYSE=True).rename('TOM?')
+  isEntryTs = (ibsTs > .9) & (ratio1Ts > 1) & (ratio2Ts>1) & (isTomTs == 0)
   isExitTs = ibsTs < .25
   stateTs = getStateTs(isEntryTs, isExitTs)
   dw[und] = -cleanTs(stateTs, isMonthlyRebal=False)
   dw.loc[dw.index.year < yrStart] = 0
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratioTs, 3), isTomTs, stateTs, how='inner')
+  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs, how='inner')
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
