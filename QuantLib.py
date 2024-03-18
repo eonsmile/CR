@@ -389,6 +389,8 @@ def runTPP(yrStart=TPP_START_YEAR):
 
 def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   und = 'FXI'
+  volTgt = .24
+  maxWgt = 2
   #####
   script = 'CSS'
   if not isSkipTitle:
@@ -405,12 +407,14 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   isTomTs = getTomTs(dp[und], 0, 2,isNYSE=True).rename('TOM?')
   isEntryTs = (ibsTs > .9) & (ratio1Ts > 1) & (ratio2Ts>1) & (isTomTs == 0)
   isExitTs = ibsTs < .25
-  stateTs = getStateTs(isEntryTs, isExitTs)
-  dw[und] = -cleanTs(stateTs, isMonthlyRebal=False)
+  stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True)
+  dw[und] = -cleanTs(stateTs,isMonthlyRebal=False)
   dw.loc[dw.index.year < yrStart] = 0
+  hv = getHV(dp, n=8)
+  dw = (dw * volTgt / hv).clip(-maxWgt, 0)
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs, how='inner')
+  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.fillna(method='pad'), how='inner')
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
