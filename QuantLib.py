@@ -281,7 +281,7 @@ def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   df = df.sort_values(by=['date'])
   return df
 
-def getStateTs(isEntryTs,isExitTs,isCleaned=False):
+def getStateTs(isEntryTs,isExitTs,isCleaned=False,isMonthlyRebal=True):
   if len(isEntryTs)!=len(isExitTs):
     ul.iExit('getStateTs')
   stateTs=(isEntryTs*np.nan).rename('State')
@@ -293,7 +293,7 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False):
       state=0
     stateTs[i]=state
   if isCleaned:
-    stateTs=cleanTs(stateTs)
+    stateTs=cleanTs(stateTs,isMonthlyRebal=isMonthlyRebal)
   return stateTs.astype(float)
 
 def getTomTs(ts, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
@@ -389,9 +389,6 @@ def runTPP(yrStart=TPP_START_YEAR):
 
 def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   und = 'FXI'
-  volTgt = .24
-  maxWgt = 2
-  #####
   script = 'CSS'
   if not isSkipTitle:
     st.header(script)
@@ -407,13 +404,9 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   isTomTs = getTomTs(dp[und], 0, 2,isNYSE=True).rename('TOM?')
   isEntryTs = (ibsTs > .9) & (ratio1Ts > 1) & (ratio2Ts>1) & (isTomTs == 0)
   isExitTs = ibsTs < 1/3
-  stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True)
+  stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
   dw[und] = -stateTs * .75
   dw[und].loc[dw.index.month.isin([5, 6, 7, 8, 9, 10])] *= 2
-  #dw[und] = -cleanTs(stateTs,isMonthlyRebal=False)
-  #dw.loc[dw.index.year < yrStart] = 0
-  #hv = getHV(dp, n=8)
-  #dw = (dw * volTgt / hv).clip(-maxWgt, 0)
   #####
   st.header('Table')
   tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.fillna(method='pad'), how='inner')
