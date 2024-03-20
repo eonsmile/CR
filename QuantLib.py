@@ -407,6 +407,7 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
   dw[und] = -stateTs * .75
   dw[und].loc[dw.index.month.isin([5, 6, 7, 8, 9, 10])] *= 2
+  dw.loc[dw.index.year < yrStart] = 0
   #####
   st.header('Table')
   tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.fillna(method='pad'), how='inner')
