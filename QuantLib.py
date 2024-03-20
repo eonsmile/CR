@@ -301,9 +301,9 @@ def getTomTs(ts, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day
   dtLast=ts.index[-1]
   dtLast2=pendulum.instance(dtLast)
   if isNYSE:
-    dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=31)).index
+    dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=30)).index
   else:
-    dts = [dtLast2.add(days=i).date() for i in range(31)]
+    dts = [dtLast2.add(days=i).date() for i in range(30)]
     dts = pd.DatetimeIndex(pd.to_datetime(dts))
   ts = ts.reindex(ts.index.union(dts))
   ts[:]=0
@@ -406,12 +406,14 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   ratio2Ts.rename('Ratio 2', inplace=True)
   isTomTs = getTomTs(dp[und], 0, 2,isNYSE=True).rename('TOM?')
   isEntryTs = (ibsTs > .9) & (ratio1Ts > 1) & (ratio2Ts>1) & (isTomTs == 0)
-  isExitTs = ibsTs < .25
+  isExitTs = ibsTs < 1/3
   stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True)
-  dw[und] = -cleanTs(stateTs,isMonthlyRebal=False)
-  dw.loc[dw.index.year < yrStart] = 0
-  hv = getHV(dp, n=8)
-  dw = (dw * volTgt / hv).clip(-maxWgt, 0)
+  dw[und] = -stateTs * .75
+  dw[und].loc[dw.index.month.isin([5, 6, 7, 8, 9, 10])] *= 2
+  #dw[und] = -cleanTs(stateTs,isMonthlyRebal=False)
+  #dw.loc[dw.index.year < yrStart] = 0
+  #hv = getHV(dp, n=8)
+  #dw = (dw * volTgt / hv).clip(-maxWgt, 0)
   #####
   st.header('Table')
   tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.fillna(method='pad'), how='inner')
