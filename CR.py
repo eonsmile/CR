@@ -57,3 +57,4 @@ if ul.stCheckPW('password_CR'):
     ql.runTPP()
     st.divider()
     ql.runCore()
+    st.markdown('YTD performance change due to model update: 3.4%')

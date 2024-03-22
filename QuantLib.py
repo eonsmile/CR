@@ -331,29 +331,38 @@ def runIBS(yrStart=IBS_START_YEAR):
   st.header(script)
   dp, dw, dfDict, hv = btSetup([undE, undB])
   #####
-  def m(df):
-    df = round(df, 10)
+  def m(und,dfDict):
+    df = round(dfDict[und], 10)
     ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
     ibsTs.rename('IBS', inplace=True)
-    isEntryTs = ibsTs < .1
-    isExitTs = df['Close'] > df['High'].shift(1)
+    if und==undE:
+      isEntryTs = ibsTs < .1
+      isExitTs = df['Close'] > df['High'].shift(1)
+    elif und==undB:
+      isEntryTs = (ibsTs < .15) & (df['Low'] < df['Low'].shift(1))
+      isExitTs = ibsTs > .55
+    else:
+      ul.iExit('runIBS')
     stateTs = getStateTs(isEntryTs, isExitTs, isCleaned=True)
     return ibsTs, stateTs
   #####
-  ibsTsE, stateTsE = m(dfDict[undE])
-  ibsTsB, stateTsB = m(dfDict[undB])
+  ibsTsE, stateTsE = m(undE,dfDict)
+  ibsTsB, stateTsB = m(undB,dfDict)
   dw[undE] = cleanTs(stateTsE)
   dw[undB] = cleanTs(stateTsB)
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   st.header('Tables')
   #####
-  def m(und, ibsTs, df, stateTs):
+  def m(und, ibsTs, df, stateTs, isLow=False):
     st.subheader(und)
-    ul.stWriteDf(ul.merge(round(ibsTs, 3), df['Close'], df['High'], stateTs.fillna(method='pad'),how='inner').tail())
+    df2=ul.merge(round(ibsTs, 3), df['Close'], df['High'], how='inner')
+    if isLow: df2=ul.merge(df2, df['Low'], how='inner')
+    df2=ul.merge(df2, stateTs.fillna(method='pad'),how='inner')
+    ul.stWriteDf(df2.tail())
   #####
   m(undE, ibsTsE, dfDict[undE], stateTsE)
-  m(undB, ibsTsB, dfDict[undB], stateTsB)
+  m(undB, ibsTsB, dfDict[undB], stateTsB, isLow=True)
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
