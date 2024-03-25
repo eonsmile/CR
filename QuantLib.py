@@ -97,7 +97,7 @@ def dwAllOrNone(dw):
   dw[selection] = dw.fillna(method='pad')[selection]
 
 def dwTail(dw,n=5):
-  ul.stWriteDf(round(dw.dropna().tail(n), 3))
+  ul.stWriteDf(dw.mask(dw.abs() == 0.0, 0.0).dropna().tail(n).round(3))
 
 def printCalendar(ts):
   def rgroup(r, groups):
@@ -450,7 +450,7 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   #####
   dw=dp.copy()
   dw[und]=stateTs
-  dw=cleanTs(dw)
+  dw=cleanTs(dw,isMonthlyRebal=True)
   hv = getHV(dp,n=16,af=365)
   dw = (dw * volTgt**2 / hv**2).clip(0, maxWgt)
   #####
