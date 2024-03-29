@@ -209,7 +209,7 @@ def getCoreWeightsDf():
   l = list()
   d = ul.cachePersist('r', 'CR')['IBSDict']
   ep = 1e-9
-  ibsDict = {'SPY': 0,
+  ibsDict = {'SPY': d['SPY'] + ep,
              'QQQ': d['QQQ'] + ep,
              'TLT': d['TLT'] + ep,
              'IEF': 0,
