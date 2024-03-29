@@ -322,20 +322,24 @@ def getYFinanceS(ticker):
 # Scripts
 #########
 def runIBS(yrStart=IBS_START_YEAR):
-  undE = 'QQQ'
+  undE = 'SPY'
+  undQ = 'QQQ'
   undB = 'TLT'
   volTgt = .16
-  maxWgt = 2
+  maxWgt = 1
   #####
   script = 'IBS'
   st.header(script)
-  dp, dw, dfDict, hv = btSetup([undE, undB])
+  dp, dw, dfDict, hv = btSetup([undE, undQ, undB])
   #####
-  def m(und,dfDict):
+  def m(und,dfDict,isMondayTs=None):
     df = round(dfDict[und], 10)
     ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
     ibsTs.rename('IBS', inplace=True)
     if und==undE:
+      isEntryTs = (isMondayTs == 1) & (ibsTs < .2) & (df['Low'] < df['Low'].shift(1))
+      isExitTs = df['Close'] > df['High'].shift(1)
+    elif und==undQ:
       isEntryTs = ibsTs < .1
       isExitTs = df['Close'] > df['High'].shift(1)
     elif und==undB:
@@ -343,25 +347,31 @@ def runIBS(yrStart=IBS_START_YEAR):
       isExitTs = ibsTs > .55
     else:
       ul.iExit('runIBS')
-    stateTs = getStateTs(isEntryTs, isExitTs, isCleaned=True)
+    stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
     return ibsTs, stateTs
   #####
-  ibsTsE, stateTsE = m(undE,dfDict)
+  isMondayTs = dfDict[undE]['Close'].rename('Is Monday') * 0
+  isMondayTs[isMondayTs.index.weekday == 0] = 1
+  ibsTsE, stateTsE = m(undE,dfDict, isMondayTs=isMondayTs)
+  ibsTsQ, stateTsQ = m(undQ,dfDict)
   ibsTsB, stateTsB = m(undB,dfDict)
-  dw[undE] = cleanTs(stateTsE)
-  dw[undB] = cleanTs(stateTsB)
+  dw[undE] = stateTsE
+  dw[undQ] = stateTsQ
+  dw[undB] = stateTsB
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   st.header('Tables')
   #####
-  def m(und, ibsTs, df, stateTs, isLow=False):
+  def m(und, ibsTs, df, stateTs, isLow=False, isMondayTs=None):
     st.subheader(und)
     df2=ul.merge(round(ibsTs, 3), df['Close'], df['High'], how='inner')
     if isLow: df2=ul.merge(df2, df['Low'], how='inner')
+    if isMondayTs is not None: df2=ul.merge(df2, isMondayTs, how='inner')
     df2=ul.merge(df2, stateTs.fillna(method='pad'),how='inner')
     ul.stWriteDf(df2.tail())
   #####
-  m(undE, ibsTsE, dfDict[undE], stateTsE)
+  m(undE, ibsTsE, dfDict[undE], stateTsE, isLow=True, isMondayTs=isMondayTs)
+  m(undQ, ibsTsQ, dfDict[undQ], stateTsQ)
   m(undB, ibsTsB, dfDict[undB], stateTsB, isLow=True)
   st.header('Weights')
   dwTail(dw)

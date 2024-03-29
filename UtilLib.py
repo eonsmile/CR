@@ -6,7 +6,6 @@ import pandas as pd
 import pathlib
 import os
 import pendulum
-import pickle
 import time
 import colorama
 from filelock import FileLock
@@ -81,10 +80,10 @@ def cachePersist(mode, key, value=None, expireMins=1e9):
   ffn = path / f"{key}.pickle"
   with FileLock(f"{ffn}.lock"):
     if mode=='w':
-      with ffn.open('wb') as f: pickle.dump(value, f)
+      pd.to_pickle(value, ffn, compression='infer')
     elif mode=='r':
       if (not ffn.exists()) or (time.time() - ffn.lstat().st_mtime >= 60*expireMins): return None
-      with ffn.open('rb') as f: return pickle.load(f)
+      return pd.read_pickle(ffn)
     else:
       iExit(f"cachePersist (mode=='{mode}')")
 
