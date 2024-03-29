@@ -350,7 +350,7 @@ def runIBS(yrStart=IBS_START_YEAR):
     stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
     return ibsTs, stateTs
   #####
-  isMondayTs = dfDict[undE]['Close'].rename('Is Monday') * 0
+  isMondayTs = dfDict[undE]['Close'].rename('Monday?') * 0
   isMondayTs[isMondayTs.index.weekday == 0] = 1
   ibsTsE, stateTsE = m(undE,dfDict, isMondayTs=isMondayTs)
   ibsTsQ, stateTsQ = m(undQ,dfDict)
