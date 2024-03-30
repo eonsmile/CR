@@ -45,19 +45,19 @@ def bt(script,dp,dw,yrStart):
   dp2 = dp2.iloc[dp2.index >= dtOrigin]
   dw2 = dw2.iloc[dw2.index >= dtOrigin]
   ecTs = dp2.iloc[:, 0].rename('Equity Curve') * 0
-  ec = ecTs[0] = 1
+  ec = ecTs.iloc[0] = 1
   p = dp2.iloc[0]
   w = dw2.iloc[0]
   for i in range(1, len(dp2)):
     r = dp2.iloc[i] / p - 1
-    ecTs[i] = ec * (1 + sum(w * r))
+    ecTs.iloc[i] = ec * (1 + sum(w * r))
     if not dw2.iloc[i].isnull().any():
       w = dw2.iloc[i]
       p = dp2.iloc[i]
-      ec = ecTs[i]
+      ec = ecTs.iloc[i]
   printCalendar(ecTs)
   nYears = (ecTs.index[-1] - ecTs.index[0]).days / 365
-  cagr = math.pow(ecTs[-1] / ecTs[0], 1 / nYears) - 1
+  cagr = math.pow(ecTs.iloc[-1] / ecTs.iloc[0], 1 / nYears) - 1
   dd = ecTs / ecTs.cummax() - 1
   upi = cagr / np.sqrt(np.power(dd, 2).mean())
   maxDD = -min(dd)
@@ -83,7 +83,7 @@ def btSetup(tickers,hvN=32,yrStart=GET_PRICE_HISTORY_START_YEAR,applyDatesTs=Non
     else:
       dp= ul.merge(dp, cTs, how='outer')
     dfDict[und] = df
-  dp=dp.fillna(method='pad')
+  dp=dp.ffill()
   dw=dp.copy()
   dw.values[:] = np.nan
   hv = getHV(dp, n=hvN)
@@ -94,7 +94,7 @@ def btSetup(tickers,hvN=32,yrStart=GET_PRICE_HISTORY_START_YEAR,applyDatesTs=Non
 
 def dwAllOrNone(dw):
   selection = dw.isnull().sum(axis=1).isin(list(range(1,len(dw.columns))))
-  dw[selection] = dw.fillna(method='pad')[selection]
+  dw[selection] = dw.ffill()[selection]
 
 def dwTail(dw,n=5):
   ul.stWriteDf(dw.mask(dw.abs() == 0.0, 0.0).dropna().tail(n).round(3))
@@ -114,9 +114,9 @@ def printCalendar(ts):
   df = pd.pivot_table(data=df, index='Year', columns='Month', values='Returns', fill_value=0)
   df = df[ul.spl('Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec')]
   df['Year'] = rgroup(r, r.index.year).values
-  df = df.applymap(lambda n:f"{n*100:.1f}")
+  df = df.map(lambda n: f"{n * 100:.1f}")
   height = (len(df)+1) * 35 + 3
-  df=df.style.applymap(lambda z:f"color: {'red' if float(z)<0 else '#228B22'}")
+  df = df.style.map(lambda z: f"color: {'red' if float(z) < 0 else '#228B22'}")
   st.dataframe(df,height=height)
 
 #############################################################################################
@@ -125,32 +125,32 @@ def printCalendar(ts):
 # Etc
 #####
 def applyDates(a,b):
-  return a.reindex(b.index,method='pad').fillna(method='pad').copy()
+  return a.reindex(b.index,method='pad').ffill().copy()
 
 def cleanTs(ts,isMonthlyRebal=True):
-  ts=ts.astype('float64').fillna(method='pad')
+  ts=ts.astype('float64').ffill()
   tmp=ts.shift(1)
   if isinstance(ts,pd.DataFrame):
     for i in range(1,len(ts)):
       if ts.iloc[i].equals(tmp.iloc[i]):
         ts.iloc[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts,'M')
-      ts.iloc[pe]=ts.fillna(method='pad').iloc[pe]
+      pe=endpoints(ts,'ME')
+      ts.iloc[pe]=ts.ffill().iloc[pe]
   else:
     for i in range(1,len(ts)):
-      if ts[i]==tmp[i]:
-        ts[i]=np.nan
+      if ts.iloc[i]==tmp.iloc[i]:
+        ts.iloc[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts,'M')
-      ts[pe]=ts.fillna(method='pad')[pe]
+      pe=endpoints(ts,'ME')
+      ts[pe]=ts.ffill()[pe]
   return ts
 
 def EMA(ts,n):
   return ts.ewm(span=n,min_periods=n,adjust=False).mean().rename('EMA')
 
 # https://quantstrattrader.wordpress.com/author/ikfuntech/
-def endpoints(df, on='M', offset=0):
+def endpoints(df, on='ME', offset=0):
   ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
   date_idx = np.where(df.index.isin(ep_dates))
   date_idx = np.insert(date_idx, 0, 0)
@@ -287,11 +287,11 @@ def getStateTs(isEntryTs,isExitTs,isCleaned=False,isMonthlyRebal=True):
   stateTs=(isEntryTs*np.nan).rename('State')
   state=0
   for i in range(len(stateTs)):
-    if state==0 and isEntryTs[i]:
+    if state==0 and isEntryTs.iloc[i]:
       state=1
-    if state==1 and isExitTs[i]:
+    if state==1 and isExitTs.iloc[i]:
       state=0
-    stateTs[i]=state
+    stateTs.iloc[i]=state
   if isCleaned:
     stateTs=cleanTs(stateTs,isMonthlyRebal=isMonthlyRebal)
   return stateTs.astype(float)
@@ -308,7 +308,7 @@ def getTomTs(ts, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day
   ts = ts.reindex(ts.index.union(dts))
   ts[:]=0
   for i in range(offsetBegin, offsetEnd+1):
-    ts[endpoints(ts, offset=i)]=1
+    ts.iloc[endpoints(ts, offset=i)]=1
   return ts[ts.index<=dtLast]
 
 def getYFinanceS(ticker):
@@ -367,7 +367,7 @@ def runIBS(yrStart=IBS_START_YEAR):
     df2=ul.merge(round(ibsTs, 3), df['Close'], df['High'], how='inner')
     if isLow: df2=ul.merge(df2, df['Low'], how='inner')
     if isMondayTs is not None: df2=ul.merge(df2, isMondayTs, how='inner')
-    df2=ul.merge(df2, stateTs.fillna(method='pad'),how='inner')
+    df2=ul.merge(df2, stateTs.ffill(),how='inner')
     ul.stWriteDf(df2.tail())
   #####
   m(undE, ibsTsE, dfDict[undE], stateTsE, isLow=True, isMondayTs=isMondayTs)
@@ -391,7 +391,7 @@ def runTPP(yrStart=TPP_START_YEAR):
   isOkDf = (ratioDf >= 1) * 1
   wDf = (1 / hv) * isOkDf
   rDf = np.log(dp / dp.shift(1))
-  for i in endpoints(rDf, 'M'):
+  for i in endpoints(rDf, 'ME'):
     origin = i - lookback + 1
     if origin >= 0:
       prTs = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
@@ -425,11 +425,11 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   isExitTs = ibsTs < 1/3
   stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
   dw[und] = -stateTs * .75
-  dw[und].loc[dw.index.month.isin([5, 6, 7, 8, 9, 10])] *= 2
+  dw.loc[dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] *= 2
   dw.loc[dw.index.year < yrStart] = 0
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.fillna(method='pad'), how='inner')
+  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.ffill(), how='inner')
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
@@ -486,11 +486,11 @@ def runAggregate(yrStart,strategies,weights,script):
   dp = pd.DataFrame()
   for strategy in strategies:
     dp[strategy] = ul.cachePersist('r', strategy)
-  dp = applyDates(dp, dp.iloc[:,-1]).fillna(method='pad')
+  dp = applyDates(dp, dp.iloc[:,-1]).ffill()
   dw = dp * np.nan
-  pe = endpoints(dw, 'M')
+  pe = endpoints(dw, 'ME')
   for i in range(len(weights)):
-    dw[strategies[i]].iloc[pe] = weights[i]
+    dw.iloc[pe, i] = weights[i]
   #####
   # Backtest
   bt(script, dp, dw, yrStart)
