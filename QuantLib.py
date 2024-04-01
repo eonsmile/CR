@@ -362,17 +362,16 @@ def runIBS(yrStart=IBS_START_YEAR):
   dwAllOrNone(dw)
   st.header('Tables')
   #####
-  def m(und, ibsTs, df, stateTs, isLow=False, isMondayTs=None):
+  def m(und, ibsTs, df, stateTs, isMondayTs=None):
     st.subheader(und)
-    df2=ul.merge(round(ibsTs, 3), df['Close'], df['High'], how='inner')
-    if isLow: df2=ul.merge(df2, df['Low'], how='inner')
+    df2=ul.merge(round(ibsTs, 3), df['Close'], df['High'], df['Low'], how='inner')
     if isMondayTs is not None: df2=ul.merge(df2, isMondayTs, how='inner')
     df2=ul.merge(df2, stateTs.ffill(),how='inner')
     ul.stWriteDf(df2.tail())
   #####
-  m(undE, ibsTsE, dfDict[undE], stateTsE, isLow=True, isMondayTs=isMondayTs)
+  m(undE, ibsTsE, dfDict[undE], stateTsE, isMondayTs=isMondayTs)
   m(undQ, ibsTsQ, dfDict[undQ], stateTsQ)
-  m(undB, ibsTsB, dfDict[undB], stateTsB, isLow=True)
+  m(undB, ibsTsB, dfDict[undB], stateTsB)
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
@@ -429,7 +428,7 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   dw.loc[dw.index.year < yrStart] = 0
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.ffill(), how='inner')
+  tableTs = ul.merge(df['Close'], df['High'], df['Low'], round(ibsTs, 3), round(ratio1Ts, 3), round(ratio2Ts, 3), isTomTs, stateTs.ffill(), how='inner')
   ul.stWriteDf(tableTs.tail())
   st.header('Weights')
   dwTail(dw)
