@@ -10,6 +10,10 @@ import time
 import colorama
 from filelock import FileLock
 import pretty_errors # keep here
+
+#########
+# Globals
+#########
 colorama.init()
 
 ###########
