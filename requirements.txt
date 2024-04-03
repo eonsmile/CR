@@ -5,4 +5,4 @@ quandl
 pendulum
 pretty_errors
 pandas_market_calendars
-pykalman
+pykalman-py311-update

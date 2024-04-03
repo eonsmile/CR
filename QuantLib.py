@@ -244,12 +244,12 @@ def getHV(ts, n=32, af=252):
 
 def getKFMeans(ts):
   kf = pykalman.KalmanFilter(n_dim_obs=1, n_dim_state=1,
-                    initial_state_mean=0,
-                    initial_state_covariance=1,
-                    transition_matrices=[1],
-                    observation_matrices=[1],
-                    observation_covariance=1,
-                    transition_covariance=0.05)
+                             initial_state_mean=0,
+                             initial_state_covariance=1,
+                             transition_matrices=[1],
+                             observation_matrices=[1],
+                             observation_covariance=1,
+                             transition_covariance=0.05)
   means, _ = kf.filter(ts)
   return pd.Series(means.flatten(), index=ts.index)
 
