@@ -94,12 +94,16 @@ def cachePersist(mode, key, value=None, expireMins=1e9):
 #####
 # Etc
 #####
-def colored(z, color=None, on_color=None, attrs=None):
-  if color=='red':
-    prefix=colorama.Fore.RED
-  else:
-    prefix=''
-  return f"{prefix}{z}"
+def colored(text, color=None, isReverse=False, isUnderline=False):
+  z = text
+  if color is not None:
+    z = f"{getattr(colorama.Fore, color.upper())}{z}"
+    if isReverse:
+      if color is None: color='WHITE'
+      z=f"{getattr(colorama.Fore, 'BLACK')}{getattr(colorama.Back, color.upper())}{text}"
+    if isUnderline:
+      z=f"\033[4m{z}"
+  return f"{z}{colorama.Style.RESET_ALL}"
 
 def getCurrentTime(isCondensed=False):
   return pendulum.now().format(f"{'' if isCondensed else 'YYYY-MM-DD'} HH:mm:ss")
