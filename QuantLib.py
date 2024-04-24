@@ -26,6 +26,7 @@ TPP_START_YEAR=2013
 CORE_START_YEAR=2013
 CSS_START_YEAR=2013
 BTS_START_YEAR=2015
+MIS_START_YEAR=2013
 
 #############################################################################################
 
@@ -466,6 +467,54 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   st.header('Table')
   tableTs = ul.merge(df['Close'], ratio1Ts.round(3), ratio2Ts.round(3), isTomTs, stateTs, how='inner')
   ul.stWriteDf(tableTs.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
+  undB = 'TLT'
+  undG = 'GLD'
+  #####
+  script = 'MIS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  dp, dw, dfDict, hv = btSetup([undB, undG])
+  #####
+  cTsB = dfDict[undB]['Close']
+  cTsG = dfDict[undG]['Close']
+  hTsG = dfDict[undG]['High']
+  #####
+  w1Ts = getTomTs(cTsB, -7, 0 - 1, isNYSE=True)
+  w2Ts = getTomTs(cTsB, 0, 7 - 1, isNYSE=True)
+  stateTsB = w1Ts-w2Ts
+  stateTsB.rename('State', inplace=True)
+  #####
+  cond1Ts = (cTsG > hTsG.rolling(3).max().shift())*1
+  cond2Ts = (cTsB > cTsB.shift())*1
+  cond3Ts = (cTsG * 0).astype(int)
+  cond3Ts.loc[cond3Ts.index.weekday != 3] = 1
+  cond1Ts.rename('Conditon 1?',inplace=True)
+  cond2Ts.rename('Conditon 2?',inplace=True)
+  cond3Ts.rename('Conditon 3?',inplace=True)
+  isEntryTs = cond1Ts & cond2Ts & cond3Ts
+  isExitTs = (cTsG > hTsG.shift()) * 1
+  isExitTs.loc[isEntryTs == 1] = 0
+  stateTsG = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False)
+  stateTsG.rename('State', inplace=True)
+  #####
+  dw[undB] = cleanTs(stateTsB,isMonthlyRebal=False)*1
+  dw[undG] = cleanTs(stateTsG,isMonthlyRebal=False)*1
+  dwAllOrNone(dw)
+  #####
+  st.header('Tables')
+  st.subheader(undB)
+  tableTsB = ul.merge(cTsB.round(2),stateTsB.ffill(),how='inner')
+  ul.stWriteDf(tableTsB.tail())
+  st.subheader(undG)
+  tableTsG = ul.merge(cTsG.round(2),hTsG.round(2),cond1Ts,cond2Ts,cond3Ts,stateTsG.ffill(), how='inner')
+  ul.stWriteDf(tableTsG.tail())
+  #####
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
