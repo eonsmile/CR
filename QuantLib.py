@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import requests
 import math
+import talib
 import quandl
 import pendulum
 import pykalman
@@ -19,7 +20,7 @@ from sklearn.linear_model import LinearRegression
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
-GET_PRICE_HISTORY_START_YEAR=2011
+GET_PRICE_HISTORY_START_YEAR=2011-5
 YFINANCE_START_YEAR=2023
 IBS_START_YEAR=2013
 TPP_START_YEAR=2013
@@ -484,11 +485,19 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   cTsB = dfDict[undB]['Close']
   cTsG = dfDict[undG]['Close']
   hTsG = dfDict[undG]['High']
+  lTsG = dfDict[undG]['Low']
   #####
+  # TLT
   w1Ts = getTomTs(cTsB, -7, 0 - 1, isNYSE=True)
   w2Ts = getTomTs(cTsB, 0, 7 - 1, isNYSE=True)
   stateTsB = w1Ts-w2Ts
   stateTsB.rename('State', inplace=True)
+  #####
+  # GLD
+  ibsTsG = (cTsG - lTsG) / (hTsG - lTsG)
+  adxTsG = talib.ADX(hTsG, lTsG, cTsG, timeperiod=5)
+  ibsTsG.rename('IBS',inplace=True)
+  adxTsG.rename('ADX',inplace=True)
   #####
   cond1Ts = (cTsG > hTsG.rolling(3).max().shift())*1
   cond2Ts = (cTsB > cTsB.shift())*1
@@ -497,11 +506,19 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   cond1Ts.rename('Conditon 1?',inplace=True)
   cond2Ts.rename('Conditon 2?',inplace=True)
   cond3Ts.rename('Conditon 3?',inplace=True)
-  isEntryTs = cond1Ts & cond2Ts & cond3Ts
+  isEntryTs = (cond1Ts & cond2Ts & cond3Ts) * 1
   isExitTs = (cTsG > hTsG.shift()) * 1
   isExitTs.loc[isEntryTs == 1] = 0
-  stateTsG = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False)
-  stateTsG.rename('State', inplace=True)
+  preStateTsG1 = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
+  #####
+  cond4Ts = ((ibsTsG < .15) & (adxTsG > 30) & (cTsG.index.day>15)) * 1
+  cond4Ts.rename('Condition 4',inplace=True)
+  isEntryTs = cond4Ts
+  isExitTs = (cTsG > cTsG.shift()) * 1
+  preStateTsG2 = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  #####
+  stateTsG=(preStateTsG1+preStateTsG2).clip(None,1)
+  stateTsG.rename('State',inplace=True)
   #####
   dw[undB] = cleanTs(stateTsB,isMonthlyRebal=False)*1
   dw[undG] = cleanTs(stateTsG,isMonthlyRebal=False)*1
@@ -511,9 +528,12 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   st.subheader(undB)
   tableTsB = ul.merge(cTsB.round(2),stateTsB.ffill(),how='inner')
   ul.stWriteDf(tableTsB.tail())
+  #####
   st.subheader(undG)
-  tableTsG = ul.merge(cTsG.round(2),hTsG.round(2),cond1Ts,cond2Ts,cond3Ts,stateTsG.ffill(), how='inner')
+  tableTsG = ul.merge(cTsG.round(2),hTsG.round(2),cond1Ts,cond2Ts,cond3Ts,preStateTsG1, how='inner')
   ul.stWriteDf(tableTsG.tail())
+  tableTsG2 = ul.merge(ibsTsG.round(3),adxTsG.round(1),cond4Ts,preStateTsG2,stateTsG.ffill(), how='inner')
+  ul.stWriteDf(tableTsG2.tail())
   #####
   st.header('Weights')
   dwTail(dw)
