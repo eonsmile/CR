@@ -20,14 +20,14 @@ from ta.trend import ADXIndicator
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
-GET_PRICE_HISTORY_START_YEAR=2011-5
+GET_PRICE_HISTORY_START_YEAR=2011
 YFINANCE_START_YEAR=2023
 IBS_START_YEAR=2013
 TPP_START_YEAR=2013
 CORE_START_YEAR=2013
 CSS_START_YEAR=2013
 BTS_START_YEAR=2015
-MIS_START_YEAR=2013-5
+MIS_START_YEAR=2013
 
 #############################################################################################
 
@@ -244,6 +244,11 @@ def getHV(ts, n=32, af=252):
     variances=(np.log(ts / ts.shift(1)))**2
     return (EMA(variances,n)**.5*(af**.5)).rename(ts.name)
 
+def getIBSTs(df):
+  ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+  ibsTs.rename('IBS',inplace=True)
+  return ibsTs
+
 def getKFMeans(ts):
   kf = pykalman.KalmanFilter(n_dim_obs=1, n_dim_state=1,
                              initial_state_mean=0,
@@ -280,7 +285,7 @@ def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   #####
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df.sort_values(by=['date'])
+  df = df.sort_values(by=['date']).round(10)
   return df
 
 def getStateTs(isEntryTs,isExitTs,isCleaned=False,isMonthlyRebal=True):
@@ -335,9 +340,8 @@ def runIBS(yrStart=IBS_START_YEAR):
   dp, dw, dfDict, hv = btSetup([undE, undQ, undB])
   #####
   def m(und,dfDict,isMondayTs=None):
-    df = round(dfDict[und], 10)
-    ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
-    ibsTs.rename('IBS', inplace=True)
+    df = dfDict[und]
+    ibsTs=getIBSTs(df)
     if und==undE:
       isEntryTs = (isMondayTs == 1) & (ibsTs < .2) & (df['Low'] < df['Low'].shift(1))
       isExitTs = df['Close'] > df['High'].shift(1)
@@ -414,9 +418,8 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
     st.header(script)
   #####
   dp, dw, dfDict, hv = btSetup([und])
-  df = round(dfDict[und], 10)
-  ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
-  ibsTs.rename('IBS', inplace=True)
+  df = dfDict[und]
+  ibsTs = getIBSTs(df)
   ratio1Ts = df['Close'] / df['Close'].shift(5)
   ratio1Ts.rename('Ratio 1', inplace=True)
   ratio2Ts = df['Close']/getKFMeans(df['Close'])
@@ -494,10 +497,8 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   stateTsB.rename('State', inplace=True)
   #####
   # GLD
-  ibsTsG = (cTsG - lTsG) / (hTsG - lTsG)
-  adxTsG = ADXIndicator(hTsG, lTsG, cTsG, window=5).adx()
-  ibsTsG.rename('IBS',inplace=True)
-  adxTsG.rename('ADX',inplace=True)
+  ibsTsG = getIBSTs(dfDict[undG])
+  adxTsG = ADXIndicator(hTsG, lTsG, cTsG, window=5).adx().rename('ADX')
   #####
   cond1Ts = (cTsG > hTsG.rolling(3).max().shift())*1
   cond2Ts = (cTsB > cTsB.shift())*1
@@ -511,7 +512,7 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   isExitTs.loc[isEntryTs == 1] = 0
   preStateTsG1 = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
   #####
-  cond4Ts = ((ibsTsG < .15) & (adxTsG > 30) & (cTsG.index.day>15)) * 1
+  cond4Ts = ((ibsTsG < .15) & (adxTsG > 30) & (cTsG.index.day>=15)) * 1
   cond4Ts.rename('Condition 4',inplace=True)
   isEntryTs = cond4Ts
   isExitTs = (cTsG > cTsG.shift()) * 1
