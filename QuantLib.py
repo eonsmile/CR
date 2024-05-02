@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import requests
 import math
-import talib
 import quandl
 import pendulum
 import pykalman
 import yfinance as yf
 import pandas_market_calendars
 from sklearn.linear_model import LinearRegression
+from ta.trend import ADXIndicator
 
 ###########
 # Constants
@@ -27,7 +27,7 @@ TPP_START_YEAR=2013
 CORE_START_YEAR=2013
 CSS_START_YEAR=2013
 BTS_START_YEAR=2015
-MIS_START_YEAR=2013
+MIS_START_YEAR=2013-5
 
 #############################################################################################
 
@@ -495,7 +495,7 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   #####
   # GLD
   ibsTsG = (cTsG - lTsG) / (hTsG - lTsG)
-  adxTsG = talib.ADX(hTsG, lTsG, cTsG, timeperiod=5)
+  adxTsG = ADXIndicator(hTsG, lTsG, cTsG, window=5).adx()
   ibsTsG.rename('IBS',inplace=True)
   adxTsG.rename('ADX',inplace=True)
   #####
