@@ -46,24 +46,24 @@ def bt(script,dp,dw,yrStart):
   dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
   dp2 = dp2.iloc[dp2.index >= dtOrigin]
   dw2 = dw2.iloc[dw2.index >= dtOrigin]
-  ecTs = dp2.iloc[:, 0].rename('Equity Curve') * 0
-  ec = ecTs.iloc[0] = 1
+  ecS = dp2.iloc[:, 0].rename('Equity Curve') * 0
+  ec = ecS.iloc[0] = 1
   p = dp2.iloc[0]
   w = dw2.iloc[0]
   for i in range(1, len(dp2)):
     r = dp2.iloc[i] / p - 1
-    ecTs.iloc[i] = ec * (1 + sum(w * r))
+    ecS.iloc[i] = ec * (1 + sum(w * r))
     if not dw2.iloc[i].isnull().any():
       w = dw2.iloc[i]
       p = dp2.iloc[i]
-      ec = ecTs.iloc[i]
-  printCalendar(ecTs)
-  nYears = (ecTs.index[-1] - ecTs.index[0]).days / 365
-  cagr = math.pow(ecTs.iloc[-1] / ecTs.iloc[0], 1 / nYears) - 1
-  dd = ecTs / ecTs.cummax() - 1
+      ec = ecS.iloc[i]
+  printCalendar(ecS)
+  nYears = (ecS.index[-1] - ecS.index[0]).days / 365
+  cagr = math.pow(ecS.iloc[-1] / ecS.iloc[0], 1 / nYears) - 1
+  dd = ecS / ecS.cummax() - 1
   upi = cagr / np.sqrt(np.power(dd, 2).mean())
   maxDD = -min(dd)
-  vol = ((np.log(ecTs / ecTs.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
+  vol = ((np.log(ecS / ecS.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
 
   m=lambda label,z: f"{label}: <font color='red'>{z}</font>"
   sep='&nbsp;'*10
@@ -73,26 +73,26 @@ def bt(script,dp,dw,yrStart):
     m('Cagr', f"{cagr:.1%}"),
     m('MaxDD', f"{maxDD:.1%}")
   ]), unsafe_allow_html=True)
-  ul.cachePersist('w',script,ecTs)
+  ul.cachePersist('w',script,ecS)
 
-def btSetup(tickers,hvN=32,yrStart=GET_PRICE_HISTORY_START_YEAR,applyDatesTs=None):
+def btSetup(tickers, hvN=32, yrStart=GET_PRICE_HISTORY_START_YEAR, applyDatesS=None):
   dfDict=dict()
   for und in tickers:
     df=getPriceHistory(und,yrStart=yrStart)
-    cTs=df['Close'].rename(und).to_frame()
+    cS=df['Close'].rename(und).to_frame()
     if not dfDict:
-      dp=cTs
+      dp=cS
     else:
-      dp= ul.merge(dp, cTs, how='outer')
+      dp= ul.merge(dp, cS, how='outer')
     dfDict[und] = df
   dp=dp.ffill()
   dw=dp.copy()
   dw.values[:] = np.nan
   hv = getHV(dp, n=hvN)
-  if applyDatesTs is None:
+  if applyDatesS is None:
     return dp,dw,dfDict,hv
   else:
-    return applyDates(dp,applyDatesTs),applyDates(dw,applyDatesTs),dfDict,applyDates(hv,applyDatesTs)
+    return applyDates(dp, applyDatesS),applyDates(dw, applyDatesS),dfDict,applyDates(hv, applyDatesS)
 
 def dwAllOrNone(dw):
   selection = dw.isnull().sum(axis=1).isin(list(range(1,len(dw.columns))))
@@ -101,13 +101,13 @@ def dwAllOrNone(dw):
 def dwTail(dw,n=5):
   ul.stWriteDf(dw.mask(dw.abs() == 0.0, 0.0).dropna().tail(n).round(3))
 
-def printCalendar(ts):
+def printCalendar(s):
   def rgroup(r, groups):
     def rprod(n):
       return (n + 1).prod() - 1
     return r.groupby(groups).apply(rprod)
   #####
-  r = ts.pct_change()[1:]
+  r = s.pct_change()[1:]
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
   df.index = df.index.map(pendulum.parse)
@@ -129,27 +129,27 @@ def printCalendar(ts):
 def applyDates(a,b):
   return a.reindex(b.index,method='pad').ffill().copy()
 
-def cleanTs(ts,isMonthlyRebal=True):
-  ts=ts.astype('float64').ffill()
-  tmp=ts.shift(1)
-  if isinstance(ts,pd.DataFrame):
-    for i in range(1,len(ts)):
-      if ts.iloc[i].equals(tmp.iloc[i]):
-        ts.iloc[i]=np.nan
+def cleanS(s, isMonthlyRebal=True):
+  s=s.astype('float64').ffill()
+  tmp=s.shift(1)
+  if isinstance(s, pd.DataFrame):
+    for i in range(1, len(s)):
+      if s.iloc[i].equals(tmp.iloc[i]):
+        s.iloc[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts,'ME')
-      ts.iloc[pe]=ts.ffill().iloc[pe]
+      pe=endpoints(s, 'ME')
+      s.iloc[pe]=s.ffill().iloc[pe]
   else:
-    for i in range(1,len(ts)):
-      if ts.iloc[i]==tmp.iloc[i]:
-        ts.iloc[i]=np.nan
+    for i in range(1, len(s)):
+      if s.iloc[i]==tmp.iloc[i]:
+        s.iloc[i]=np.nan
     if isMonthlyRebal:
-      pe=endpoints(ts,'ME')
-      ts[pe]=ts.ffill()[pe]
-  return ts
+      pe=endpoints(s, 'ME')
+      s[pe]=s.ffill()[pe]
+  return s
 
-def EMA(ts,n):
-  return ts.ewm(span=n,min_periods=n,adjust=False).mean().rename('EMA')
+def EMA(s, n):
+  return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
 
 # https://quantstrattrader.wordpress.com/author/ikfuntech/
 def endpoints(df, on='ME', offset=0):
@@ -192,14 +192,14 @@ def getBeta(ts1, ts2, lookbackWindow=90):
   return coef1 if mae1<mae2 else coef2
 
 def getCoreBetas():
-  tltTs = getYFinanceS('TLT')
-  iefTs = getYFinanceS('IEF')
-  zbTs = getYFinanceS('ZB=F')
-  znTs = getYFinanceS('ZN=F')
-  tnTs = getYFinanceS('TN=F')
-  zb_tlt_beta=getBeta(zbTs, tltTs)
-  zn_ief_beta=getBeta(znTs, iefTs)
-  tn_ief_beta=getBeta(tnTs, iefTs)
+  tltS = getYFinanceS('TLT')
+  iefS = getYFinanceS('IEF')
+  zbS = getYFinanceS('ZB=F')
+  znS = getYFinanceS('ZN=F')
+  tnS = getYFinanceS('TN=F')
+  zb_tlt_beta=getBeta(zbS, tltS)
+  zn_ief_beta=getBeta(znS, iefS)
+  tn_ief_beta=getBeta(tnS, iefS)
   return zb_tlt_beta,zn_ief_beta,tn_ief_beta
 
 def getCoreWeightsDf():
@@ -234,22 +234,22 @@ def getCoreWeightsDf():
   df.set_index(['ETF'], inplace=True)
   return df,lastUpdate
 
-def getHV(ts, n=32, af=252):
-  if isinstance(ts,pd.DataFrame):
-    hv = ts.copy()
+def getHV(s, n=32, af=252):
+  if isinstance(s, pd.DataFrame):
+    hv = s.copy()
     for col in hv.columns:
       hv[col].values[:] = getHV(hv[col], n=n, af=af)
     return hv
   else:
-    variances=(np.log(ts / ts.shift(1)))**2
-    return (EMA(variances,n)**.5*(af**.5)).rename(ts.name)
+    variances= (np.log(s / s.shift(1))) ** 2
+    return (EMA(variances,n)**.5*(af**.5)).rename(s.name)
 
-def getIBSTs(df):
-  ibsTs = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
-  ibsTs.rename('IBS',inplace=True)
-  return ibsTs
+def getIbsS(df):
+  ibsS = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+  ibsS.rename('IBS',inplace=True)
+  return ibsS
 
-def getKFMeans(ts):
+def getKFMeans(s):
   kf = pykalman.KalmanFilter(n_dim_obs=1, n_dim_state=1,
                              initial_state_mean=0,
                              initial_state_covariance=1,
@@ -257,8 +257,8 @@ def getKFMeans(ts):
                              observation_matrices=[1],
                              observation_covariance=1,
                              transition_covariance=0.05)
-  means, _ = kf.filter(ts)
-  return pd.Series(means.flatten(), index=ts.index)
+  means, _ = kf.filter(s)
+  return pd.Series(means.flatten(), index=s.index)
 
 def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   dtStart=str(yrStart)+ '-1-1'
@@ -274,7 +274,7 @@ def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
     for i in range(2 if yrStart<2015 else 1):
       df2, toTs = m(toTs)
       df = pd.concat([df2.drop(df2.index[-1]), df])
-    df['date'] = [pendulum.from_timestamp(ts).naive() for ts in df['time']]
+    df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
     df = df[df['date'] > '2010-7-16']
     df['open'] = df['close'].shift()
     df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
@@ -288,35 +288,35 @@ def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
   df = df.sort_values(by=['date']).round(10)
   return df
 
-def getStateTs(isEntryTs,isExitTs,isCleaned=False,isMonthlyRebal=True):
-  if len(isEntryTs)!=len(isExitTs):
-    ul.iExit('getStateTs')
-  stateTs=(isEntryTs*np.nan).rename('State')
+def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
+  if len(isEntryS)!=len(isExitS):
+    ul.iExit('getStateS')
+  stateS=(isEntryS * np.nan).rename('State')
   state=0
-  for i in range(len(stateTs)):
-    if state==0 and isEntryTs.iloc[i]:
+  for i in range(len(stateS)):
+    if state==0 and isEntryS.iloc[i]:
       state=1
-    if state==1 and isExitTs.iloc[i]:
+    if state==1 and isExitS.iloc[i]:
       state=0
-    stateTs.iloc[i]=state
+    stateS.iloc[i]=state
   if isCleaned:
-    stateTs=cleanTs(stateTs,isMonthlyRebal=isMonthlyRebal)
-  return stateTs.astype(float)
+    stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
+  return stateS.astype(float)
 
-def getTomTs(ts, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
-  ts=ts.copy()
-  dtLast=ts.index[-1]
+def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
+  s=s.copy()
+  dtLast=s.index[-1]
   dtLast2=pendulum.instance(dtLast)
   if isNYSE:
     dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=30)).index
   else:
     dts = [dtLast2.add(days=i).date() for i in range(30)]
     dts = pd.DatetimeIndex(pd.to_datetime(dts))
-  ts = ts.reindex(ts.index.union(dts))
-  ts[:]=0
+  s = s.reindex(s.index.union(dts))
+  s[:]=0
   for i in range(offsetBegin, offsetEnd+1):
-    ts.iloc[endpoints(ts, offset=i)]=1
-  return ts[ts.index<=dtLast]
+    s.iloc[endpoints(s, offset=i)]=1
+  return s[s.index <= dtLast]
 
 def getYFinanceS(ticker):
   from_date = f"{YFINANCE_START_YEAR}-01-01"
@@ -339,45 +339,45 @@ def runIBS(yrStart=IBS_START_YEAR):
   st.header(script)
   dp, dw, dfDict, hv = btSetup([undE, undQ, undB])
   #####
-  def m(und,dfDict,isMondayTs=None):
+  def m(und, dfDict, isMondayS=None):
     df = dfDict[und]
-    ibsTs=getIBSTs(df)
+    ibsS=getIbsS(df)
     if und==undE:
-      isEntryTs = (isMondayTs == 1) & (ibsTs < .2) & (df['Low'] < df['Low'].shift(1))
-      isExitTs = df['Close'] > df['High'].shift(1)
+      isEntryS = (isMondayS == 1) & (ibsS < .2) & (df['Low'] < df['Low'].shift(1))
+      isExitS = df['Close'] > df['High'].shift(1)
     elif und==undQ:
-      isEntryTs = ibsTs < .1
-      isExitTs = df['Close'] > df['High'].shift(1)
+      isEntryS = ibsS < .1
+      isExitS = df['Close'] > df['High'].shift(1)
     elif und==undB:
-      isEntryTs = (ibsTs < .15) & (df['Low'] < df['Low'].shift(1))
-      isExitTs = ibsTs > .55
+      isEntryS = (ibsS < .15) & (df['Low'] < df['Low'].shift(1))
+      isExitS = ibsS > .55
     else:
       ul.iExit('runIBS')
-    stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
-    return ibsTs, stateTs
+    stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
+    return ibsS, stateS
   #####
-  isMondayTs = dfDict[undE]['Close'].rename('Monday?') * 0
-  isMondayTs[isMondayTs.index.weekday == 0] = 1
-  ibsTsE, stateTsE = m(undE,dfDict, isMondayTs=isMondayTs)
-  ibsTsQ, stateTsQ = m(undQ,dfDict)
-  ibsTsB, stateTsB = m(undB,dfDict)
-  dw[undE] = stateTsE
-  dw[undQ] = stateTsQ
-  dw[undB] = stateTsB
+  isMondayS = dfDict[undE]['Close'].rename('Monday?') * 0
+  isMondayS[isMondayS.index.weekday == 0] = 1
+  ibsSE, stateSE = m(undE, dfDict, isMondayS=isMondayS)
+  ibsSQ, stateSQ = m(undQ,dfDict)
+  ibsSB, stateSB = m(undB,dfDict)
+  dw[undE] = stateSE
+  dw[undQ] = stateSQ
+  dw[undB] = stateSB
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   st.header('Tables')
   #####
-  def m(und, ibsTs, df, stateTs, isMondayTs=None):
+  def m(und, ibsS, df, stateS, isMondayS=None):
     st.subheader(und)
-    df2=ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsTs.round(3), how='inner')
-    if isMondayTs is not None: df2=ul.merge(df2, isMondayTs, how='inner')
-    df2=ul.merge(df2, stateTs.ffill(),how='inner')
+    df2=ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
+    if isMondayS is not None: df2=ul.merge(df2, isMondayS, how='inner')
+    df2=ul.merge(df2, stateS.ffill(), how='inner')
     ul.stWriteDf(df2.tail())
   #####
-  m(undE, ibsTsE, dfDict[undE], stateTsE, isMondayTs=isMondayTs)
-  m(undQ, ibsTsQ, dfDict[undQ], stateTsQ)
-  m(undB, ibsTsB, dfDict[undB], stateTsB)
+  m(undE, ibsSE, dfDict[undE], stateSE, isMondayS=isMondayS)
+  m(undQ, ibsSQ, dfDict[undQ], stateSQ)
+  m(undB, ibsSB, dfDict[undB], stateSB)
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
@@ -399,8 +399,8 @@ def runTPP(yrStart=TPP_START_YEAR):
   for i in endpoints(rDf, 'ME'):
     origin = i - lookback + 1
     if origin >= 0:
-      prTs = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
-      pHv = ((prTs ** 2).mean()) ** .5 * (252 ** .5)
+      prS = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
+      pHv = ((prS ** 2).mean()) ** .5 * (252 ** .5)
       dw.iloc[i] = wDf.iloc[i] * volTgt / pHv
   dw.clip(0, maxWgt, inplace=True)
   st.header('Prices')
@@ -419,22 +419,22 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   #####
   dp, dw, dfDict, hv = btSetup([und])
   df = dfDict[und]
-  ibsTs = getIBSTs(df)
-  ratio1Ts = df['Close'] / df['Close'].shift(5)
-  ratio1Ts.rename('Ratio 1', inplace=True)
-  ratio2Ts = df['Close']/getKFMeans(df['Close'])
-  ratio2Ts.rename('Ratio 2', inplace=True)
-  isTomTs = getTomTs(dp[und], 0, 2,isNYSE=True).rename('TOM?')
-  isEntryTs = (ibsTs > .9) & (ratio1Ts > 1) & (ratio2Ts>1) & (isTomTs == 0)
-  isExitTs = ibsTs < 1/3
-  stateTs = getStateTs(isEntryTs, isExitTs,isCleaned=True,isMonthlyRebal=False)
-  dw[und] = -stateTs * .75
+  ibsS = getIbsS(df)
+  ratio1S = df['Close'] / df['Close'].shift(5)
+  ratio1S.rename('Ratio 1', inplace=True)
+  ratio2S = df['Close']/getKFMeans(df['Close'])
+  ratio2S.rename('Ratio 2', inplace=True)
+  isTomS = getTomS(dp[und], 0, 2, isNYSE=True).rename('TOM?')
+  isEntryS = (ibsS > .9) & (ratio1S > 1) & (ratio2S>1) & (isTomS == 0)
+  isExitS = ibsS < 1/3
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
+  dw[und] = -stateS * .75
   dw.loc[dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] *= 2
   dw.loc[dw.index.year < yrStart] = 0
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsTs.round(3), ratio1Ts.round(3), ratio2Ts.round(3), isTomTs, stateTs.ffill(), how='inner')
-  ul.stWriteDf(tableTs.tail())
+  tableS = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), ratio1S.round(3), ratio2S.round(3), isTomS, stateS.ffill(), how='inner')
+  ul.stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
@@ -451,26 +451,26 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   df=getPriceHistory(und,yrStart)
   dp=df[['Close']]
   dp.columns=[und]
-  ratio1Ts=dp[und]/dp[und].shift(28)
-  ratio1Ts.rename('Ratio 1',inplace=True)
-  ratio2Ts=dp[und]/dp[und].rolling(5).mean()
-  ratio2Ts.rename('Ratio 2', inplace=True)
+  ratio1S=dp[und]/dp[und].shift(28)
+  ratio1S.rename('Ratio 1',inplace=True)
+  ratio2S=dp[und]/dp[und].rolling(5).mean()
+  ratio2S.rename('Ratio 2', inplace=True)
   #####
-  isTomTs = getTomTs(dp[und],-4,3).rename('TOM?')
+  isTomS = getTomS(dp[und], -4, 3).rename('TOM?')
   #####
-  momScoreTs=(ratio1Ts>=1)*1+(ratio2Ts>=1)*1
-  stateTs = ((momScoreTs==2)*1 | (isTomTs==1)*1)*1
-  stateTs.rename('State', inplace=True)
+  momScoreS=(ratio1S>=1)*1+(ratio2S>=1)*1
+  stateS = ((momScoreS==2)*1 | (isTomS==1)*1)*1
+  stateS.rename('State', inplace=True)
   #####
   dw=dp.copy()
-  dw[und]=stateTs
-  dw=cleanTs(dw,isMonthlyRebal=True)
+  dw[und]=stateS
+  dw=cleanS(dw, isMonthlyRebal=True)
   hv = getHV(dp,n=16,af=365)
   dw = (dw * volTgt**2 / hv**2).clip(0, maxWgt)
   #####
   st.header('Table')
-  tableTs = ul.merge(df['Close'], ratio1Ts.round(3), ratio2Ts.round(3), isTomTs, stateTs, how='inner')
-  ul.stWriteDf(tableTs.tail())
+  tableS = ul.merge(df['Close'], ratio1S.round(3), ratio2S.round(3), isTomS, stateS, how='inner')
+  ul.stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
@@ -485,56 +485,56 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   #####
   dp, dw, dfDict, hv = btSetup([undB, undG])
   #####
-  cTsB = dfDict[undB]['Close']
-  cTsG = dfDict[undG]['Close']
-  hTsG = dfDict[undG]['High']
-  lTsG = dfDict[undG]['Low']
+  cSB = dfDict[undB]['Close']
+  cSG = dfDict[undG]['Close']
+  hSG = dfDict[undG]['High']
+  lSG = dfDict[undG]['Low']
   #####
   # TLT
-  w1Ts = getTomTs(cTsB, -7, 0 - 1, isNYSE=True)
-  w2Ts = getTomTs(cTsB, 0, 7 - 1, isNYSE=True)
-  stateTsB = w1Ts-w2Ts
-  stateTsB.rename('State', inplace=True)
+  w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
+  w2S = getTomS(cSB, 0, 7 - 1, isNYSE=True)
+  stateSB = w1S-w2S
+  stateSB.rename('State', inplace=True)
   #####
   # GLD
-  ibsTsG = getIBSTs(dfDict[undG])
-  adxTsG = ADXIndicator(hTsG, lTsG, cTsG, window=5).adx().rename('ADX')
+  ibsSG = getIbsS(dfDict[undG])
+  adxSG = ADXIndicator(hSG, lSG, cSG, window=5).adx().rename('ADX')
   #####
-  cond1Ts = (cTsG > hTsG.rolling(3).max().shift())*1
-  cond2Ts = (cTsB > cTsB.shift())*1
-  cond3Ts = (cTsG * 0).astype(int)
-  cond3Ts.loc[cond3Ts.index.weekday != 3] = 1
-  cond1Ts.rename('Conditon 1?',inplace=True)
-  cond2Ts.rename('Conditon 2?',inplace=True)
-  cond3Ts.rename('Conditon 3?',inplace=True)
-  isEntryTs = (cond1Ts & cond2Ts & cond3Ts) * 1
-  isExitTs = (cTsG > hTsG.shift()) * 1
-  isExitTs.loc[isEntryTs == 1] = 0
-  preStateTsG1 = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
+  cond1S = (cSG > hSG.rolling(3).max().shift())*1
+  cond2S = (cSB > cSB.shift())*1
+  cond3S = (cSG * 0).astype(int)
+  cond3S.loc[cond3S.index.weekday != 3] = 1
+  cond1S.rename('Conditon 1?',inplace=True)
+  cond2S.rename('Conditon 2?',inplace=True)
+  cond3S.rename('Conditon 3?',inplace=True)
+  isEntryS = (cond1S & cond2S & cond3S) * 1
+  isExitS = (cSG > hSG.shift()) * 1
+  isExitS.loc[isEntryS == 1] = 0
+  preStateSG1 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
   #####
-  cond4Ts = ((ibsTsG < .15) & (adxTsG > 30) & (cTsG.index.day>=15)) * 1
-  cond4Ts.rename('Condition 4',inplace=True)
-  isEntryTs = cond4Ts
-  isExitTs = (cTsG > cTsG.shift()) * 1
-  preStateTsG2 = getStateTs(isEntryTs, isExitTs, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  cond4S = ((ibsSG < .15) & (adxSG > 30) & (cSG.index.day>=15)) * 1
+  cond4S.rename('Condition 4',inplace=True)
+  isEntryS = cond4S
+  isExitS = (cSG > cSG.shift()) * 1
+  preStateSG2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
-  stateTsG=(preStateTsG1+preStateTsG2).clip(None,1)
-  stateTsG.rename('State',inplace=True)
+  stateSG=(preStateSG1+preStateSG2).clip(None,1)
+  stateSG.rename('State',inplace=True)
   #####
-  dw[undB] = cleanTs(stateTsB,isMonthlyRebal=False)*1
-  dw[undG] = cleanTs(stateTsG,isMonthlyRebal=False)*1
+  dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * 1
+  dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * 1
   dwAllOrNone(dw)
   #####
   st.header('Tables')
   st.subheader(undB)
-  tableTsB = ul.merge(cTsB.round(2),stateTsB.ffill(),how='inner')
-  ul.stWriteDf(tableTsB.tail())
+  tableSB = ul.merge(cSB.round(2),stateSB.ffill(),how='inner')
+  ul.stWriteDf(tableSB.tail())
   #####
   st.subheader(undG)
-  tableTsG = ul.merge(cTsG.round(2),hTsG.round(2),cond1Ts,cond2Ts,cond3Ts,preStateTsG1, how='inner')
-  ul.stWriteDf(tableTsG.tail())
-  tableTsG2 = ul.merge(ibsTsG.round(3),adxTsG.round(1),cond4Ts,preStateTsG2,stateTsG.ffill(), how='inner')
-  ul.stWriteDf(tableTsG2.tail())
+  tableSG = ul.merge(cSG.round(2),hSG.round(2),cond1S,cond2S,cond3S,preStateSG1, how='inner')
+  ul.stWriteDf(tableSG.tail())
+  tableSG2 = ul.merge(ibsSG.round(3),adxSG.round(1),cond4S,preStateSG2,stateSG.ffill(), how='inner')
+  ul.stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
   dwTail(dw)
