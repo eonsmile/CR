@@ -513,7 +513,7 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   #####
   # GLD
   ibsSG = getIbsS(dfDict[undG])
-  adxSG = pandas_ta.adx(hSG, lSG, cSG, length=5)['ADX_5'].rename('ADX2')
+  adxSG = pandas_ta.adx(hSG, lSG, cSG, length=5)['ADX_5'].rename('ADX5')
   #####
   cond1S = (cSG > hSG.rolling(3).max().shift())*1
   cond2S = (cSB > cSB.shift())*1
