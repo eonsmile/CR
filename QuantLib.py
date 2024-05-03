@@ -13,7 +13,7 @@ import pykalman
 import yfinance as yf
 import pandas_market_calendars
 from sklearn.linear_model import LinearRegression
-from ta.trend import ADXIndicator
+import pandas_ta
 
 ###########
 # Constants
@@ -476,6 +476,7 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   bt(script, dp, dw, yrStart)
 
 def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
+  undE = 'SPY'
   undB = 'TLT'
   undG = 'GLD'
   #####
@@ -483,12 +484,26 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
-  dp, dw, dfDict, hv = btSetup([undB, undG])
+  dp, dw, dfDict, hv = btSetup([undE, undB, undG])
+  #####
+  oSE = dfDict[undE]['Open']
+  hSE = dfDict[undE]['High']
+  lSE = dfDict[undE]['Low']
+  cSE = dfDict[undE]['Close']
   #####
   cSB = dfDict[undB]['Close']
-  cSG = dfDict[undG]['Close']
+  #####
   hSG = dfDict[undG]['High']
   lSG = dfDict[undG]['Low']
+  cSG = dfDict[undG]['Close']
+  #####
+  # SPY
+  isBHS = (pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100).rename('BH?') * 1
+  ratioS = (cSE / cSE.rolling(200).mean()).rename('Ratio')
+  rawS = ((isBHS == 1) & (ratioS >= 1)) * 1
+  rawS.rename('Raw',inplace=True)
+  stateSE = rawS.rolling(5).sum().clip(None, 1)
+  stateSE.rename('State', inplace=True)
   #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
@@ -498,7 +513,7 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   #####
   # GLD
   ibsSG = getIbsS(dfDict[undG])
-  adxSG = ADXIndicator(hSG, lSG, cSG, window=5).adx().rename('ADX')
+  adxSG = pandas_ta.adx(hSG, lSG, cSG, length=5)['ADX_5'].rename('ADX2')
   #####
   cond1S = (cSG > hSG.rolling(3).max().shift())*1
   cond2S = (cSB > cSB.shift())*1
@@ -521,11 +536,16 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   stateSG=(preStateSG1+preStateSG2).clip(None,1)
   stateSG.rename('State',inplace=True)
   #####
+  dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
   dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * 1
   dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * 1
   dwAllOrNone(dw)
   #####
   st.header('Tables')
+  st.subheader(undE)
+  tableSE = ul.merge(cSE.round(2),isBHS,ratioS.round(4),rawS,stateSE.ffill(),how='inner')
+  ul.stWriteDf(tableSE.tail())
+  #####
   st.subheader(undB)
   tableSB = ul.merge(cSB.round(2),stateSB.ffill(),how='inner')
   ul.stWriteDf(tableSB.tail())
