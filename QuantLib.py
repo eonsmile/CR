@@ -20,14 +20,14 @@ import pandas_ta
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
-GET_PRICE_HISTORY_START_YEAR=2011-5
+GET_PRICE_HISTORY_START_YEAR=2011
 YFINANCE_START_YEAR=2023
 IBS_START_YEAR=2013
 TPP_START_YEAR=2013
 CORE_START_YEAR=2013
 CSS_START_YEAR=2013
 BTS_START_YEAR=2015
-ART_START_YEAR=2013-5
+ART_START_YEAR=2013
 
 #############################################################################################
 
