@@ -20,14 +20,14 @@ import pandas_ta
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
-GET_PRICE_HISTORY_START_YEAR=2011
+GET_PRICE_HISTORY_START_YEAR=2011-5
 YFINANCE_START_YEAR=2023
 IBS_START_YEAR=2013
 TPP_START_YEAR=2013
 CORE_START_YEAR=2013
 CSS_START_YEAR=2013
 BTS_START_YEAR=2015
-MIS_START_YEAR=2013
+ART_START_YEAR=2013-5
 
 #############################################################################################
 
@@ -406,7 +406,7 @@ def runTPP(yrStart=TPP_START_YEAR):
   st.header('Prices')
   ul.stWriteDf(dp.tail())
   st.header('Ratios')
-  ul.stWriteDf(round(ratioDf, 4).tail())
+  ul.stWriteDf(ratioDf.round(3).tail())
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
@@ -475,12 +475,12 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
+def runART(yrStart=ART_START_YEAR, isSkipTitle=False):
   undE = 'SPY'
   undB = 'TLT'
   undG = 'GLD'
   #####
-  script = 'MIS'
+  script = 'ART'
   if not isSkipTitle:
     st.header(script)
   #####
@@ -502,8 +502,16 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   ratioS = (cSE / cSE.rolling(200).mean()).rename('Ratio')
   rawS = ((isBHS == 1) & (ratioS >= 1)) * 1
   rawS.rename('Raw',inplace=True)
-  stateSE = rawS.rolling(5).sum().clip(None, 1)
-  stateSE.rename('State', inplace=True)
+  preStateSE1 = rawS.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
+  #####
+  df = pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
+  df.index = pd.to_datetime(df['Date'])
+  sgArmorS = applyDates(df['SG-Armor'], cSE).shift()
+  wprS = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
+  isEntryS = ((wprS < (-90)) & (sgArmorS > 0))*1
+  isExitS = (wprS > (-10))*1
+  preStateSE2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  stateSE = (preStateSE1 + preStateSE2).clip(None,1).rename('State')
   #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
@@ -543,8 +551,10 @@ def runMIS(yrStart=MIS_START_YEAR, isSkipTitle=False):
   #####
   st.header('Tables')
   st.subheader(undE)
-  tableSE = ul.merge(cSE.round(2),isBHS,ratioS.round(4),rawS,stateSE.ffill(),how='inner')
+  tableSE = ul.merge(cSE.round(2),isBHS,ratioS.round(3),rawS,preStateSE1,how='inner')
   ul.stWriteDf(tableSE.tail())
+  tableSE2 = ul.merge(wprS.round(2),sgArmorS,preStateSE2,stateSE.ffill(), how='inner')
+  ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(undB)
   tableSB = ul.merge(cSB.round(2),stateSB.ffill(),how='inner')
@@ -589,7 +599,8 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = dp.copy()
   dp2[script] = ul.cachePersist('r', script)
   dp2 = dp2[[script] + strategies]
-  dp2 = round((dp2 / dp2.iloc[-1]).tail(23) * 100, 2)
+  dp2 = (dp2 / dp2.iloc[-1]).tail(23) * 100
+  dp2 = dp2.round(2)
   ul.stWriteDf(dp2, isMaxHeight=True)
 
 def runCore(yrStart=CORE_START_YEAR):
