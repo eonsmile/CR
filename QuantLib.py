@@ -20,14 +20,16 @@ import pandas_ta
 ###########
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
-GET_PRICE_HISTORY_START_YEAR=2011
-YFINANCE_START_YEAR=2023
-IBS_START_YEAR=2013
-TPP_START_YEAR=2013
-CORE_START_YEAR=2013
-CSS_START_YEAR=2013
-BTS_START_YEAR=2015
-ART_START_YEAR=2013
+START_YEAR_DICT={
+  'getPriceHistory':2011,
+  'YFinance':2023,
+  'IBS':2013,
+  'TPP':2013,
+  'Core':2013,
+  'CSS':2013,
+  'BTS':2015,
+  'ART':2013
+}
 
 #############################################################################################
 
@@ -75,7 +77,7 @@ def bt(script,dp,dw,yrStart):
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
-def btSetup(tickers, hvN=32, yrStart=GET_PRICE_HISTORY_START_YEAR, applyDatesS=None):
+def btSetup(tickers, hvN=32, yrStart=START_YEAR_DICT['getPriceHistory'], applyDatesS=None):
   dfDict=dict()
   for und in tickers:
     df=getPriceHistory(und,yrStart=yrStart)
@@ -260,7 +262,7 @@ def getKFMeans(s):
   means, _ = kf.filter(s)
   return pd.Series(means.flatten(), index=s.index)
 
-def getPriceHistory(und,yrStart=GET_PRICE_HISTORY_START_YEAR):
+def getPriceHistory(und,yrStart=START_YEAR_DICT['getPriceHistory']):
   dtStart=str(yrStart)+ '-1-1'
   if und in ul.spl('BTC,ETH'):
     def m(toTs=None):
@@ -319,7 +321,7 @@ def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day s
   return s[s.index <= dtLast]
 
 def getYFinanceS(ticker):
-  from_date = f"{YFINANCE_START_YEAR}-01-01"
+  from_date = f"{START_YEAR_DICT['YFinance']}-01-01"
   to_date = pendulum.today().format('YYYY-MM-DD')
   return yf.download(ticker, start=from_date, end=to_date)['Adj Close'].rename(ticker)
 
@@ -328,7 +330,7 @@ def getYFinanceS(ticker):
 #########
 # Scripts
 #########
-def runIBS(yrStart=IBS_START_YEAR):
+def runIBS(yrStart=START_YEAR_DICT['IBS']):
   undE = 'SPY'
   undQ = 'QQQ'
   undB = 'TLT'
@@ -382,7 +384,7 @@ def runIBS(yrStart=IBS_START_YEAR):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runTPP(yrStart=TPP_START_YEAR):
+def runTPP(yrStart=START_YEAR_DICT['TPP']):
   tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
   lookback = 32
   volTgt = .16
@@ -411,7 +413,7 @@ def runTPP(yrStart=TPP_START_YEAR):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
+def runCSS(yrStart=START_YEAR_DICT['CSS'], isSkipTitle=False):
   und = 'FXI'
   script = 'CSS'
   if not isSkipTitle:
@@ -439,7 +441,7 @@ def runCSS(yrStart=CSS_START_YEAR, isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
+def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   volTgt = .24
   maxWgt = 1
   und='BTC'
@@ -475,7 +477,7 @@ def runBTS(yrStart=BTS_START_YEAR, isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runART(yrStart=ART_START_YEAR, isSkipTitle=False):
+def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   undE = 'SPY'
   undB = 'TLT'
   undG = 'GLD'
@@ -603,7 +605,7 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = dp2.round(2)
   ul.stWriteDf(dp2, isMaxHeight=True)
 
-def runCore(yrStart=CORE_START_YEAR):
+def runCore(yrStart=START_YEAR_DICT['Core']):
   strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
   script = 'Core'
