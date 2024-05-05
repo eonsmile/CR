@@ -330,27 +330,17 @@ def getYFinanceS(ticker):
 #########
 # Scripts
 #########
-def runIBS(yrStart=START_YEAR_DICT['IBS']):
-  undE = 'SPY'
-  undQ = 'QQQ'
-  undB = 'TLT'
-  volTgt = .16
-  maxWgt = 1
-  #####
-  script = 'IBS'
-  st.header(script)
-  dp, dw, dfDict, hv = btSetup([undE, undQ, undB])
-  #####
+def runIBSCore():
   def m(und, dfDict, isMondayS=None):
     df = dfDict[und]
-    ibsS=getIbsS(df)
-    if und==undE:
+    ibsS = getIbsS(df)
+    if und == undE:
       isEntryS = (isMondayS == 1) & (ibsS < .2) & (df['Low'] < df['Low'].shift(1))
       isExitS = df['Close'] > df['High'].shift(1)
-    elif und==undQ:
+    elif und == undQ:
       isEntryS = ibsS < .1
       isExitS = df['Close'] > df['High'].shift(1)
-    elif und==undB:
+    elif und == undB:
       isEntryS = (ibsS < .15) & (df['Low'] < df['Low'].shift(1))
       isExitS = ibsS > .55
     else:
@@ -358,31 +348,58 @@ def runIBS(yrStart=START_YEAR_DICT['IBS']):
     stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
     return ibsS, stateS
   #####
+  undE = 'SPY'
+  undQ = 'QQQ'
+  undB = 'TLT'
+  volTgt = .16
+  maxWgt = 1
+  dp, dw, dfDict, hv = btSetup([undE, undQ, undB])
+  #####
   isMondayS = dfDict[undE]['Close'].rename('Monday?') * 0
   isMondayS[isMondayS.index.weekday == 0] = 1
   ibsSE, stateSE = m(undE, dfDict, isMondayS=isMondayS)
-  ibsSQ, stateSQ = m(undQ,dfDict)
-  ibsSB, stateSB = m(undB,dfDict)
+  ibsSQ, stateSQ = m(undQ, dfDict)
+  ibsSB, stateSB = m(undB, dfDict)
   dw[undE] = stateSE
   dw[undQ] = stateSQ
   dw[undB] = stateSB
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
-  st.header('Tables')
-  #####
-  def m(und, ibsS, df, stateS, isMondayS=None):
+  d=dict()
+  d['undE']=undE
+  d['undQ']=undQ
+  d['undB']=undB
+  d['dp']=dp
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['isMondayS']=isMondayS
+  d['ibsSE']=ibsSE
+  d['ibsSQ']=ibsSQ
+  d['ibsSB']=ibsSB
+  d['stateSE']=stateSE
+  d['stateSQ']=stateSQ
+  d['stateSB']=stateSB
+  return d
+
+def runIBS(yrStart=START_YEAR_DICT['IBS']):
+  def m(d, und, ibsS, stateS, isMondayS=None):
+    df=d['dfDict'][und]
     st.subheader(und)
-    df2=ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
-    if isMondayS is not None: df2=ul.merge(df2, isMondayS, how='inner')
-    df2=ul.merge(df2, stateS.ffill(), how='inner')
+    df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
+    if isMondayS is not None: df2 = ul.merge(df2, isMondayS, how='inner')
+    df2 = ul.merge(df2, stateS.ffill(), how='inner')
     ul.stWriteDf(df2.tail())
   #####
-  m(undE, ibsSE, dfDict[undE], stateSE, isMondayS=isMondayS)
-  m(undQ, ibsSQ, dfDict[undQ], stateSQ)
-  m(undB, ibsSB, dfDict[undB], stateSB)
+  script = 'IBS'
+  st.header(script)
+  d=runIBSCore()
+  st.header('Tables')
+  m(d, d['undE'], d['ibsSE'], d['stateSE'], isMondayS=d['isMondayS'])
+  m(d, d['undQ'], d['ibsSQ'], d['stateSQ'])
+  m(d, d['undB'], d['ibsSB'], d['stateSB'])
   st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 def runTPP(yrStart=START_YEAR_DICT['TPP']):
   tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
@@ -441,51 +458,55 @@ def runCSS(yrStart=START_YEAR_DICT['CSS'], isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
+def runBTSCore(yrStart):
+  und = 'BTC'
   volTgt = .24
   maxWgt = 1
-  und='BTC'
-  #####
-  script = 'BTS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  df=getPriceHistory(und,yrStart)
-  dp=df[['Close']]
-  dp.columns=[und]
-  ratio1S=dp[und]/dp[und].shift(28)
-  ratio1S.rename('Ratio 1',inplace=True)
-  ratio2S=dp[und]/dp[und].rolling(5).mean()
+  df = getPriceHistory(und, yrStart)
+  dp = df[['Close']]
+  dp.columns = [und]
+  ratio1S = dp[und] / dp[und].shift(28)
+  ratio1S.rename('Ratio 1', inplace=True)
+  ratio2S = dp[und] / dp[und].rolling(5).mean()
   ratio2S.rename('Ratio 2', inplace=True)
   #####
   isTomS = getTomS(dp[und], -4, 3).rename('TOM?')
   #####
-  momScoreS=(ratio1S>=1)*1+(ratio2S>=1)*1
-  stateS = ((momScoreS==2)*1 | (isTomS==1)*1)*1
+  momScoreS = (ratio1S >= 1) * 1 + (ratio2S >= 1) * 1
+  stateS = ((momScoreS == 2) * 1 | (isTomS == 1) * 1) * 1
   stateS.rename('State', inplace=True)
   #####
-  dw=dp.copy()
-  dw[und]=stateS
-  dw=cleanS(dw, isMonthlyRebal=True)
-  hv = getHV(dp,n=16,af=365)
-  dw = (dw * volTgt**2 / hv**2).clip(0, maxWgt)
-  #####
+  dw = dp.copy()
+  dw[und] = stateS
+  dw = cleanS(dw, isMonthlyRebal=True)
+  hv = getHV(dp, n=16, af=365)
+  dw = (dw * volTgt ** 2 / hv ** 2).clip(0, maxWgt)
+  d=dict()
+  d['und']=und
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratio1S']=ratio1S
+  d['ratio2S']=ratio2S
+  d['isTomS']=isTomS
+  d['stateS']=stateS
+  return d
+
+def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
+  script = 'BTS'
+  if not isSkipTitle:
+    st.header(script)
+  d=runBTSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(df['Close'], ratio1S.round(3), ratio2S.round(3), isTomS, stateS, how='inner')
+  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['isTomS'], d['stateS'], how='inner')
   ul.stWriteDf(tableS.tail())
   st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
-def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
+def runARTCore():
   undE = 'SPY'
   undB = 'TLT'
   undG = 'GLD'
-  #####
-  script = 'ART'
-  if not isSkipTitle:
-    st.header(script)
-  #####
   dp, dw, dfDict, hv = btSetup([undE, undB, undG])
   #####
   oSE = dfDict[undE]['Open']
@@ -550,27 +571,63 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * 1
   dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * 1
   dwAllOrNone(dw)
+  d=dict()
+  d['undE']=undE
+  d['undB']=undB
+  d['undG']=undG
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['cSE']=cSE
+  d['cSB']=cSB
+  d['cSG']=cSG
+  d['hSG']=hSG
+  d['isBHS']=isBHS
+  d['ratioS']=ratioS
+  d['rawS']=rawS
+  d['preStateSE1']=preStateSE1
+  d['wprS']=wprS
+  d['sgArmorS']=sgArmorS
+  d['preStateSE2']=preStateSE2
+  d['cond1S']=cond1S
+  d['cond2S']=cond2S
+  d['cond3S']=cond3S
+  d['preStateSG1']=preStateSG1
+  d['ibsSG']=ibsSG
+  d['adxSG']=adxSG
+  d['cond4S']=cond4S
+  d['preStateSG2']=preStateSG2
+  d['stateSE']=stateSE
+  d['stateSB']=stateSB
+  d['stateSG']=stateSG
+  return d
+
+def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
+  script = 'ART'
+  if not isSkipTitle:
+    st.header(script)
   #####
+  d=runARTCore()
   st.header('Tables')
-  st.subheader(undE)
-  tableSE = ul.merge(cSE.round(2),isBHS,ratioS.round(3),rawS,preStateSE1,how='inner')
+  st.subheader(d['undE'])
+  tableSE = ul.merge(d['cSE'].round(2),d['isBHS'],d['ratioS'].round(3),d['rawS'],d['preStateSE1'],how='inner')
   ul.stWriteDf(tableSE.tail())
-  tableSE2 = ul.merge(wprS.round(2),sgArmorS,preStateSE2,stateSE.ffill(), how='inner')
+  tableSE2 = ul.merge(d['wprS'].round(2),d['sgArmorS'],d['preStateSE2'],d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
   #####
-  st.subheader(undB)
-  tableSB = ul.merge(cSB.round(2),stateSB.ffill(),how='inner')
+  st.subheader(d['undB'])
+  tableSB = ul.merge(d['cSB'].round(2),d['stateSB'].ffill(),how='inner')
   ul.stWriteDf(tableSB.tail())
   #####
-  st.subheader(undG)
-  tableSG = ul.merge(cSG.round(2),hSG.round(2),cond1S,cond2S,cond3S,preStateSG1, how='inner')
+  st.subheader(d['undG'])
+  tableSG = ul.merge(d['cSG'].round(2),d['hSG'].round(2),d['cond1S'],d['cond2S'],d['cond3S'],d['preStateSG1'], how='inner')
   ul.stWriteDf(tableSG.tail())
-  tableSG2 = ul.merge(ibsSG.round(3),adxSG.round(1),cond4S,preStateSG2,stateSG.ffill(), how='inner')
+  tableSG2 = ul.merge(d['ibsSG'].round(3),d['adxSG'].round(1),d['cond4S'],d['preStateSG2'],d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 
