@@ -450,7 +450,7 @@ def runCSSCore(yrStart, isAppend=False):
       for field in ul.spl('Open,High,Low,Close,Volume'):
         df2.loc[yest, field] = float(data[field].iloc[0])
       df = pd.concat([df, df2])
-      dp.loc[yest] = df2.loc[yest, 'Close']
+      dp.loc[yest,und] = df2.loc[yest, 'Close']
       dw = dp.copy()
       dw[:] = np.nan
       dfDict[und] = df.copy()
