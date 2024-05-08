@@ -21,7 +21,7 @@ import pandas_ta
 quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
 START_YEAR_DICT={
-  'getPriceHistory':2011,
+  'priceHistory':2013-1,
   'YFinance':2023,
   'IBS':2013,
   'TPP':2013,
@@ -30,6 +30,7 @@ START_YEAR_DICT={
   'BTS':2015,
   'ART':2013
 }
+MKT_CLOSE_HOUR=4
 
 #############################################################################################
 
@@ -77,7 +78,7 @@ def bt(script,dp,dw,yrStart):
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
-def btSetup(tickers, hvN=32, yrStart=START_YEAR_DICT['getPriceHistory'], applyDatesS=None):
+def btSetup(tickers, hvN=32, yrStart=START_YEAR_DICT['priceHistory'], applyDatesS=None):
   dfDict=dict()
   for und in tickers:
     df=getPriceHistory(und,yrStart=yrStart)
@@ -262,7 +263,7 @@ def getKFMeans(s):
   means, _ = kf.filter(s)
   return pd.Series(means.flatten(), index=s.index)
 
-def getPriceHistory(und,yrStart=START_YEAR_DICT['getPriceHistory']):
+def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   dtStart=str(yrStart)+ '-1-1'
   if und in ul.spl('BTC,ETH'):
     def m(toTs=None):
@@ -319,6 +320,11 @@ def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day s
   for i in range(offsetBegin, offsetEnd+1):
     s.iloc[endpoints(s, offset=i)]=1
   return s[s.index <= dtLast]
+
+def getYestNYSE():
+  today = pendulum.today().naive()
+  yest=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=today.subtract(days=8), end_date=today.subtract(days=1)).iloc[-1]['market_close']
+  return pendulum.datetime(yest.year, yest.month, yest.day).naive()
 
 def getYFinanceS(ticker):
   from_date = f"{START_YEAR_DICT['YFinance']}-01-01"
@@ -410,7 +416,7 @@ def runTPP(yrStart=START_YEAR_DICT['TPP']):
   script = 'TPP'
   st.header(script)
   ######
-  dp, dw, dfDict, hv = btSetup(tickers)
+  dp, dw, dfDict, hv = btSetup(tickers,yrStart=yrStart-1)
   ratioDf = dp / dp.rolling(200).mean()
   isOkDf = (ratioDf >= 1) * 1
   wDf = (1 / hv) * isOkDf
@@ -430,33 +436,66 @@ def runTPP(yrStart=START_YEAR_DICT['TPP']):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runCSS(yrStart=START_YEAR_DICT['CSS'], isSkipTitle=False):
+def runCSSCore(yrStart, isAppend=False):
   und = 'FXI'
-  script = 'CSS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  dp, dw, dfDict, hv = btSetup([und])
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   df = dfDict[und]
+  if isAppend:
+    yest=getYestNYSE()
+    if (pendulum.instance(df.index[-1]).date() < yest.date()) and (pendulum.now().hour < MKT_CLOSE_HOUR + 1):
+      ul.tPrint('Appending data to backtest ....')
+      data = yf.Ticker(und).history(period='1d')
+      df2 = df.tail(1).copy()
+      df2.index = [yest]
+      for field in ul.spl('Open,High,Low,Close,Volume'):
+        df2.loc[yest, field] = float(data[field].iloc[0])
+      df = pd.concat([df, df2])
+      dp.loc[yest] = df2.loc[yest, 'Close']
+      dw = dp.copy()
+      dw[:] = np.nan
+      dfDict[und] = df.copy()
+    else:
+      ul.tPrint('Continuing on with backtest ....')
+  #####
   ibsS = getIbsS(df)
   ratio1S = df['Close'] / df['Close'].shift(5)
   ratio1S.rename('Ratio 1', inplace=True)
-  ratio2S = df['Close']/getKFMeans(df['Close'])
+  ratio2S = df['Close'] / getKFMeans(df['Close'])
   ratio2S.rename('Ratio 2', inplace=True)
   isTomS = getTomS(dp[und], 0, 2, isNYSE=True).rename('TOM?')
-  isEntryS = (ibsS > .9) & (ratio1S > 1) & (ratio2S>1) & (isTomS == 0)
-  isExitS = ibsS < 1/3
+  isEntryS = (ibsS > .9) & (ratio1S > 1) & (ratio2S > 1) & (isTomS == 0)
+  isExitS = ibsS < 1 / 3
   stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
   dw[und] = -stateS * .75
   dw.loc[dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] *= 2
   dw.loc[dw.index.year < yrStart] = 0
-  #####
+  d=dict()
+  d['und'] = und
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ibsS'] = ibsS
+  d['ratio1S'] = ratio1S
+  d['ratio2S'] = ratio2S
+  d['isTomS'] = isTomS
+  d['isEntryS'] = isEntryS
+  d['isExitS'] = isExitS
+  d['stateS'] = stateS
+  return d
+
+def runCSS(yrStart=START_YEAR_DICT['CSS'], isSkipTitle=False):
+  script = 'CSS'
+  if not isSkipTitle:
+    st.header(script)
+  d=runCSSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), ratio1S.round(3), ratio2S.round(3), isTomS, stateS.ffill(), how='inner')
+  df=d['dfDict'][d['und']]
+  tableS = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2),
+                    d['ibsS'].round(3), d['ratio1S'].round(3), d['ratio2S'].round(3), d['isTomS'], d['stateS'].ffill(), how='inner')
   ul.stWriteDf(tableS.tail())
   st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 def runBTSCore(yrStart):
   und = 'BTC'
@@ -503,11 +542,11 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runARTCore():
+def runARTCore(yrStart):
   undE = 'SPY'
   undB = 'TLT'
   undG = 'GLD'
-  dp, dw, dfDict, hv = btSetup([undE, undB, undG])
+  dp, dw, dfDict, hv = btSetup([undE, undB, undG], yrStart=yrStart-1)
   #####
   oSE = dfDict[undE]['Open']
   hSE = dfDict[undE]['High']
@@ -522,8 +561,9 @@ def runARTCore():
   #####
   # SPY
   isBHS = (pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100).rename('BH?') * 1
+  isPriorDownS = (cSE.shift(1)<cSE.shift(2)).rename('Prior Down')*1
   ratioS = (cSE / cSE.rolling(200).mean()).rename('Ratio')
-  rawS = ((isBHS == 1) & (ratioS >= 1)) * 1
+  rawS = ((isBHS == 1) & (isPriorDownS==1) & (ratioS >= 1)) * 1
   rawS.rename('Raw',inplace=True)
   preStateSE1 = rawS.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
   #####
@@ -583,6 +623,7 @@ def runARTCore():
   d['cSG']=cSG
   d['hSG']=hSG
   d['isBHS']=isBHS
+  d['isPriorDown']=isPriorDownS
   d['ratioS']=ratioS
   d['rawS']=rawS
   d['preStateSE1']=preStateSE1
@@ -607,10 +648,10 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runARTCore()
+  d=runARTCore(yrStart)
   st.header('Tables')
   st.subheader(d['undE'])
-  tableSE = ul.merge(d['cSE'].round(2),d['isBHS'],d['ratioS'].round(3),d['rawS'],d['preStateSE1'],how='inner')
+  tableSE = ul.merge(d['cSE'].round(2),d['isBHS'],d['isPriorDown'],d['ratioS'].round(3),d['rawS'],d['preStateSE1'],how='inner')
   ul.stWriteDf(tableSE.tail())
   tableSE2 = ul.merge(d['wprS'].round(2),d['sgArmorS'],d['preStateSE2'],d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
