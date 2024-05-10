@@ -126,12 +126,76 @@ def printCalendar(s):
 
 #############################################################################################
 
-#####
-# Etc
-#####
+#######
+# Dates
+#######
 def applyDates(a,b):
   return a.reindex(b.index,method='pad').ffill().copy()
 
+# https://quantstrattrader.wordpress.com/author/ikfuntech/
+def endpoints(df, on='ME', offset=0):
+  ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
+  date_idx = np.where(df.index.isin(ep_dates))
+  date_idx = np.insert(date_idx, 0, 0)
+  date_idx = np.append(date_idx, df.shape[0] - 1)
+  if offset != 0:
+    date_idx = date_idx + offset
+    date_idx[date_idx < 0] = 0
+    date_idx[date_idx > df.shape[0] - 1] = df.shape[0] - 1
+  out = np.unique(date_idx)
+  return out
+
+def getBizDayPriorNYSE(y,m,d):
+  dt0=pendulum.date(y,m,d)
+  dt=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0.subtract(days=1)).iloc[-1]['market_close']
+  return pendulum.datetime(dt.year, dt.month, dt.day).naive()
+
+def getBizDayNYSE(y,m,d):
+  dt0 = pendulum.date(y, m, d)
+  dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0, end_date=dt0.add(days=8)).iloc[0]['market_close']
+  return pendulum.datetime(dt.year, dt.month, dt.day).naive()
+
+def getIsSeasonalS(s,mEntry,dEntry,mExit,dExit):
+  s=s.copy()
+  s[:]=np.nan
+  for y in range(s.index.year[0],s.index.year[-1]+1):
+    dtEntry=getBizDayPriorNYSE(y,mEntry,dEntry)
+    dtExit=getBizDayNYSE(y, mExit, dExit)
+    if dtEntry in s.index:
+      s.loc[dtEntry]=1
+    elif dtEntry < s.index[-1]:
+      print(f"getSeasonalS: {dtEntry:%Y-%m-%d} (entry) is missing!")
+    if dtExit in s.index:
+      s.loc[dtExit]=0
+    elif dtExit < s.index[-1]:
+      print(f"getSeasonalS: {dtExit:%Y-%m-%d} (exit) is missing!")
+  return s.ffill().fillna(0).rename('Seasonal?')
+
+def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
+  s=s.copy()
+  dtLast=s.index[-1]
+  dtLast2=pendulum.instance(dtLast)
+  if isNYSE:
+    dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=30)).index
+  else:
+    dts = [dtLast2.add(days=i).date() for i in range(30)]
+    dts = pd.DatetimeIndex(pd.to_datetime(dts))
+  s = s.reindex(s.index.union(dts))
+  s[:]=0
+  for i in range(offsetBegin, offsetEnd+1):
+    s.iloc[endpoints(s, offset=i)]=1
+  return s[s.index <= dtLast]
+
+def getYestNYSE():
+  today = pendulum.today().naive()
+  yest=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=today.subtract(days=8), end_date=today.subtract(days=1)).iloc[-1]['market_close']
+  return pendulum.datetime(yest.year, yest.month, yest.day).naive()
+
+#############################################################################################
+
+#####
+# Etc
+#####
 def cleanS(s, isMonthlyRebal=True):
   s=s.astype('float64').ffill()
   tmp=s.shift(1)
@@ -153,19 +217,6 @@ def cleanS(s, isMonthlyRebal=True):
 
 def EMA(s, n):
   return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
-
-# https://quantstrattrader.wordpress.com/author/ikfuntech/
-def endpoints(df, on='ME', offset=0):
-  ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
-  date_idx = np.where(df.index.isin(ep_dates))
-  date_idx = np.insert(date_idx, 0, 0)
-  date_idx = np.append(date_idx, df.shape[0] - 1)
-  if offset != 0:
-    date_idx = date_idx + offset
-    date_idx[date_idx < 0] = 0
-    date_idx[date_idx > df.shape[0] - 1] = df.shape[0] - 1
-  out = np.unique(date_idx)
-  return out
 
 def extend(df, df2):
   dtAnchor=df['Close'].first_valid_index()
@@ -305,26 +356,6 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if isCleaned:
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
-
-def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
-  s=s.copy()
-  dtLast=s.index[-1]
-  dtLast2=pendulum.instance(dtLast)
-  if isNYSE:
-    dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=30)).index
-  else:
-    dts = [dtLast2.add(days=i).date() for i in range(30)]
-    dts = pd.DatetimeIndex(pd.to_datetime(dts))
-  s = s.reindex(s.index.union(dts))
-  s[:]=0
-  for i in range(offsetBegin, offsetEnd+1):
-    s.iloc[endpoints(s, offset=i)]=1
-  return s[s.index <= dtLast]
-
-def getYestNYSE():
-  today = pendulum.today().naive()
-  yest=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=today.subtract(days=8), end_date=today.subtract(days=1)).iloc[-1]['market_close']
-  return pendulum.datetime(yest.year, yest.month, yest.day).naive()
 
 def getYFinanceS(ticker):
   from_date = f"{START_YEAR_DICT['YFinance']}-01-01"
@@ -604,7 +635,9 @@ def runARTCore(yrStart):
   isExitS = (cSG > cSG.shift()) * 1
   preStateSG2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
-  stateSG=(preStateSG1+preStateSG2).clip(None,1)
+  isSeasonalS = getIsSeasonalS(cSG,12,27,1,26)
+  #####
+  stateSG=(preStateSG1+preStateSG2+isSeasonalS).clip(None,1)
   stateSG.rename('State',inplace=True)
   #####
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
@@ -638,6 +671,7 @@ def runARTCore(yrStart):
   d['adxSG']=adxSG
   d['cond4S']=cond4S
   d['preStateSG2']=preStateSG2
+  d['isSeasonalS']=isSeasonalS
   d['stateSE']=stateSE
   d['stateSB']=stateSB
   d['stateSG']=stateSG
@@ -663,7 +697,7 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   st.subheader(d['undG'])
   tableSG = ul.merge(d['cSG'].round(2),d['hSG'].round(2),d['cond1S'],d['cond2S'],d['cond3S'],d['preStateSG1'], how='inner')
   ul.stWriteDf(tableSG.tail())
-  tableSG2 = ul.merge(d['ibsSG'].round(3),d['adxSG'].round(1),d['cond4S'],d['preStateSG2'],d['stateSG'].ffill(), how='inner')
+  tableSG2 = ul.merge(d['ibsSG'].round(3),d['adxSG'].round(1),d['cond4S'],d['preStateSG2'],d['isSeasonalS'],d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
