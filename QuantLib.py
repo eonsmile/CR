@@ -187,7 +187,7 @@ def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day s
   s[:]=0
   for i in range(offsetBegin, offsetEnd+1):
     s.iloc[endpoints(s, offset=i)]=1
-  return s[s.index <= dtLast]
+  return s[s.index <= dtLast].rename('TOM?')
 
 def getYestNYSE():
   today = pendulum.today().naive()
@@ -496,12 +496,12 @@ def runCSSCore(yrStart, isAppend=False):
   ratio1S.rename('Ratio 1', inplace=True)
   ratio2S = df['Close'] / getKFMeans(df['Close'])
   ratio2S.rename('Ratio 2', inplace=True)
-  isTomS = getTomS(dp[und], 0, 2, isNYSE=True).rename('TOM?')
-  isEntryS = (ibsS > .9) & (ratio1S > 1) & (ratio2S > 1) & (isTomS == 0)
-  isExitS = ibsS < 1 / 3
+  isTomS = getTomS(dp[und], 0, 2, isNYSE=True)
+  isEntryS = ((ibsS > .9) & (ratio1S > 1) & (ratio2S > 1) & (isTomS == 0)) * 1
+  isExitS = (ibsS < (1 / 3))*1
   stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
-  dw[und] = -stateS * .5
-  dw.loc[dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] *= 2
+  dw[und] = -stateS
+  dw.loc[~dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] /= 2
   dw.loc[dw.index.year < yrStart] = 0
   d=dict()
   d['und'] = und
@@ -543,7 +543,7 @@ def runBTSCore(yrStart):
   ratio2S = dp[und] / dp[und].rolling(5).mean()
   ratio2S.rename('Ratio 2', inplace=True)
   #####
-  isTomS = getTomS(dp[und], -4, 3).rename('TOM?')
+  isTomS = getTomS(dp[und], -4, 3)
   #####
   momScoreS = (ratio1S >= 1) * 1 + (ratio2S >= 1) * 1
   stateS = ((momScoreS == 2) * 1 | (isTomS == 1) * 1) * 1
@@ -594,19 +594,19 @@ def runARTCore(yrStart):
   cSG = dfDict[undG]['Close']
   #####
   # SPY
-  isBHS = (pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100).rename('BH?') * 1
-  isPriorDownS = (cSE.shift(1)<cSE.shift(2)).rename('Prior Down')*1
-  ratioS = (cSE / cSE.rolling(200).mean()).rename('Ratio')
-  rawS = ((isBHS == 1) & (isPriorDownS==1) & (ratioS >= 1)) * 1
-  rawS.rename('Raw',inplace=True)
-  preStateSE1 = rawS.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
+  isBHSE = (pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100).rename('BH?') * 1
+  isPriorDownSE = (cSE.shift(1)<cSE.shift(2)).rename('Prior Down')*1
+  ratioSE = (cSE / cSE.rolling(200).mean()).rename('Ratio')
+  rawSE = ((isBHSE == 1) & (isPriorDownSE==1) & (ratioSE >= 1)) * 1
+  rawSE.rename('Raw',inplace=True)
+  preStateSE1 = rawSE.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
   #####
   df = pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
   df.index = pd.to_datetime(df['Date'])
-  sgArmorS = applyDates(df['SG-Armor'], cSE).shift()
-  wprS = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
-  isEntryS = ((wprS < (-90)) & (sgArmorS > 0))*1
-  isExitS = (wprS > (-10))*1
+  sgArmorSE = applyDates(df['SG-Armor'], cSE).shift()
+  wprSE = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
+  isEntryS = ((wprSE < (-90)) & (sgArmorSE > 0))*1
+  isExitS = (wprSE > (-10))*1
   preStateSE2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   stateSE = (preStateSE1 + preStateSE2).clip(None,1).rename('State')
   #####
@@ -638,9 +638,9 @@ def runARTCore(yrStart):
   isExitS = (cSG > cSG.shift()) * 1
   preStateSG2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
-  isSeasonalS = getIsSeasonalS(cSG,12,27,1,26)
+  isSeasonalSG = getIsSeasonalS(cSG,12,27,1,26)
   #####
-  stateSG=(preStateSG1+preStateSG2+isSeasonalS).clip(None,1)
+  stateSG=(preStateSG1+preStateSG2+isSeasonalSG).clip(None,1)
   stateSG.rename('State',inplace=True)
   #####
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
@@ -654,18 +654,23 @@ def runARTCore(yrStart):
   d['dp'] = dp
   d['dw'] = dw
   d['dfDict'] = dfDict
-  d['cSE']=cSE
-  d['cSB']=cSB
-  d['cSG']=cSG
-  d['hSG']=hSG
-  d['isBHS']=isBHS
-  d['isPriorDown']=isPriorDownS
-  d['ratioS']=ratioS
-  d['rawS']=rawS
+  #####
+  d['cSE'] = cSE
+  d['isBHSE']=isBHSE
+  d['isPriorDownSE']=isPriorDownSE
+  d['ratioSE']=ratioSE
+  d['rawSE']=rawSE
   d['preStateSE1']=preStateSE1
-  d['wprS']=wprS
-  d['sgArmorS']=sgArmorS
+  d['wprSE']=wprSE
+  d['sgArmorSE']=sgArmorSE
   d['preStateSE2']=preStateSE2
+  d['stateSE'] = stateSE
+  #####
+  d['cSB'] = cSB
+  d['stateSB'] = stateSB
+  #####
+  d['cSG'] = cSG
+  d['hSG'] = hSG
   d['cond1S']=cond1S
   d['cond2S']=cond2S
   d['cond3S']=cond3S
@@ -674,9 +679,7 @@ def runARTCore(yrStart):
   d['adxSG']=adxSG
   d['cond4S']=cond4S
   d['preStateSG2']=preStateSG2
-  d['isSeasonalS']=isSeasonalS
-  d['stateSE']=stateSE
-  d['stateSB']=stateSB
+  d['isSeasonalSG']=isSeasonalSG
   d['stateSG']=stateSG
   return d
 
@@ -688,9 +691,9 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   d=runARTCore(yrStart)
   st.header('Tables')
   st.subheader(d['undE'])
-  tableSE = ul.merge(d['cSE'].round(2),d['isBHS'],d['isPriorDown'],d['ratioS'].round(3),d['rawS'],d['preStateSE1'],how='inner')
+  tableSE = ul.merge(d['cSE'].round(2),d['isBHSE'],d['isPriorDownSE'],d['ratioSE'].round(3),d['rawSE'],d['preStateSE1'],how='inner')
   ul.stWriteDf(tableSE.tail())
-  tableSE2 = ul.merge(d['wprS'].round(2),d['sgArmorS'],d['preStateSE2'],d['stateSE'].ffill(), how='inner')
+  tableSE2 = ul.merge(d['wprSE'].round(2),d['sgArmorSE'],d['preStateSE2'],d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undB'])
@@ -700,7 +703,7 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   st.subheader(d['undG'])
   tableSG = ul.merge(d['cSG'].round(2),d['hSG'].round(2),d['cond1S'],d['cond2S'],d['cond3S'],d['preStateSG1'], how='inner')
   ul.stWriteDf(tableSG.tail())
-  tableSG2 = ul.merge(d['ibsSG'].round(3),d['adxSG'].round(1),d['cond4S'],d['preStateSG2'],d['isSeasonalS'],d['stateSG'].ffill(), how='inner')
+  tableSG2 = ul.merge(d['ibsSG'].round(3),d['adxSG'].round(1),d['cond4S'],d['preStateSG2'],d['isSeasonalSG'],d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
