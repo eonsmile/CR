@@ -150,9 +150,12 @@ def getBizDayPriorNYSE(y,m,d):
   dt=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0.subtract(days=1)).iloc[-1]['market_close']
   return pendulum.datetime(dt.year, dt.month, dt.day).naive()
 
-def getBizDayNYSE(y,m,d):
+def getBizDayNYSE(y,m,d,isAdjForward=True):
   dt0 = pendulum.date(y, m, d)
-  dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0, end_date=dt0.add(days=8)).iloc[0]['market_close']
+  if isAdjForward:
+    dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0, end_date=dt0.add(days=8)).iloc[0]['market_close']
+  else:
+    dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0).iloc[-1]['market_close']
   return pendulum.datetime(dt.year, dt.month, dt.day).naive()
 
 def getIsSeasonalS(s,mEntry,dEntry,mExit,dExit):
@@ -160,7 +163,7 @@ def getIsSeasonalS(s,mEntry,dEntry,mExit,dExit):
   s[:]=np.nan
   for y in range(s.index.year[0],s.index.year[-1]+1):
     dtEntry=getBizDayPriorNYSE(y,mEntry,dEntry)
-    dtExit=getBizDayNYSE(y, mExit, dExit)
+    dtExit=getBizDayNYSE(y, mExit, dExit, isAdjForward=False)
     if dtEntry in s.index:
       s.loc[dtEntry]=1
     elif dtEntry < s.index[-1]:
