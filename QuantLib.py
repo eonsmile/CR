@@ -497,7 +497,7 @@ def runCSSCore(yrStart, isAppend=False):
   isEntryS = (ibsS > .9) & (ratio1S > 1) & (ratio2S > 1) & (isTomS == 0)
   isExitS = ibsS < 1 / 3
   stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
-  dw[und] = -stateS * .75
+  dw[und] = -stateS * .5
   dw.loc[dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] *= 2
   dw.loc[dw.index.year < yrStart] = 0
   d=dict()
