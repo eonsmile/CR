@@ -9,6 +9,7 @@ import pendulum
 import time
 import colorama
 from filelock import FileLock
+from joblib import Parallel, delayed
 import pretty_errors # keep here
 
 #########
@@ -123,6 +124,9 @@ def merge(*args,how=None):
     df2=args[i]
     df=pd.merge(df,df2,how=how,left_index=True,right_index=True)
   return df
+
+def parallelRun(objs, n_jobs=-1):
+  Parallel(n_jobs=n_jobs, backend='threading')(delayed(obj.run)() for obj in objs)
 
 def printDict(d, indent=0, isSort=True):
   keys=d.keys()

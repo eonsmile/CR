@@ -79,18 +79,29 @@ def bt(script,dp,dw,yrStart):
   ul.cachePersist('w',script,ecS)
 
 def btSetup(tickers, hvN=32, yrStart=START_YEAR_DICT['priceHistory'], applyDatesS=None):
-  dfDict=dict()
+  class m:
+    def __init__(self, und,yrStart):
+      self.und = und
+      self.yrStart=yrStart
+    #####
+    def run(self):
+      self.df=getPriceHistory(self.und,yrStart=self.yrStart)
+      self.cS = self.df['Close'].rename(self.und)
+  #####
+  objs=[]
   for und in tickers:
-    df=getPriceHistory(und,yrStart=yrStart)
-    cS=df['Close'].rename(und).to_frame()
-    if not dfDict:
-      dp=cS
-    else:
-      dp= ul.merge(dp, cS, how='outer')
-    dfDict[und] = df
+    objs.append(m(und,yrStart))
+  ul.parallelRun(objs)
+  #####
+  dfDict = dict()
+  dp = None
+  for obj in objs:
+    dfDict[obj.und] = obj.df
+    cS=obj.cS.to_frame()
+    dp = cS if dp is None else ul.merge(dp, cS, how='outer')
   dp=dp.ffill()
   dw=dp.copy()
-  dw.values[:] = np.nan
+  dw[:] = np.nan
   hv = getHV(dp, n=hvN)
   if applyDatesS is None:
     return dp,dw,dfDict,hv
