@@ -633,10 +633,9 @@ def runARTCore(yrStart, isAppend=False):
   cSG = dfDict[undG]['Close']
   #####
   # SPY
-  isBHSE = (pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100).rename('BH?') * 1
-  isPriorDownSE = (cSE.shift(1)<cSE.shift(2)).rename('Prior Down')*1
+  isBHSE = ((pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100) & (cSE.shift(1)<cSE.shift(2))).rename('BH')*1
   ratioSE = (cSE / cSE.rolling(200).mean()).rename('Ratio')
-  rawSE = ((isBHSE == 1) & (isPriorDownSE==1) & (ratioSE >= 1)) * 1
+  rawSE = ((isBHSE == 1) & (ratioSE >= 1)) * 1
   rawSE.rename('Raw',inplace=True)
   preStateSE1 = rawSE.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
   #####
@@ -720,7 +719,6 @@ def runARTCore(yrStart, isAppend=False):
   #####
   d['cSE'] = cSE
   d['isBHSE']=isBHSE
-  d['isPriorDownSE']=isPriorDownSE
   d['ratioSE']=ratioSE
   d['rawSE']=rawSE
   d['preStateSE1']=preStateSE1
@@ -769,7 +767,7 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   d=runARTCore(yrStart)
   st.header('Tables')
   st.subheader(d['undE'])
-  tableSE = ul.merge(d['cSE'].round(2), d['isBHSE'], d['isPriorDownSE'], d['ratioSE'].round(3), d['rawSE'], d['preStateSE1'], how='inner')
+  tableSE = ul.merge(d['cSE'].round(2), d['isBHSE'], d['ratioSE'].round(3), d['rawSE'], d['preStateSE1'], how='inner')
   ul.stWriteDf(tableSE.tail())
   tableSE2 = ul.merge(d['wprSE'].round(2), d['sgArmorSE'], d['preStateSE2'], d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
