@@ -590,15 +590,19 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
 
 def runARTCore(yrStart, isAppend=False):
   undE = 'SPY'
+  undQ = 'QQQ'
   undC = 'FXI'
   undB = 'TLT'
   undG = 'GLD'
-  dp, dw, dfDict, hv = btSetup([undE, undC, undB, undG], yrStart=yrStart-1)
+  tickers = [undE, undQ, undC, undB, undG]
+  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
   oSE = dfDict[undE]['Open']
   hSE = dfDict[undE]['High']
   lSE = dfDict[undE]['Low']
   cSE = dfDict[undE]['Close']
+  #####
+  cSQ = dfDict[undQ]['Close']
   #####
   hSC = dfDict[undC]['High']
   lSC = dfDict[undC]['Low']
@@ -614,14 +618,15 @@ def runARTCore(yrStart, isAppend=False):
     yest = getYestNYSE()
     if (pendulum.instance(dp.index[-1]).date() < yest.date()) and (pendulum.now().hour < MKT_CLOSE_HOUR + 1):
       ul.tPrint('Appending data to backtest ....')
-      for und in [undE,undC,undB,undG]:
+      for und in tickers:
         data = yf.Ticker(und).history(period='1d')
         row = dfDict[und].tail(1).copy()
         row.index = [yest]
         for field in ul.spl('Open,High,Low,Close,Volume'):
           row.loc[yest, field] = float(data[field].iloc[0])
-        dfDict[und] = pd.concat([dfDict[und], row])
-        dp.loc[yest, und] = row.loc[yest, 'Close']
+        if yest not in dfDict[und].index:
+          dfDict[und] = pd.concat([dfDict[und], row])
+          dp.loc[yest, und] = row.loc[yest, 'Close']
       dw = dp.copy()
       dw[:] = np.nan
     else:
@@ -644,6 +649,12 @@ def runARTCore(yrStart, isAppend=False):
   preStateSE2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   stateSE = (preStateSE1 + preStateSE2).clip(None,1).rename('State')
   #####
+  # QQQ
+  ratioSQ=EMA(cSQ,130)/EMA(cSE,130)
+  isTrigSQ=(ratioSQ-ratioSQ.shift()+0.0002).rename('Trig?')*10000
+  stateSQ=((isTrigSQ>0) & (sgArmorSE>0))*1
+  stateSQ.rename('State',inplace=True)
+  #####
   # FXI
   ibsSC = getIbsS(dfDict[undC])
   ratio1SC = (cSC / cSC.shift(5)).rename('Ratio 1')
@@ -652,7 +663,6 @@ def runARTCore(yrStart, isAppend=False):
   isEntrySC = ((ibsSC > .9) & (ratio1SC > 1) & (ratio2SC > 1) & (isTomSC == 0)) * 1
   isExitSC = (ibsSC < (1 / 3)) * 1
   stateSC = -getStateS(isEntrySC, isExitSC, isCleaned=False, isMonthlyRebal=False).rename('State')
-  ul.cachePersist('w','tmp2',stateSC)
   #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
@@ -687,6 +697,7 @@ def runARTCore(yrStart, isAppend=False):
   stateSG.rename('State',inplace=True)
   #####
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
+  dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * 1
   dw[undC] = cleanS(stateSC, isMonthlyRebal=False) * 1
   dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * 1
   dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * 1
@@ -694,6 +705,7 @@ def runARTCore(yrStart, isAppend=False):
   dwAllOrNone(dw)
   d=dict()
   d['undE']=undE
+  d['undQ']=undQ
   d['undC']=undC
   d['undB']=undB
   d['undG']=undG
@@ -711,6 +723,10 @@ def runARTCore(yrStart, isAppend=False):
   d['sgArmorSE']=sgArmorSE
   d['preStateSE2']=preStateSE2
   d['stateSE'] = stateSE
+  #####
+  d['cSQ'] = cSQ
+  d['isTrigSQ'] = isTrigSQ
+  d['stateSQ'] = stateSQ
   #####
   d['cSC'] = cSC
   d['hSC'] = hSC
@@ -752,6 +768,10 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   ul.stWriteDf(tableSE.tail())
   tableSE2 = ul.merge(d['wprSE'].round(2),d['sgArmorSE'],d['preStateSE2'],d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
+  #####
+  st.subheader(d['undQ'])
+  tableSQ = ul.merge(d['cSQ'].round(2), d['isTrigSQ'].round(3), d['sgArmorSE'],d['stateSQ'].ffill(), how='inner')
+  ul.stWriteDf(tableSQ.tail())
   #####
   st.subheader(d['undC'])
   tableSC = ul.merge(d['cSC'].round(2), d['hSC'].round(2), d['lSC'].round(2),d['ibsSC'].round(3),d['ratio1SC'].round(3),d['ratio2SC'].round(3),d['isTomSC'],d['stateSC'].ffill(),how='inner')
