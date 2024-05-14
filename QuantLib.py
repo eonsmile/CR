@@ -640,7 +640,7 @@ def runARTCore(yrStart, isAppend=False):
   preStateSE1 = rawSE.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
   #####
   key='sgArmor'
-  s = ul.cachePersist('r',key,expireMins=60*24)
+  s = ul.cachePersist('r',key,expireMins=60*12)
   if s is None:
     df=pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
     df.index = pd.to_datetime(df['Date'])
