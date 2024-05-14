@@ -597,23 +597,6 @@ def runARTCore(yrStart, isAppend=False):
   tickers = [undE, undQ, undC, undB, undG]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
-  oSE = dfDict[undE]['Open']
-  hSE = dfDict[undE]['High']
-  lSE = dfDict[undE]['Low']
-  cSE = dfDict[undE]['Close']
-  #####
-  cSQ = dfDict[undQ]['Close']
-  #####
-  hSC = dfDict[undC]['High']
-  lSC = dfDict[undC]['Low']
-  cSC = dfDict[undC]['Close']
-  #####
-  cSB = dfDict[undB]['Close']
-  #####
-  hSG = dfDict[undG]['High']
-  lSG = dfDict[undG]['Low']
-  cSG = dfDict[undG]['Close']
-  #####
   if isAppend:
     yest = getYestNYSE()
     if (pendulum.instance(dp.index[-1]).date() < yest.date()) and (pendulum.now().hour < MKT_CLOSE_HOUR + 1):
@@ -632,6 +615,23 @@ def runARTCore(yrStart, isAppend=False):
     else:
       ul.tPrint('Continuing on with backtest ....')
   #####
+  oSE = dfDict[undE]['Open']
+  hSE = dfDict[undE]['High']
+  lSE = dfDict[undE]['Low']
+  cSE = dfDict[undE]['Close']
+  #####
+  cSQ = dfDict[undQ]['Close']
+  #####
+  hSC = dfDict[undC]['High']
+  lSC = dfDict[undC]['Low']
+  cSC = dfDict[undC]['Close']
+  #####
+  cSB = dfDict[undB]['Close']
+  #####
+  hSG = dfDict[undG]['High']
+  lSG = dfDict[undG]['Low']
+  cSG = dfDict[undG]['Close']
+  #####
   # SPY
   isBHSE = (pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100).rename('BH?') * 1
   isPriorDownSE = (cSE.shift(1)<cSE.shift(2)).rename('Prior Down')*1
@@ -640,9 +640,14 @@ def runARTCore(yrStart, isAppend=False):
   rawSE.rename('Raw',inplace=True)
   preStateSE1 = rawSE.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
   #####
-  df = pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
-  df.index = pd.to_datetime(df['Date'])
-  sgArmorSE = applyDates(df['SG-Armor'], cSE).shift()
+  key='sgArmor'
+  s = ul.cachePersist('r',key,expireMins=60*24)
+  if s is None:
+    df=pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
+    df.index = pd.to_datetime(df['Date'])
+    s = df['SG-Armor']
+    ul.cachePersist('w',key,s)
+  sgArmorSE = applyDates(s, cSE).shift()
   wprSE = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
   isEntryS = ((wprSE < (-90)) & (sgArmorSE > 0))*1
   isExitS = (wprSE > (-10))*1
@@ -764,9 +769,9 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   d=runARTCore(yrStart)
   st.header('Tables')
   st.subheader(d['undE'])
-  tableSE = ul.merge(d['cSE'].round(2),d['isBHSE'],d['isPriorDownSE'],d['ratioSE'].round(3),d['rawSE'],d['preStateSE1'],how='inner')
+  tableSE = ul.merge(d['cSE'].round(2), d['isBHSE'], d['isPriorDownSE'], d['ratioSE'].round(3), d['rawSE'], d['preStateSE1'], how='inner')
   ul.stWriteDf(tableSE.tail())
-  tableSE2 = ul.merge(d['wprSE'].round(2),d['sgArmorSE'],d['preStateSE2'],d['stateSE'].ffill(), how='inner')
+  tableSE2 = ul.merge(d['wprSE'].round(2), d['sgArmorSE'], d['preStateSE2'], d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
@@ -782,9 +787,9 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   ul.stWriteDf(tableSB.tail())
   #####
   st.subheader(d['undG'])
-  tableSG = ul.merge(d['cSG'].round(2),d['hSG'].round(2),d['cond1S'],d['cond2S'],d['cond3S'],d['preStateSG1'], how='inner')
+  tableSG = ul.merge(d['cSG'].round(2), d['hSG'].round(2), d['cond1S'], d['cond2S'], d['cond3S'], d['preStateSG1'], how='inner')
   ul.stWriteDf(tableSG.tail())
-  tableSG2 = ul.merge(d['ibsSG'].round(3),d['adxSG'].round(1),d['cond4S'],d['preStateSG2'],d['isSeasonalSG'],d['stateSG'].ffill(), how='inner')
+  tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preStateSG2'], d['isSeasonalSG'], d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
