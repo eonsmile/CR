@@ -185,6 +185,10 @@ def getIsSeasonalS(s,mEntry,dEntry,mExit,dExit):
       print(f"getSeasonalS: {dtExit:%Y-%m-%d} (exit) is missing!")
   return s.ffill().fillna(0).rename('Seasonal?')
 
+def getTodayNYSE():
+  today = pendulum.today().naive()
+  return getBizDayNYSE(today.year, today.month, today.day)
+
 def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
   s=s.copy()
   dtLast=s.index[-1]

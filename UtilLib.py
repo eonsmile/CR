@@ -96,14 +96,17 @@ def cachePersist(mode, key, value=None, expireMins=1e9):
 # Etc
 #####
 def colored(text, color=None, isReverse=False, isUnderline=False):
+  if not hasattr(colored, 'isInit'):
+    colored.isInit=True
+    colorama.init()
   z = text
   if color is not None:
     z = f"{getattr(colorama.Fore, color.upper())}{z}"
-    if isReverse:
-      if color is None: color='WHITE'
-      z=f"{getattr(colorama.Fore, 'BLACK')}{getattr(colorama.Back, color.upper())}{text}"
-    if isUnderline:
-      z=f"\033[4m{z}"
+  if isReverse:
+    if color is None: color='WHITE'
+    z=f"{getattr(colorama.Fore, 'BLACK')}{getattr(colorama.Back, color.upper())}{text}"
+  if isUnderline:
+    z=f"\033[4m{z}"
   return f"{z}{colorama.Style.RESET_ALL}"
 
 def getCurrentTime(isCondensed=False):
@@ -158,5 +161,5 @@ def timeTag(z):
 def tPrint(z, end='\n'):
   print(timeTag(z),end=end)
 
-def tcPrint(z, color, attrs=None, end='\n'):
-  print(timeTag(colored(z, color, attrs=attrs)), end=end)
+def tcPrint(z, color, end='\n'):
+  print(timeTag(colored(z, color)), end=end)
