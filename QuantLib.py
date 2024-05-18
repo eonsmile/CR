@@ -623,6 +623,7 @@ def runARTCore(yrStart, isAppend=False):
   hSE = dfDict[undE]['High']
   lSE = dfDict[undE]['Low']
   cSE = dfDict[undE]['Close']
+  rSE = (cSE / cSE.shift() - 1).rename('Return')
   #####
   cSQ = dfDict[undQ]['Close']
   #####
@@ -637,25 +638,28 @@ def runARTCore(yrStart, isAppend=False):
   cSG = dfDict[undG]['Close']
   #####
   # SPY
-  isBHSE = ((pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100) & (cSE.shift(1)<cSE.shift(2))).rename('BH')*1
   ratioSE = (cSE / cSE.rolling(200).mean()).rename('Ratio')
-  rawSE = ((isBHSE == 1) & (ratioSE >= 1)) * 1
-  rawSE.rename('Raw',inplace=True)
-  preStateSE1 = rawSE.rolling(5).sum().clip(None, 1).rename('Pre-State 1')
-  #####
-  key='sgArmor'
-  s = ul.cachePersist('r',key,expireMins=60*12)
+  key = 'sgArmor'
+  s = ul.cachePersist('r', key, expireMins=60 * 12)
   if s is None:
-    df=pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
+    df = pd.read_csv('https://www.sumgrowth.com/StormGuardData.csv')
     df.index = pd.to_datetime(df['Date'])
     s = df['SG-Armor']
-    ul.cachePersist('w',key,s)
+    ul.cachePersist('w', key, s)
   sgArmorSE = applyDates(s, cSE).shift()
+  #####
+  isBHSE = ((pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100) & (cSE.shift(1)<cSE.shift(2))).rename('BH?')*1
+  preStateSE1 = (((isBHSE == 1) & (ratioSE >= 1)) * 1).rolling(5).sum().clip(None, 1).rename('Pre-State 1')
+  #####
   wprSE = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
   isEntryS = ((wprSE < (-90)) & (sgArmorSE > 0))*1
   isExitS = (wprSE > (-10))*1
   preStateSE2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
-  stateSE = (preStateSE1 + preStateSE2).clip(None,1).rename('State')
+  #####
+  isEntryS = ((rSE < 0) & (rSE.shift().rolling(5).min() > 0) & (sgArmorSE > 0)) * 1
+  isExitS = (cSE > hSE.shift()) * 1
+  preStateSE3 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
+  stateSE = (preStateSE1 + preStateSE2 + preStateSE3).clip(None, 1).rename('State')
   #####
   # QQQ
   ratioSQ=EMA(cSQ,130)/EMA(cSE,130)
@@ -722,13 +726,15 @@ def runARTCore(yrStart, isAppend=False):
   d['dfDict'] = dfDict
   #####
   d['cSE'] = cSE
+  d['ratioSE'] = ratioSE
+  d['sgArmorSE'] = sgArmorSE
+  #####
   d['isBHSE']=isBHSE
-  d['ratioSE']=ratioSE
-  d['rawSE']=rawSE
   d['preStateSE1']=preStateSE1
   d['wprSE']=wprSE
-  d['sgArmorSE']=sgArmorSE
   d['preStateSE2']=preStateSE2
+  d['rSE']=rSE
+  d['preStateSE3']=preStateSE3
   d['stateSE'] = stateSE
   #####
   d['cSQ'] = cSQ
@@ -771,13 +777,14 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   d=runARTCore(yrStart)
   st.header('Tables')
   st.subheader(d['undE'])
-  tableSE = ul.merge(d['cSE'].round(2), d['isBHSE'], d['ratioSE'].round(3), d['rawSE'], d['preStateSE1'], how='inner')
+  z=lambda n: f"{n:.1%}"
+  tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['isBHSE'], d['preStateSE1'], how='inner')
   ul.stWriteDf(tableSE.tail())
-  tableSE2 = ul.merge(d['wprSE'].round(2), d['sgArmorSE'], d['preStateSE2'], d['stateSE'].ffill(), how='inner')
+  tableSE2 = ul.merge(d['wprSE'].round(2), d['preStateSE2'], d['preStateSE3'], d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
-  tableSQ = ul.merge(d['cSQ'].round(2), d['isTrigSQ'].round(3), d['sgArmorSE'],d['stateSQ'].ffill(), how='inner')
+  tableSQ = ul.merge(d['cSQ'].round(2), d['isTrigSQ'].round(3), d['stateSQ'].ffill(), how='inner')
   ul.stWriteDf(tableSQ.tail())
   #####
   st.subheader(d['undC'])
