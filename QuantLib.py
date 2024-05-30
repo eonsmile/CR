@@ -703,9 +703,7 @@ def runARTCore(yrStart, isAppend=False):
   isExitS = (cSG > cSG.shift()) * 1
   preStateSG2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
-  isSeasonalSG = getIsSeasonalS(cSG,12,27,1,26)
-  #####
-  stateSG=(preStateSG1+preStateSG2+isSeasonalSG).clip(None,1)
+  stateSG=(preStateSG1+preStateSG2).clip(None,1)
   stateSG.rename('State',inplace=True)
   #####
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
@@ -765,7 +763,6 @@ def runARTCore(yrStart, isAppend=False):
   d['adxSG']=adxSG
   d['cond4S']=cond4S
   d['preStateSG2']=preStateSG2
-  d['isSeasonalSG']=isSeasonalSG
   d['stateSG']=stateSG
   return d
 
@@ -798,7 +795,7 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   st.subheader(d['undG'])
   tableSG = ul.merge(d['cSG'].round(2), d['hSG'].round(2), d['cond1S'], d['cond2S'], d['cond3S'], d['preStateSG1'], how='inner')
   ul.stWriteDf(tableSG.tail())
-  tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preStateSG2'], d['isSeasonalSG'], d['stateSG'].ffill(), how='inner')
+  tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preStateSG2'], d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
