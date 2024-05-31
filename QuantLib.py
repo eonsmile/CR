@@ -169,22 +169,6 @@ def getBizDayNYSE(y,m,d,isAdjForward=True):
     dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0).iloc[-1]['market_close']
   return pendulum.datetime(dt.year, dt.month, dt.day).naive()
 
-def getIsSeasonalS(s,mEntry,dEntry,mExit,dExit):
-  s=s.copy()
-  s[:]=np.nan
-  for y in range(s.index.year[0],s.index.year[-1]+1):
-    dtEntry=getBizDayPriorNYSE(y,mEntry,dEntry)
-    dtExit=getBizDayNYSE(y, mExit, dExit, isAdjForward=False)
-    if dtEntry in s.index:
-      s.loc[dtEntry]=1
-    elif dtEntry < s.index[-1]:
-      print(f"getSeasonalS: {dtEntry:%Y-%m-%d} (entry) is missing!")
-    if dtExit in s.index:
-      s.loc[dtExit]=0
-    elif dtExit < s.index[-1]:
-      print(f"getSeasonalS: {dtExit:%Y-%m-%d} (exit) is missing!")
-  return s.ffill().fillna(0).rename('Seasonal?')
-
 def getTodayNYSE():
   today = pendulum.today().naive()
   return getBizDayNYSE(today.year, today.month, today.day)
@@ -592,7 +576,7 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runARTCore(yrStart, isAppend=False):
+def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   undE = 'SPY'
   undQ = 'QQQ'
   undB = 'TLT'
@@ -692,10 +676,10 @@ def runARTCore(yrStart, isAppend=False):
   stateSG=(preStateSG1+preStateSG2).clip(None,1)
   stateSG.rename('State',inplace=True)
   #####
-  dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
-  dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * 1
-  dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * 1
-  dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * 1
+  dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * multE
+  dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * multQ
+  dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * multB
+  dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * multG
   dw.loc[dw.index.year < yrStart] = 0
   dwAllOrNone(dw)
   d=dict()
@@ -739,12 +723,12 @@ def runARTCore(yrStart, isAppend=False):
   d['stateSG']=stateSG
   return d
 
-def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
+def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, isSkipTitle=False):
   script = 'ART'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runARTCore(yrStart)
+  d=runARTCore(yrStart,multE=multE,multQ=multQ,multB=multB,multG=multG)
   st.header('Tables')
   st.subheader(d['undE'])
   z=lambda n: f"{n:.1%}"
