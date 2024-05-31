@@ -595,10 +595,9 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
 def runARTCore(yrStart, isAppend=False):
   undE = 'SPY'
   undQ = 'QQQ'
-  undC = 'FXI'
   undB = 'TLT'
   undG = 'GLD'
-  tickers = [undE, undQ, undC, undB, undG]
+  tickers = [undE, undQ, undB, undG]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
   if isAppend:
@@ -626,10 +625,6 @@ def runARTCore(yrStart, isAppend=False):
   rSE = (cSE / cSE.shift() - 1).rename('Return')
   #####
   cSQ = dfDict[undQ]['Close']
-  #####
-  hSC = dfDict[undC]['High']
-  lSC = dfDict[undC]['Low']
-  cSC = dfDict[undC]['Close']
   #####
   cSB = dfDict[undB]['Close']
   #####
@@ -667,15 +662,6 @@ def runARTCore(yrStart, isAppend=False):
   stateSQ=((isTrigSQ>0) & (sgArmorSE>0))*1
   stateSQ.rename('State',inplace=True)
   #####
-  # FXI
-  ibsSC = getIbsS(dfDict[undC])
-  ratio1SC = (cSC / cSC.shift(5)).rename('Ratio 1')
-  ratio2SC = (cSC / getKFMeans(cSC)).rename('Ratio 2')
-  isTomSC = getTomS(cSC, 0, 2, isNYSE=True)
-  isEntrySC = ((ibsSC > .9) & (ratio1SC > 1) & (ratio2SC > 1) & (isTomSC == 0)) * 1
-  isExitSC = (ibsSC < (1 / 3)) * 1
-  stateSC = -getStateS(isEntrySC, isExitSC, isCleaned=False, isMonthlyRebal=False).rename('State')
-  #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
   w2S = getTomS(cSB, 0, 7 - 1, isNYSE=True)
@@ -708,7 +694,6 @@ def runARTCore(yrStart, isAppend=False):
   #####
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * 1
   dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * 1
-  dw[undC] = cleanS(stateSC, isMonthlyRebal=False) * 1
   dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * 1
   dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * 1
   dw.loc[dw.index.year < yrStart] = 0
@@ -716,7 +701,6 @@ def runARTCore(yrStart, isAppend=False):
   d=dict()
   d['undE']=undE
   d['undQ']=undQ
-  d['undC']=undC
   d['undB']=undB
   d['undG']=undG
   d['dp'] = dp
@@ -738,17 +722,6 @@ def runARTCore(yrStart, isAppend=False):
   d['cSQ'] = cSQ
   d['isTrigSQ'] = isTrigSQ
   d['stateSQ'] = stateSQ
-  #####
-  d['cSC'] = cSC
-  d['hSC'] = hSC
-  d['lSC'] = lSC
-  d['ibsSC'] = ibsSC
-  d['ratio1SC'] = ratio1SC
-  d['ratio2SC'] = ratio2SC
-  d['isTomSC'] = isTomSC
-  d['isEntrySC'] = isEntrySC
-  d['isExitSC'] = isExitSC
-  d['stateSC'] = stateSC
   #####
   d['cSB'] = cSB
   d['stateSB'] = stateSB
@@ -783,10 +756,6 @@ def runART(yrStart=START_YEAR_DICT['ART'], isSkipTitle=False):
   st.subheader(d['undQ'])
   tableSQ = ul.merge(d['cSQ'].round(2), d['isTrigSQ'].round(3), d['stateSQ'].ffill(), how='inner')
   ul.stWriteDf(tableSQ.tail())
-  #####
-  st.subheader(d['undC'])
-  tableSC = ul.merge(d['cSC'].round(2), d['hSC'].round(2), d['lSC'].round(2),d['ibsSC'].round(3),d['ratio1SC'].round(3),d['ratio2SC'].round(3),d['isTomSC'],d['stateSC'].ffill(),how='inner')
-  ul.stWriteDf(tableSC.tail())
   #####
   st.subheader(d['undB'])
   tableSB = ul.merge(d['cSB'].round(2),d['stateSB'].ffill(),how='inner')
