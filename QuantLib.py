@@ -609,6 +609,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   rSE = (cSE / cSE.shift() - 1).rename('Return')
   #####
   cSQ = dfDict[undQ]['Close']
+  hSQ = dfDict[undQ]['High']
   #####
   cSB = dfDict[undB]['Close']
   #####
@@ -642,9 +643,18 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   #####
   # QQQ
   ratioSQ=EMA(cSQ,130)/EMA(cSE,130)
-  isTrigSQ=(ratioSQ-ratioSQ.shift()+0.0002).rename('Trig?')*10000
-  stateSQ=((isTrigSQ>0) & (sgArmorSE>0))*1
-  stateSQ.rename('State',inplace=True)
+  trigSQ=(ratioSQ-ratioSQ.shift()+0.0002).rename('Trig')*10000
+  preStateSQ1=((trigSQ>0) & (sgArmorSE>0))*1
+  preStateSQ1.rename('Pre-State 1',inplace=True)
+  #####
+  isTuesWedSQ = cSQ.rename('Tues/Wed?').astype(int) * 0
+  isTuesWedSQ[isTuesWedSQ.index.weekday.isin([1, 2])] = 1
+  isTwoDownDaysSQ = ((cSQ / cSQ.shift()).rolling(2).max()<1)*1
+  isTwoDownDaysSQ.rename('Two Down Days?',inplace=True)
+  isEntryS=(isTuesWedSQ==1)&(isTwoDownDaysSQ==1)&(sgArmorSE>0)
+  isExitS=cSQ>hSQ.shift()
+  preStateSQ2=getStateS(isEntryS,isExitS,isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  stateSQ = (preStateSQ1 + preStateSQ2).clip(None, 1).rename('State')
   #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
@@ -704,7 +714,12 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   d['stateSE'] = stateSE
   #####
   d['cSQ'] = cSQ
-  d['isTrigSQ'] = isTrigSQ
+  d['hSQ'] = hSQ
+  d['trigSQ'] = trigSQ
+  d['preStateSQ1'] = preStateSQ1
+  d['isTuesWedSQ'] = isTuesWedSQ
+  d['isTwoDownDaysSQ'] = isTwoDownDaysSQ
+  d['preStateSQ2'] = preStateSQ2
   d['stateSQ'] = stateSQ
   #####
   d['cSB'] = cSB
@@ -738,7 +753,7 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, i
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
-  tableSQ = ul.merge(d['cSQ'].round(2), d['isTrigSQ'].round(3), d['stateSQ'].ffill(), how='inner')
+  tableSQ = ul.merge(d['cSQ'].round(2), d['hSQ'].round(2), d['trigSQ'].round(3), d['preStateSQ1'], d['isTuesWedSQ'], d['isTwoDownDaysSQ'], d['preStateSQ2'], d['stateSQ'].ffill(), how='inner')
   ul.stWriteDf(tableSQ.tail())
   #####
   st.subheader(d['undB'])
