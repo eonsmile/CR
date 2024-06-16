@@ -576,12 +576,13 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
+def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=False):
   undE = 'SPY'
   undQ = 'QQQ'
   undB = 'TLT'
   undG = 'GLD'
-  tickers = [undE, undQ, undB, undG]
+  undC = 'FXI'
+  tickers = [undE, undQ, undB, undG, undC]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
   if isAppend:
@@ -616,6 +617,10 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   hSG = dfDict[undG]['High']
   lSG = dfDict[undG]['Low']
   cSG = dfDict[undG]['Close']
+  #####
+  hSC = dfDict[undC]['High']
+  lSC = dfDict[undC]['Low']
+  cSC = dfDict[undC]['Close']
   #####
   # SPY
   ratioSE = (cSE / cSE.rolling(200).mean()).rename('Ratio')
@@ -685,11 +690,19 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   #####
   stateSG=(preStateSG1+preStateSG2).clip(None,1)
   stateSG.rename('State',inplace=True)
+  # FXI
+  ibsSC = getIbsS(dfDict[undC])
+  wprSC = pandas_ta.willr(hSC, lSC, cSC, length=2).rename('WPR')
+  isEntrySC = ((ibsSC > .9) & (wprSC > (-20)))*1
+  isExitSC = cSC < lSC.shift()
+  stateSC = -getStateS(isEntrySC, isExitSC, isCleaned=False, isMonthlyRebal=False).rename('State')
   #####
+  # Summary
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * multE
   dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * multQ
   dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * multB
   dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * multG
+  dw[undC] = cleanS(stateSC, isMonthlyRebal=False) * multC
   dw.loc[dw.index.year < yrStart] = 0
   dwAllOrNone(dw)
   d=dict()
@@ -697,6 +710,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   d['undQ']=undQ
   d['undB']=undB
   d['undG']=undG
+  d['undC']=undC
   d['dp'] = dp
   d['dw'] = dw
   d['dfDict'] = dfDict
@@ -736,14 +750,23 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, isAppend=False):
   d['cond4S']=cond4S
   d['preStateSG2']=preStateSG2
   d['stateSG']=stateSG
+  #####
+  d['cSC'] = cSC
+  d['hSC'] = hSC
+  d['lSC'] = lSC
+  d['ibsSC'] = ibsSC
+  d['wprSC'] = wprSC
+  d['isEntrySC'] = isEntrySC
+  d['isExitSC'] = isExitSC
+  d['stateSC'] = stateSC
   return d
 
-def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, isSkipTitle=False):
+def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, multC=1, isSkipTitle=False):
   script = 'ART'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runARTCore(yrStart,multE=multE,multQ=multQ,multB=multB,multG=multG)
+  d=runARTCore(yrStart,multE=multE,multQ=multQ,multB=multB,multG=multG,multC=multC)
   st.header('Tables')
   st.subheader(d['undE'])
   z=lambda n: f"{n:.1%}"
@@ -765,6 +788,10 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, i
   ul.stWriteDf(tableSG.tail())
   tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preStateSG2'], d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
+  #####
+  st.subheader(d['undC'])
+  tableSC = ul.merge(d['cSC'].round(2), d['lSC'].round(2), d['ibsSC'].round(3), d['wprSC'].round(2), d['stateSC'].ffill(), how='inner')
+  ul.stWriteDf(tableSC.tail())
   #####
   st.header('Weights')
   dwTail(d['dw'])
