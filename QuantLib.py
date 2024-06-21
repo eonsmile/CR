@@ -652,8 +652,10 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   stateSE = (preStateSE1 + preStateSE2 + preStateSE3).clip(None, 1).rename('State')
   #####
   # QQQ
-  ratioSQ=EMA(cSQ,130)/EMA(cSE,130)
-  trigSQ=(ratioSQ-ratioSQ.shift()+0.0002).rename('Trig')*10000
+  ratioSQ = (cSQ / cSQ.rolling(200).mean()).rename('Ratio')
+  #####
+  s=EMA(cSQ,130)/EMA(cSE,130)
+  trigSQ=(s-s.shift()+0.0002).rename('Trig')*10000
   preStateSQ1=((trigSQ>0) & (sgArmorSE>0))*1
   preStateSQ1.rename('Pre-State 1',inplace=True)
   #####
@@ -664,12 +666,17 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   isEntryS=(isTuesWedSQ==1)&(isTwoDownDaysSQ==1)&(sgArmorSE>0)
   isExitS=cSQ>hSQ.shift()
   preStateSQ2=getStateS(isEntryS,isExitS,isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
-  stateSQ = (preStateSQ1 + preStateSQ2).clip(None, 1).rename('State')
+  #####
+  ibsSQ = getIbsS(dfDict[undQ])
+  isEntryS = (ratioSQ < 1) & ((cSQ / cSQ.shift(2)) > 1.02) & (cSQ > hSQ.shift())
+  isExitS = ibsSQ < .2
+  preStateSQ3 = -getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
+  stateSQ = (preStateSQ1 + preStateSQ2 + preStateSQ3).clip(-1, 1).rename('State')
   #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
   w2S = getTomS(cSB, 0, 7 - 1, isNYSE=True)
-  stateSB = w1S-w2S
+  stateSB = (w1S-w2S)*(ratioSE>1)*1
   stateSB.rename('State', inplace=True)
   #####
   # GLD
@@ -737,11 +744,15 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   #####
   d['cSQ'] = cSQ
   d['hSQ'] = hSQ
+  d['ratioSQ']=ratioSQ
+  #####
   d['trigSQ'] = trigSQ
   d['preStateSQ1'] = preStateSQ1
   d['isTuesWedSQ'] = isTuesWedSQ
   d['isTwoDownDaysSQ'] = isTwoDownDaysSQ
   d['preStateSQ2'] = preStateSQ2
+  d['ibsSQ']=ibsSQ
+  d['preStateSQ3'] = preStateSQ3
   d['stateSQ'] = stateSQ
   #####
   d['cSB'] = cSB
@@ -784,8 +795,11 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, m
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
-  tableSQ = ul.merge(d['cSQ'].round(2), d['hSQ'].round(2), d['trigSQ'].round(3), d['preStateSQ1'], d['isTuesWedSQ'], d['isTwoDownDaysSQ'], d['preStateSQ2'], d['stateSQ'].ffill(), how='inner')
+  tableSQ = ul.merge(d['cSQ'].round(2), d['hSQ'].round(2), d['ratioSQ'].round(3), d['trigSQ'].round(3), d['preStateSQ1'], d['isTuesWedSQ'], d['isTwoDownDaysSQ'], d['preStateSQ2'], how='inner')
   ul.stWriteDf(tableSQ.tail())
+  tableSQ2 = ul.merge(d['ibsSQ'], d['preStateSQ3'], d['stateSQ'].ffill(), how='inner')
+  ul.stWriteDf(tableSQ2.tail())
+
   #####
   st.subheader(d['undB'])
   tableSB = ul.merge(d['cSB'].round(2),d['stateSB'].ffill(),how='inner')
