@@ -8,3 +8,4 @@ pandas_market_calendars
 pykalman-py311-update
 pandas-ta
 ta-lib-bin
+numpy==1.26.4
