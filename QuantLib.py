@@ -603,7 +603,6 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
     else:
       ul.tPrint('Continuing on with backtest ....')
   #####
-  oSE = dfDict[undE]['Open']
   hSE = dfDict[undE]['High']
   lSE = dfDict[undE]['Low']
   cSE = dfDict[undE]['Close']
@@ -633,8 +632,9 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
     ul.cachePersist('w', key, s)
   sgArmorSE = applyDates(s, cSE).shift()
   #####
-  isBHSE = ((pandas_ta.cdl_pattern(oSE, hSE, lSE, cSE, name='harami')['CDL_HARAMI'] == 100) & (cSE.shift(1)<cSE.shift(2))).rename('BH?')*1
-  preStateSE1 = (((isBHSE == 1) & (ratioSE >= 1)) * 1).rolling(5).sum().clip(None, 1).rename('Pre-State 1')
+  isEntryS = ((rSE < 0) & (rSE.shift().rolling(5).min() > 0) & (sgArmorSE > 0)) * 1
+  isExitS = (cSE > hSE.shift()) * 1
+  preStateSE1 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
   #####
   wprSE = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
   isEntryS = ((wprSE < (-90)) & (sgArmorSE > 0))*1
@@ -649,10 +649,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   isExitS = (rsiSE > 75)*1
   preStateSE3 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
   #####
-  isEntryS = ((rSE < 0) & (rSE.shift().rolling(5).min() > 0) & (sgArmorSE > 0)) * 1
-  isExitS = (cSE > hSE.shift()) * 1
-  preStateSE4 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 4')
-  stateSE = (preStateSE1 + preStateSE2 + preStateSE3 + preStateSE4).clip(None, 1).rename('State')
+  stateSE = (preStateSE1 + preStateSE2 + preStateSE3).clip(None, 1).rename('State')
   #####
   # QQQ
   ratioSQ=EMA(cSQ,130)/EMA(cSE,130)
@@ -724,10 +721,10 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['dfDict'] = dfDict
   #####
   d['cSE'] = cSE
+  d['rSE'] = rSE
   d['ratioSE'] = ratioSE
   d['sgArmorSE'] = sgArmorSE
   #####
-  d['isBHSE']=isBHSE
   d['preStateSE1']=preStateSE1
   d['wprSE']=wprSE
   d['preStateSE2']=preStateSE2
@@ -736,8 +733,6 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['vixSMA40SE']=vixSMA40SE
   d['vixSMA65SE']=vixSMA65SE
   d['preStateSE3']=preStateSE3
-  d['rSE']=rSE
-  d['preStateSE4']=preStateSE4
   d['stateSE'] = stateSE
   #####
   d['cSQ'] = cSQ
@@ -783,9 +778,9 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, m
   st.header('Tables')
   st.subheader(d['undE'])
   z=lambda n: f"{n:.1%}"
-  tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['isBHSE'], d['preStateSE1'], d['wprSE'].round(2), d['preStateSE2'], how='inner')
+  tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['preStateSE1'], d['wprSE'].round(2), d['preStateSE2'], how='inner')
   ul.stWriteDf(tableSE.tail())
-  tableSE2 = ul.merge(d['rsiSE'].round(2), d['vixSE'].round(2), d['vixSMA40SE'].round(2), d['vixSMA65SE'].round(2), d['preStateSE3'], d['preStateSE4'], d['stateSE'].ffill(), how='inner')
+  tableSE2 = ul.merge(d['rsiSE'].round(2), d['vixSE'].round(2), d['vixSMA40SE'].round(2), d['vixSMA65SE'].round(2), d['preStateSE3'], d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
