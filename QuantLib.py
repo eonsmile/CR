@@ -28,7 +28,7 @@ START_YEAR_DICT={
   'Core':2013,
   'CSS':2013,
   'BTS':2015,
-  'ART':2008
+  'ART':2013
 }
 MKT_CLOSE_HOUR=4
 
