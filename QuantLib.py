@@ -28,7 +28,7 @@ START_YEAR_DICT={
   'Core':2013,
   'CSS':2013,
   'BTS':2015,
-  'ART':2013
+  'ART':2008
 }
 MKT_CLOSE_HOUR=4
 
@@ -706,7 +706,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   ibsSC = getIbsS(dfDict[undC])
   wprSC = pandas_ta.willr(hSC, lSC, cSC, length=2).rename('WPR')
   isEntrySC = ((ibsSC > .9) & (wprSC > (-20)))*1
-  isExitSC = cSC < lSC.shift()
+  isExitSC = ((ibsSC < .33) | (wprSC < -67)|(cSC<lSC.shift()))* 1
   stateSC = -getStateS(isEntrySC, isExitSC, isCleaned=False, isMonthlyRebal=False).rename('State')
   #####
   # Summary
