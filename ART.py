@@ -8,10 +8,10 @@ import streamlit as st
 z='ART'
 st.set_page_config(page_title=z)
 st.title(z)
-
+yrStart=ql.START_YEAR_DICT['ART']
 if ul.stCheckPW('password_CR'):
   l = ul.spl('SPY,QQQ,TLT,GLD,FXI')
-  chosenYear = st.radio('Start Year', ["2008", "2013"], index=1)
+  chosenYear = st.radio('Start Year', ['2008', f"{yrStart}"], index=1)
   st.write('')
   cols = st.columns(len(l))
   checkboxes = [cols[i].checkbox(l[i], value=True) for i in range(len(l))]
