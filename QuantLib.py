@@ -334,10 +334,18 @@ def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
     df = df[df['date'] > '2010-7-16']
     df['open'] = df['close'].shift()
     df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
-  else: # Quandl
-    df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
-    df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
-    df = df[df['adj_volume'] != 0]  # Correction for erroneous zero volume days
+  else: # EODHD/Quandl
+    if True:
+      df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{und}.US?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
+      df['date'] = pd.to_datetime(df['date'])
+      df['ratio'] = df['adjusted_close'] / df['close']
+      for field in ul.spl('open,high,low'):
+        df[f"adjusted_{field}"] = df[field] * df['ratio']
+      df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
+    else:
+      df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
+      df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
+      df = df[df['adj_volume'] != 0]  # Correction for erroneous zero volume days
   #####
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
