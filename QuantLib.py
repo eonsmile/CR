@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import requests
 import math
-import quandl
+#import quandl
 import pendulum
 import pykalman
 import yfinance as yf
@@ -18,7 +18,7 @@ import pandas_ta
 ###########
 # Constants
 ###########
-quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
+#quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
 START_YEAR_DICT={
   'priceHistory':2013-1,
