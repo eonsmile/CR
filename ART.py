@@ -20,6 +20,6 @@ if ul.stCheckPW('password_CR'):
   multB=checkboxes[2]*1
   multG=checkboxes[3]*1
   multC=checkboxes[4]*1
-  ql.START_YEAR_DICT['ART'] = int(chosenYear)
-  ql.START_YEAR_DICT['priceHistory'] = ql.START_YEAR_DICT['ART'] - 1
-  ql.runART(ql.START_YEAR_DICT['ART'],multE=multE,multQ=multQ,multB=multB,multG=multG,multC=multC,isSkipTitle=True)
+  y = int(chosenYear)
+  ql.START_YEAR_DICT['priceHistory'] = y - 1
+  ql.runART(y,multE=multE,multQ=multQ,multB=multB,multG=multG,multC=multC,isSkipTitle=True)

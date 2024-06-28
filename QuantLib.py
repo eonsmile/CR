@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import requests
 import math
-#import quandl
 import pendulum
 import pykalman
 import yfinance as yf
@@ -18,7 +17,6 @@ import pandas_ta
 ###########
 # Constants
 ###########
-#quandl.ApiConfig.api_key = st.secrets['quandl_api_key']
 CC_API_KEY = st.secrets['cc_api_key']
 START_YEAR_DICT={
   'priceHistory':2013-1,
@@ -334,18 +332,14 @@ def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
     df = df[df['date'] > '2010-7-16']
     df['open'] = df['close'].shift()
     df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
-  else: # EODHD/Quandl
-    if True:
-      df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{und}.US?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
-      df['date'] = pd.to_datetime(df['date'])
-      df['ratio'] = df['adjusted_close'] / df['close']
-      for field in ul.spl('open,high,low'):
-        df[f"adjusted_{field}"] = df[field] * df['ratio']
-      df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
-    else:
-      df = quandl.get_table('QUOTEMEDIA/PRICES', ticker=und, paginate=True, date={'gte': dtStart})
-      df = df[ul.spl('date,adj_open,adj_high,adj_low,adj_close,adj_volume')]
-      df = df[df['adj_volume'] != 0]  # Correction for erroneous zero volume days
+  else: # EODHD
+    ticker='VIX.INDX' if und=='VIX' else f"{und}.US"
+    df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
+    df['date'] = pd.to_datetime(df['date'])
+    df['ratio'] = df['adjusted_close'] / df['close']
+    for field in ul.spl('open,high,low'):
+      df[f"adjusted_{field}"] = df[field] * df['ratio']
+    df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
   #####
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
@@ -477,68 +471,6 @@ def runTPP(yrStart=START_YEAR_DICT['TPP']):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runCSSCore(yrStart, isAppend=False):
-  und = 'FXI'
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  df = dfDict[und]
-  if isAppend:
-    yest=getYestNYSE()
-    if (pendulum.instance(df.index[-1]).date() < yest.date()) and (pendulum.now().hour < MKT_CLOSE_HOUR + 1):
-      ul.tPrint('Appending data to backtest ....')
-      data = yf.Ticker(und).history(period='1d')
-      df2 = df.tail(1).copy()
-      df2.index = [yest]
-      for field in ul.spl('Open,High,Low,Close,Volume'):
-        df2.loc[yest, field] = float(data[field].iloc[0])
-      df = pd.concat([df, df2])
-      dp.loc[yest,und] = df2.loc[yest, 'Close']
-      dw = dp.copy()
-      dw[:] = np.nan
-      dfDict[und] = df.copy()
-    else:
-      ul.tPrint('Continuing on with backtest ....')
-  #####
-  ibsS = getIbsS(df)
-  ratio1S = df['Close'] / df['Close'].shift(5)
-  ratio1S.rename('Ratio 1', inplace=True)
-  ratio2S = df['Close'] / getKFMeans(df['Close'])
-  ratio2S.rename('Ratio 2', inplace=True)
-  isTomS = getTomS(dp[und], 0, 2, isNYSE=True)
-  isEntryS = ((ibsS > .9) & (ratio1S > 1) & (ratio2S > 1) & (isTomS == 0)) * 1
-  isExitS = (ibsS < (1 / 3))*1
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
-  ul.cachePersist('w','tmp1',stateS)
-  dw[und] = -stateS
-  #dw.loc[~dw.index.month.isin([5, 6, 7, 8, 9, 10]), und] /= 2
-  dw.loc[dw.index.year < yrStart] = 0
-  d=dict()
-  d['und'] = und
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ratio1S'] = ratio1S
-  d['ratio2S'] = ratio2S
-  d['isTomS'] = isTomS
-  d['isEntryS'] = isEntryS
-  d['isExitS'] = isExitS
-  d['stateS'] = stateS
-  return d
-
-def runCSS(yrStart=START_YEAR_DICT['CSS'], isSkipTitle=False):
-  script = 'CSS'
-  if not isSkipTitle:
-    st.header(script)
-  d=runCSSCore(yrStart)
-  st.header('Table')
-  df=d['dfDict'][d['und']]
-  tableS = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2),
-                    d['ibsS'].round(3), d['ratio1S'].round(3), d['ratio2S'].round(3), d['isTomS'], d['stateS'].ffill(), how='inner')
-  ul.stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
 def runBTSCore(yrStart):
   und = 'BTC'
   volTgt = .24
@@ -650,7 +582,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   preStateSE2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
   rsiSE = pandas_ta.rsi(cSE,length=2).rename('RSI')
-  vixSE = applyDates(getYFinanceS('^VIX',fromYear=START_YEAR_DICT['priceHistory']),cSE).rename('VIX')
+  vixSE = applyDates(getPriceHistory('VIX',yrStart=START_YEAR_DICT['priceHistory'])['Close'],cSE).rename('VIX')
   vixSMA40SE = vixSE.rolling(40).mean().rename('VIX SMA40')
   vixSMA65SE = vixSE.rolling(65).mean().rename('VIX SMA65')
   isEntryS = ((rsiSE < 25) & (vixSMA40SE<vixSMA65SE) & (ratioSE > 1))*1
