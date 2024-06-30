@@ -28,7 +28,6 @@ START_YEAR_DICT={
   'BTS':2015,
   'ART':2013
 }
-MKT_CLOSE_HOUR=4
 
 #############################################################################################
 
@@ -166,6 +165,9 @@ def getBizDayNYSE(y,m,d,isAdjForward=True):
   else:
     dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0).iloc[-1]['market_close']
   return pendulum.datetime(dt.year, dt.month, dt.day).naive()
+
+def getNYSECloseHourHKT():
+  return 4 if pendulum.now('US/Eastern').is_dst() else 5
 
 def getTodayNYSE():
   today = pendulum.today().naive()
@@ -527,7 +529,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   #####
   if isAppend:
     yest = getYestNYSE()
-    if (pendulum.instance(dp.index[-1]).date() < yest.date()) and (pendulum.now().hour < MKT_CLOSE_HOUR + 1):
+    if pendulum.instance(dp.index[-1]).date() < yest.date():
       ul.tPrint('Appending data to backtest ....')
       for und in tickers:
         data = yf.Ticker(und).history(period='1d')
@@ -541,7 +543,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
       dw = dp.copy()
       dw[:] = np.nan
     else:
-      ul.tPrint('Continuing on with backtest ....')
+      ul.tPrint('No need to append data to backtest ....')
   #####
   hSE = dfDict[undE]['High']
   lSE = dfDict[undE]['Low']
