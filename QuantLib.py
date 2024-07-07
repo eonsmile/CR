@@ -576,12 +576,12 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   #####
   isEntryS = ((rSE < 0) & (rSE.shift().rolling(5).min() > 0) & (sgArmorSE > 0)) * 1
   isExitS = (cSE > hSE.shift()) * 1
-  preStateSE1 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
+  preState1SE = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
   #####
   wprSE = pandas_ta.willr(hSE, lSE, cSE, length=2).rename('WPR')
   isEntryS = ((wprSE < (-90)) & (sgArmorSE > 0))*1
   isExitS = (wprSE > (-10))*1
-  preStateSE2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  preState2SE = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
   rsiSE = pandas_ta.rsi(cSE,length=2).rename('RSI')
   vixSE = applyDates(getPriceHistory('VIX',yrStart=START_YEAR_DICT['priceHistory'])['Close'],cSE).rename('VIX')
@@ -589,17 +589,22 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   vixSMA65SE = vixSE.rolling(65).mean().rename('VIX SMA65')
   isEntryS = ((rsiSE < 25) & (vixSMA40SE<vixSMA65SE) & (ratioSE > 1))*1
   isExitS = (rsiSE > 75)*1
-  preStateSE3 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
+  preState3SE = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
   #####
-  stateSE = (preStateSE1 + preStateSE2 + preStateSE3).clip(None, 1).rename('State')
+  sma6SE = cSE.rolling(6).mean().rename('SMA6')
+  isEntryS=(rSE.rolling(2).min()>0) & (rSE==rSE.rolling(2).max()) & (ratioSE<1)
+  isExitS=cSE<sma6SE
+  preState4SE = -getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 4')
+  #####
+  stateSE = (preState1SE + preState2SE + preState3SE+preState4SE).clip(None, 1).rename('State')
   #####
   # QQQ
   ratioSQ = (cSQ / cSQ.rolling(200).mean()).rename('Ratio')
   #####
   s=EMA(cSQ,130)/EMA(cSE,130)
   trigSQ=(s-s.shift()+0.0002).rename('Trig')*10000
-  preStateSQ1=((trigSQ>0) & (sgArmorSE>0))*1
-  preStateSQ1.rename('Pre-State 1',inplace=True)
+  preState1SQ=((trigSQ>0) & (sgArmorSE>0))*1
+  preState1SQ.rename('Pre-State 1',inplace=True)
   #####
   isTuesWedSQ = cSQ.rename('Tues/Wed?').astype(int) * 0
   isTuesWedSQ[isTuesWedSQ.index.weekday.isin([1, 2])] = 1
@@ -607,13 +612,13 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   isTwoDownDaysSQ.rename('Two Down Days?',inplace=True)
   isEntryS=(isTuesWedSQ==1)&(isTwoDownDaysSQ==1)&(sgArmorSE>0)
   isExitS=cSQ>hSQ.shift()
-  preStateSQ2=getStateS(isEntryS,isExitS,isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  preState2SQ=getStateS(isEntryS,isExitS,isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
   ibsSQ = getIbsS(dfDict[undQ])
   isEntryS = (ratioSQ < 1) & ((cSQ / cSQ.shift(2)) > 1.02) & (cSQ > hSQ.shift())
   isExitS = ibsSQ < .2
-  preStateSQ3 = -getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
-  stateSQ = (preStateSQ1 + preStateSQ2 + preStateSQ3).clip(-1, 1).rename('State')
+  preState3SQ = -getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
+  stateSQ = (preState1SQ + preState2SQ + preState3SQ).clip(-1, 1).rename('State')
   #####
   # TLT
   w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
@@ -632,7 +637,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   isEntryS = (cond1S & cond2S & cond3S) * 1
   isExitS = (cSG > hSG.shift()) * 1
   isExitS.loc[isEntryS == 1] = 0
-  preStateSG1 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
+  preState1SG = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 1')
   #####
   ibsSG = getIbsS(dfDict[undG])
   adxSG = pandas_ta.adx(hSG, lSG, cSG, length=5)['ADX_5'].rename('ADX5')
@@ -640,9 +645,9 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   cond4S.rename('Condition 4',inplace=True)
   isEntryS = cond4S
   isExitS = (cSG > cSG.shift()) * 1
-  preStateSG2 = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
+  preState2SG = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
-  stateSG=(preStateSG1+preStateSG2).clip(None,1)
+  stateSG=(preState1SG+preState2SG).clip(None,1)
   stateSG.rename('State',inplace=True)
   # FXI
   ibsSC = getIbsS(dfDict[undC])
@@ -674,14 +679,16 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['ratioSE'] = ratioSE
   d['sgArmorSE'] = sgArmorSE
   #####
-  d['preStateSE1']=preStateSE1
+  d['preState1SE']=preState1SE
   d['wprSE']=wprSE
-  d['preStateSE2']=preStateSE2
+  d['preState2SE']=preState2SE
   d['rsiSE']=rsiSE
   d['vixSE']=vixSE
   d['vixSMA40SE']=vixSMA40SE
   d['vixSMA65SE']=vixSMA65SE
-  d['preStateSE3']=preStateSE3
+  d['preState3SE']=preState3SE
+  d['sma6SE']=sma6SE
+  d['preState4SE']=preState4SE
   d['stateSE'] = stateSE
   #####
   d['cSQ'] = cSQ
@@ -689,12 +696,12 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['ratioSQ']=ratioSQ
   #####
   d['trigSQ'] = trigSQ
-  d['preStateSQ1'] = preStateSQ1
+  d['preState1SQ'] = preState1SQ
   d['isTuesWedSQ'] = isTuesWedSQ
   d['isTwoDownDaysSQ'] = isTwoDownDaysSQ
-  d['preStateSQ2'] = preStateSQ2
+  d['preState2SQ'] = preState2SQ
   d['ibsSQ']=ibsSQ
-  d['preStateSQ3'] = preStateSQ3
+  d['preState3SQ'] = preState3SQ
   d['stateSQ'] = stateSQ
   #####
   d['cSB'] = cSB
@@ -705,11 +712,11 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['cond1S']=cond1S
   d['cond2S']=cond2S
   d['cond3S']=cond3S
-  d['preStateSG1']=preStateSG1
+  d['preState1SG']=preState1SG
   d['ibsSG']=ibsSG
   d['adxSG']=adxSG
   d['cond4S']=cond4S
-  d['preStateSG2']=preStateSG2
+  d['preState2SG']=preState2SG
   d['stateSG']=stateSG
   #####
   d['cSC'] = cSC
@@ -731,26 +738,25 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, m
   st.header('Tables')
   st.subheader(d['undE'])
   z=lambda n: f"{n:.1%}"
-  tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['preStateSE1'], d['wprSE'].round(2), d['preStateSE2'], how='inner')
+  tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['preState1SE'], d['wprSE'].round(2), d['preState2SE'], how='inner')
   ul.stWriteDf(tableSE.tail())
-  tableSE2 = ul.merge(d['rsiSE'].round(2), d['vixSE'].round(2), d['vixSMA40SE'].round(2), d['vixSMA65SE'].round(2), d['preStateSE3'], d['stateSE'].ffill(), how='inner')
+  tableSE2 = ul.merge(d['rsiSE'].round(2), d['vixSE'].round(2), d['vixSMA40SE'].round(2), d['vixSMA65SE'].round(2), d['preState3SE'], d['sma6SE'].round(2), d['preState4SE'],d['stateSE'].ffill(), how='inner')
   ul.stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
-  tableSQ = ul.merge(d['cSQ'].round(2), d['hSQ'].round(2), d['ratioSQ'].round(3), d['trigSQ'].round(3), d['preStateSQ1'], d['isTuesWedSQ'], d['isTwoDownDaysSQ'], d['preStateSQ2'], how='inner')
+  tableSQ = ul.merge(d['cSQ'].round(2), d['hSQ'].round(2), d['ratioSQ'].round(3), d['trigSQ'].round(3), d['preState1SQ'], d['isTuesWedSQ'], d['isTwoDownDaysSQ'], d['preState2SQ'], how='inner')
   ul.stWriteDf(tableSQ.tail())
-  tableSQ2 = ul.merge(d['ibsSQ'], d['preStateSQ3'], d['stateSQ'].ffill(), how='inner')
+  tableSQ2 = ul.merge(d['ibsSQ'], d['preState3SQ'], d['stateSQ'].ffill(), how='inner')
   ul.stWriteDf(tableSQ2.tail())
-
   #####
   st.subheader(d['undB'])
   tableSB = ul.merge(d['cSB'].round(2),d['stateSB'].ffill(),how='inner')
   ul.stWriteDf(tableSB.tail())
   #####
   st.subheader(d['undG'])
-  tableSG = ul.merge(d['cSG'].round(2), d['hSG'].round(2), d['cond1S'], d['cond2S'], d['cond3S'], d['preStateSG1'], how='inner')
+  tableSG = ul.merge(d['cSG'].round(2), d['hSG'].round(2), d['cond1S'], d['cond2S'], d['cond3S'], d['preState1SG'], how='inner')
   ul.stWriteDf(tableSG.tail())
-  tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preStateSG2'], d['stateSG'].ffill(), how='inner')
+  tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preState2SG'], d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
   #####
   st.subheader(d['undC'])
