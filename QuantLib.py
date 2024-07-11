@@ -59,19 +59,22 @@ def bt(script,dp,dw,yrStart):
       ec = ecS.iloc[i]
   printCalendar(ecS)
   nYears = (ecS.index[-1] - ecS.index[0]).days / 365
-  cagr = math.pow(ecS.iloc[-1] / ecS.iloc[0], 1 / nYears) - 1
+  ecRatio = ecS.iloc[-1] / ecS.iloc[0]
+  #####
+  cagr = math.pow(ecRatio, 1 / nYears) - 1
   dd = ecS / ecS.cummax() - 1
   upi = cagr / np.sqrt(np.power(dd, 2).mean())
-  maxDD = -min(dd)
   vol = ((np.log(ecS / ecS.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
-
+  sharpe = cagr/vol
+  mdd = -min(dd)
+  #####
   m=lambda label,z: f"{label}: <font color='red'>{z}</font>"
   sep='&nbsp;'*10
   st.markdown(sep.join([
     m('&nbsp;'*3+'UPI', f"{upi:.2f}"),
-    m('Sharpe', f"{cagr / vol:.2f}"),
+    m('Sharpe', f"{sharpe:.2f}"),
     m('Cagr', f"{cagr:.1%}"),
-    m('MaxDD', f"{maxDD:.1%}")
+    m('MDD', f"{mdd:.1%}")
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
