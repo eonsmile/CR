@@ -521,32 +521,13 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=False):
+def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
   undE = 'SPY'
   undQ = 'QQQ'
   undB = 'TLT'
   undG = 'GLD'
-  undC = 'FXI'
-  tickers = [undE, undQ, undB, undG, undC]
+  tickers = [undE, undQ, undB, undG]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
-  #####
-  if isAppend:
-    yest = getYestNYSE()
-    if pendulum.instance(dp.index[-1]).date() < yest.date():
-      ul.tPrint('Appending data to backtest ....')
-      for und in tickers:
-        data = yf.Ticker(und).history(period='1d')
-        row = dfDict[und].tail(1).copy()
-        row.index = [yest]
-        for field in ul.spl('Open,High,Low,Close,Volume'):
-          row.loc[yest, field] = float(data[field].iloc[0])
-        if yest not in dfDict[und].index:
-          dfDict[und] = pd.concat([dfDict[und], row])
-          dp.loc[yest, und] = row.loc[yest, 'Close']
-      dw = dp.copy()
-      dw[:] = np.nan
-    else:
-      ul.tPrint('No need to append data to backtest ....')
   #####
   hSE = dfDict[undE]['High']
   lSE = dfDict[undE]['Low']
@@ -561,10 +542,6 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   hSG = dfDict[undG]['High']
   lSG = dfDict[undG]['Low']
   cSG = dfDict[undG]['Close']
-  #####
-  hSC = dfDict[undC]['High']
-  lSC = dfDict[undC]['Low']
-  cSC = dfDict[undC]['Close']
   #####
   # SPY
   ratioSE = (cSE / cSE.rolling(200).mean()).rename('Ratio')
@@ -652,19 +629,12 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   #####
   stateSG=(preState1SG+preState2SG).clip(None,1)
   stateSG.rename('State',inplace=True)
-  # FXI
-  ibsSC = getIbsS(dfDict[undC])
-  wprSC = pandas_ta.willr(hSC, lSC, cSC, length=2).rename('WPR')
-  isEntrySC = ((ibsSC > .9) & (wprSC > (-20)))*1
-  isExitSC = ((ibsSC < .33) | (wprSC < -67)|(cSC<lSC.shift()))* 1
-  stateSC = -getStateS(isEntrySC, isExitSC, isCleaned=False, isMonthlyRebal=False).rename('State')
   #####
   # Summary
   dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * multE
   dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * multQ
   dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * multB
   dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * multG
-  dw[undC] = cleanS(stateSC, isMonthlyRebal=False) * multC
   dw.loc[dw.index.year < yrStart] = 0
   dwAllOrNone(dw)
   d=dict()
@@ -672,7 +642,6 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['undQ']=undQ
   d['undB']=undB
   d['undG']=undG
-  d['undC']=undC
   d['dp'] = dp
   d['dw'] = dw
   d['dfDict'] = dfDict
@@ -721,24 +690,16 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1, multC=1, isAppend=Fa
   d['cond4S']=cond4S
   d['preState2SG']=preState2SG
   d['stateSG']=stateSG
-  #####
-  d['cSC'] = cSC
-  d['hSC'] = hSC
-  d['lSC'] = lSC
-  d['ibsSC'] = ibsSC
-  d['wprSC'] = wprSC
-  d['isEntrySC'] = isEntrySC
-  d['isExitSC'] = isExitSC
-  d['stateSC'] = stateSC
   return d
 
-def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, multC=1, isSkipTitle=False):
+def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, isSkipTitle=False):
   script = 'ART'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runARTCore(yrStart,multE=multE,multQ=multQ,multB=multB,multG=multG,multC=multC)
+  d=runARTCore(yrStart,multE=multE,multQ=multQ,multB=multB,multG=multG)
   st.header('Tables')
+  #####
   st.subheader(d['undE'])
   z=lambda n: f"{n:.1%}"
   tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['preState1SE'], d['wprSE'].round(2), d['preState2SE'], how='inner')
@@ -761,10 +722,6 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, m
   ul.stWriteDf(tableSG.tail())
   tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preState2SG'], d['stateSG'].ffill(), how='inner')
   ul.stWriteDf(tableSG2.tail())
-  #####
-  st.subheader(d['undC'])
-  tableSC = ul.merge(d['cSC'].round(2), d['lSC'].round(2), d['ibsSC'].round(3), d['wprSC'].round(2), d['stateSC'].ffill(), how='inner')
-  ul.stWriteDf(tableSC.tail())
   #####
   st.header('Weights')
   dwTail(d['dw'])

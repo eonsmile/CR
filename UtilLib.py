@@ -120,6 +120,9 @@ def iExit(msg, isSuffix=True):
     tcPrint(z,'red')
   os._exit(1)
 
+def invertDict(d):
+  return {v: k for k, v in d.items()}
+
 def merge(*args,how=None):
   if how is None: iExit('merge (how)')
   df=args[0]
