@@ -52,8 +52,4 @@ if ul.stCheckPW('password_CR'):
   st.header('Backtest')
   if st.button('Run'):
     st.divider()
-    ql.runIBS()
-    st.divider()
-    ql.runTPP()
-    st.divider()
     ql.runCore()

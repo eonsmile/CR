@@ -58,23 +58,29 @@ def bt(script,dp,dw,yrStart):
       p = dp2.iloc[i]
       ec = ecS.iloc[i]
   printCalendar(ecS)
-  nYears = (ecS.index[-1] - ecS.index[0]).days / 365
-  ecRatio = ecS.iloc[-1] / ecS.iloc[0]
   #####
-  cagr = math.pow(ecRatio, 1 / nYears) - 1
-  dd = ecS / ecS.cummax() - 1
-  upi = cagr / np.sqrt(np.power(dd, 2).mean())
-  vol = ((np.log(ecS / ecS.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
-  sharpe = cagr/vol
-  mdd = -min(dd)
+  def m(s):
+    d=dict()
+    nYears = (s.index[-1] - s.index[0]).days / 365
+    d['cagr'] = math.pow(s.iloc[-1] / s.iloc[0], 1 / nYears) - 1
+    dd = s / s.cummax() - 1
+    vol = ((np.log(s / s.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
+    d['sharpe'] = d['cagr'] / vol
+    d['mdd'] = -min(dd)
+    d['mar'] = d['cagr']/d['mdd']
+    return d
+  #####
+  d=m(ecS)
+  d3=m(ecS[ecS.index>pendulum.instance(ecS.index[-1]).subtract(years=3).naive()])
   #####
   m=lambda label,z: f"{label}: <font color='red'>{z}</font>"
   sep='&nbsp;'*10
   st.markdown(sep.join([
-    m('&nbsp;'*3+'UPI', f"{upi:.2f}"),
-    m('Sharpe', f"{sharpe:.2f}"),
-    m('Cagr', f"{cagr:.1%}"),
-    m('MDD', f"{mdd:.1%}")
+    m('&nbsp;'*3+'Calmar', f"{d3['mar']:.2f}"),
+    m('MAR', f"{d['mar']:.2f}"),
+    m('Sharpe', f"{d['sharpe']:.2f}"),
+    m('Cagr', f"{d['cagr']:.1%}"),
+    m('MDD', f"{d['mdd']:.1%}"),
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
@@ -761,6 +767,10 @@ def runAggregate(yrStart,strategies,weights,script):
   ul.stWriteDf(dp2, isMaxHeight=True)
 
 def runCore(yrStart=START_YEAR_DICT['Core']):
+  runIBS()
+  st.divider()
+  runTPP()
+  st.divider()
   strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
   script = 'Core'
