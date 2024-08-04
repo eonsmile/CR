@@ -494,10 +494,10 @@ def runBTSCore(yrStart):
   ratio2S = dp[und] / dp[und].rolling(5).mean()
   ratio2S.rename('Ratio 2', inplace=True)
   #####
-  isTomS = getTomS(dp[und], -4, 3)
+
   #####
   momScoreS = (ratio1S >= 1) * 1 + (ratio2S >= 1) * 1
-  stateS = ((momScoreS == 2) * 1 | (isTomS == 1) * 1) * 1
+  stateS = (momScoreS == 2) * 1
   stateS.rename('State', inplace=True)
   #####
   dw = dp.copy()
@@ -511,7 +511,6 @@ def runBTSCore(yrStart):
   d['dw'] = dw
   d['ratio1S']=ratio1S
   d['ratio2S']=ratio2S
-  d['isTomS']=isTomS
   d['stateS']=stateS
   return d
 
@@ -521,7 +520,7 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
     st.header(script)
   d=runBTSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['isTomS'], d['stateS'], how='inner')
+  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['stateS'], how='inner')
   ul.stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
