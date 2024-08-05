@@ -223,7 +223,7 @@ def cleanS(s, isMonthlyRebal=True):
         s.iloc[i]=np.nan
     if isMonthlyRebal:
       pe=endpoints(s, 'ME')
-      s[pe]=s.ffill()[pe]
+      s.iloc[pe]=s.ffill().iloc[pe]
   return s
 
 def EMA(s, n):
@@ -527,7 +527,7 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runARTCore(yrStart, multE=1, multQ=1, multG=1):
-  volTgt = .16/3
+  volTgt = .08
   maxWgt = 1
   undE = 'SPY'
   undQ = 'QQQ'
@@ -605,7 +605,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multG=1):
   stateSQ = (preState1SQ + preState2SQ + preState3SQ).clip(-1, 1).rename('State')
   #####
   # GLD
-  cSB = getPriceHistory('TLT')['Close']
+  cSB = applyDates(getPriceHistory('TLT')['Close'],cSG)
   cond1S = (cSG > hSG.rolling(3).max().shift())*1
   cond2S = (cSB > cSB.shift())*1
   cond3S = (cSG * 0).astype(int)
@@ -633,10 +633,10 @@ def runARTCore(yrStart, multE=1, multQ=1, multG=1):
   dw[undE] = cleanS(stateSE, isMonthlyRebal=True) * multE
   dw[undQ] = cleanS(stateSQ, isMonthlyRebal=True) * multQ
   dw[undG] = cleanS(stateSG, isMonthlyRebal=True) * multG
-  #dw.loc[dw.index.year < yrStart] = 0
+  dw.loc[dw.index.year < yrStart] = 0
   dw = (dw * volTgt / hv).clip(-maxWgt, maxWgt)
   dwAllOrNone(dw)
-
+  #####
   d=dict()
   d['undE']=undE
   d['undQ']=undQ
