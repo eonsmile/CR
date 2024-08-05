@@ -526,12 +526,13 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
+def runARTCore(yrStart, multE=1, multQ=1, multG=1):
+  volTgt = .16/3
+  maxWgt = 1
   undE = 'SPY'
   undQ = 'QQQ'
-  undB = 'TLT'
   undG = 'GLD'
-  tickers = [undE, undQ, undB, undG]
+  tickers = [undE, undQ, undG]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
   hSE = dfDict[undE]['High']
@@ -541,8 +542,6 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
   #####
   cSQ = dfDict[undQ]['Close']
   hSQ = dfDict[undQ]['High']
-  #####
-  cSB = dfDict[undB]['Close']
   #####
   hSG = dfDict[undG]['High']
   lSG = dfDict[undG]['Low']
@@ -605,13 +604,8 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
   preState3SQ = -getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
   stateSQ = (preState1SQ + preState2SQ + preState3SQ).clip(-1, 1).rename('State')
   #####
-  # TLT
-  w1S = getTomS(cSB, -7, 0 - 1, isNYSE=True)
-  w2S = getTomS(cSB, 0, 7 - 1, isNYSE=True)
-  stateSB = (w1S-w2S)*(ratioSE>1)*1
-  stateSB.rename('State', inplace=True)
-  #####
   # GLD
+  cSB = getPriceHistory('TLT')['Close']
   cond1S = (cSG > hSG.rolling(3).max().shift())*1
   cond2S = (cSB > cSB.shift())*1
   cond3S = (cSG * 0).astype(int)
@@ -636,16 +630,16 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
   stateSG.rename('State',inplace=True)
   #####
   # Summary
-  dw[undE] = cleanS(stateSE, isMonthlyRebal=False) * multE
-  dw[undQ] = cleanS(stateSQ, isMonthlyRebal=False) * multQ
-  dw[undB] = cleanS(stateSB, isMonthlyRebal=False) * multB
-  dw[undG] = cleanS(stateSG, isMonthlyRebal=False) * multG
-  dw.loc[dw.index.year < yrStart] = 0
+  dw[undE] = cleanS(stateSE, isMonthlyRebal=True) * multE
+  dw[undQ] = cleanS(stateSQ, isMonthlyRebal=True) * multQ
+  dw[undG] = cleanS(stateSG, isMonthlyRebal=True) * multG
+  #dw.loc[dw.index.year < yrStart] = 0
+  dw = (dw * volTgt / hv).clip(-maxWgt, maxWgt)
   dwAllOrNone(dw)
+
   d=dict()
   d['undE']=undE
   d['undQ']=undQ
-  d['undB']=undB
   d['undG']=undG
   d['dp'] = dp
   d['dw'] = dw
@@ -681,9 +675,6 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
   d['preState3SQ'] = preState3SQ
   d['stateSQ'] = stateSQ
   #####
-  d['cSB'] = cSB
-  d['stateSB'] = stateSB
-  #####
   d['cSG'] = cSG
   d['hSG'] = hSG
   d['cond1S']=cond1S
@@ -697,12 +688,12 @@ def runARTCore(yrStart, multE=1, multQ=1, multB=1, multG=1):
   d['stateSG']=stateSG
   return d
 
-def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, isSkipTitle=False):
+def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multG=1, isSkipTitle=False):
   script = 'ART'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runARTCore(yrStart,multE=multE,multQ=multQ,multB=multB,multG=multG)
+  d=runARTCore(yrStart,multE=multE,multQ=multQ,multG=multG)
   st.header('Tables')
   #####
   st.subheader(d['undE'])
@@ -717,10 +708,6 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multB=1, multG=1, i
   ul.stWriteDf(tableSQ.tail())
   tableSQ2 = ul.merge(d['ibsSQ'], d['preState3SQ'], d['stateSQ'].ffill(), how='inner')
   ul.stWriteDf(tableSQ2.tail())
-  #####
-  st.subheader(d['undB'])
-  tableSB = ul.merge(d['cSB'].round(2),d['stateSB'].ffill(),how='inner')
-  ul.stWriteDf(tableSB.tail())
   #####
   st.subheader(d['undG'])
   tableSG = ul.merge(d['cSG'].round(2), d['hSG'].round(2), d['cond1S'], d['cond2S'], d['cond3S'], d['preState1SG'], how='inner')
