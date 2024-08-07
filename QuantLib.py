@@ -571,14 +571,14 @@ def runARTCore(yrStart, multE=1, multQ=1, multG=1):
   vixSE = applyDates(getPriceHistory('VIX',yrStart=START_YEAR_DICT['priceHistory'])['Close'],cSE).rename('VIX')
   vixSMA40SE = vixSE.rolling(40).mean().rename('VIX SMA40')
   vixSMA65SE = vixSE.rolling(65).mean().rename('VIX SMA65')
-  isEntryS = ((rsiSE < 25) & (vixSMA40SE<vixSMA65SE) & (ratioSE > 1))*1
+  isEntryS = ((rsiSE < 25) & (vixSMA40SE<vixSMA65SE) )*1
   isExitS = (rsiSE > 75)*1
   preState3SE = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 3')
   #####
   sma6SE = cSE.rolling(6).mean().rename('SMA6')
   isEntryS=(rSE.rolling(2).min()>0) & (rSE==rSE.rolling(2).max()) & (ratioSE<1)
   isExitS=cSE<sma6SE
-  preState4SE = -getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 4')
+  preState4SE = -2*getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 4')
   #####
   stateSE = (preState1SE + preState2SE + preState3SE+preState4SE).clip(None, 1).rename('State')
   #####
