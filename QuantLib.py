@@ -580,7 +580,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multG=1):
   isExitS=cSE<sma6SE
   preState4SE = -2*getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 4')
   #####
-  stateSE = (preState1SE + preState2SE + preState3SE+preState4SE).clip(None, 1).rename('State')
+  stateSE = (preState1SE + preState2SE + preState3SE+preState4SE).clip(-1, 1).rename('State')
   #####
   # QQQ
   ratioSQ = (cSQ / cSQ.rolling(200).mean()).rename('Ratio')
@@ -626,7 +626,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multG=1):
   isExitS = (cSG > cSG.shift()) * 1
   preState2SG = getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=False).rename('Pre-State 2')
   #####
-  stateSG=(preState1SG+preState2SG).clip(None,1)
+  stateSG=(preState1SG+preState2SG).clip(-1,1)
   stateSG.rename('State',inplace=True)
   #####
   # Summary
