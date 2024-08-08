@@ -36,7 +36,6 @@ def stCheckPW(key):
   def m():
     isPWOk=st.session_state['pw'] == st.secrets[key]
     st.session_state['isPWOk']=isPWOk
-    if isPWOk: del st.session_state['pw']
   #####
   def m2():
     st.text_input('Password', type='password', on_change=m, key='pw')
