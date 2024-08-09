@@ -397,7 +397,7 @@ def runIBSCore():
       isExitS = ibsS > .55
     else:
       ul.iExit('runIBS')
-    stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False)
+    stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
     return ibsS, stateS
   #####
   undE = 'SPY'
