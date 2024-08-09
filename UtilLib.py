@@ -53,16 +53,6 @@ def stCheckPW(key):
 def stRed(label, z):
   st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
 
-def stWriteDf(df,isMaxHeight=False):
-  df2 = df.copy()
-  if isinstance(df2.index, pd.DatetimeIndex):
-    df2.index = pd.to_datetime(df2.index).strftime('%Y-%m-%d')
-  if isMaxHeight:
-    height = (len(df2) + 1) * 35 + 3
-    st.dataframe(df2, height=height)
-  else:
-    st.write(df2)
-
 #######
 # Cache
 #######

@@ -119,7 +119,7 @@ def dwAllOrNone(dw):
   dw[selection] = dw.ffill()[selection]
 
 def dwTail(dw,n=5):
-  ul.stWriteDf(dw.mask(dw.abs() == 0.0, 0.0).dropna().tail(n).round(3))
+  stWriteDf(dw.mask(dw.abs() == 0.0, 0.0).dropna().tail(n).round(3))
 
 def printCalendar(s):
   def rgroup(r, groups):
@@ -149,9 +149,8 @@ def printCalendar(s):
 def applyDates(a,b):
   return a.reindex(b.index,method='pad').ffill().copy()
 
-# https://quantstrattrader.wordpress.com/author/ikfuntech/
-def endpoints(df, on='ME', offset=0):
-  ep_dates = pd.Series(df.index, index=df.index).resample(on).max()
+def endpoints(df, offset=0):
+  ep_dates = pd.Series(df.index, index=df.index).resample('ME').max()
   date_idx = np.where(df.index.isin(ep_dates))
   date_idx = np.insert(date_idx, 0, 0)
   date_idx = np.append(date_idx, df.shape[0] - 1)
@@ -214,16 +213,13 @@ def cleanS(s, isMonthlyRebal=True):
     for i in range(1, len(s)):
       if s.iloc[i].equals(tmp.iloc[i]):
         s.iloc[i]=np.nan
-    if isMonthlyRebal:
-      pe=endpoints(s, 'ME')
-      s.iloc[pe]=s.ffill().iloc[pe]
   else:
     for i in range(1, len(s)):
       if s.iloc[i]==tmp.iloc[i]:
         s.iloc[i]=np.nan
-    if isMonthlyRebal:
-      pe=endpoints(s, 'ME')
-      s.iloc[pe]=s.ffill().iloc[pe]
+  if isMonthlyRebal:
+    pe=endpoints(s)
+    s.iloc[pe]=s.ffill().iloc[pe]
   return s
 
 def EMA(s, n):
@@ -377,6 +373,23 @@ def getYFinanceS(ticker, fromYear=START_YEAR_DICT['YFinance']):
   toDate = pendulum.today().format('YYYY-MM-DD')
   return yf.download(ticker, start=fromDate, end=toDate)['Adj Close'].rename(ticker)
 
+def stWriteDf(df,isStateRed=True,isMaxHeight=False):
+  df2 = df.copy()
+  if isinstance(df2.index, pd.DatetimeIndex):
+    df2.index = pd.to_datetime(df2.index).strftime('%Y-%m-%d')
+
+  if isStateRed:
+    if 'State' in df.columns:
+      df2['State'] = df2['State'].astype(int)
+      m = lambda val: 'color: red'
+      df2 = df2.style.map(m, subset=['State'])
+
+  if isMaxHeight:
+    height = (len(df2) + 1) * 35 + 3
+    st.dataframe(df2, height=height)
+  else:
+    st.write(df2)
+
 #############################################################################################
 
 #########
@@ -440,7 +453,7 @@ def runIBS(yrStart=START_YEAR_DICT['IBS']):
     df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
     if isMondayS is not None: df2 = ul.merge(df2, isMondayS, how='inner')
     df2 = ul.merge(df2, stateS.ffill(), how='inner')
-    ul.stWriteDf(df2.tail())
+    stWriteDf(df2.tail())
   #####
   script = 'IBS'
   st.header(script)
@@ -467,7 +480,7 @@ def runTPP(yrStart=START_YEAR_DICT['TPP']):
   isOkDf = (ratioDf >= 1) * 1
   wDf = (1 / hv) * isOkDf
   rDf = np.log(dp / dp.shift(1))
-  for i in endpoints(rDf, 'ME'):
+  for i in endpoints(rDf):
     origin = i - lookback + 1
     if origin >= 0:
       prS = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
@@ -475,9 +488,9 @@ def runTPP(yrStart=START_YEAR_DICT['TPP']):
       dw.iloc[i] = wDf.iloc[i] * volTgt / pHv
   dw.clip(0, maxWgt, inplace=True)
   st.header('Prices')
-  ul.stWriteDf(dp.tail())
+  stWriteDf(dp.tail())
   st.header('Ratios')
-  ul.stWriteDf(ratioDf.round(3).tail())
+  stWriteDf(ratioDf.round(3).tail())
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
@@ -493,8 +506,6 @@ def runBTSCore(yrStart):
   ratio1S.rename('Ratio 1', inplace=True)
   ratio2S = dp[und] / dp[und].rolling(5).mean()
   ratio2S.rename('Ratio 2', inplace=True)
-  #####
-
   #####
   momScoreS = (ratio1S >= 1) * 1 + (ratio2S >= 1) * 1
   stateS = (momScoreS == 2) * 1
@@ -521,7 +532,7 @@ def runBTS(yrStart=START_YEAR_DICT['BTS'], isSkipTitle=False):
   d=runBTSCore(yrStart)
   st.header('Table')
   tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['stateS'], how='inner')
-  ul.stWriteDf(tableS.tail())
+  stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -699,21 +710,21 @@ def runART(yrStart=START_YEAR_DICT['ART'], multE=1, multQ=1, multG=1, isSkipTitl
   st.subheader(d['undE'])
   z=lambda n: f"{n:.1%}"
   tableSE = ul.merge(d['cSE'].round(2), d['rSE'].apply(z), d['ratioSE'].round(3), d['sgArmorSE'], d['preState1SE'], d['wprSE'].round(2), d['preState2SE'], how='inner')
-  ul.stWriteDf(tableSE.tail())
+  stWriteDf(tableSE.tail())
   tableSE2 = ul.merge(d['rsiSE'].round(2), d['vixSE'].round(2), d['vixSMA40SE'].round(2), d['vixSMA65SE'].round(2), d['preState3SE'], d['sma6SE'].round(2), d['preState4SE'],d['stateSE'].ffill(), how='inner')
-  ul.stWriteDf(tableSE2.tail())
+  stWriteDf(tableSE2.tail())
   #####
   st.subheader(d['undQ'])
   tableSQ = ul.merge(d['cSQ'].round(2), d['hSQ'].round(2), d['ratioSQ'].round(3), d['trigSQ'].round(3), d['preState1SQ'], d['isTuesWedSQ'], d['isTwoDownDaysSQ'], d['preState2SQ'], how='inner')
-  ul.stWriteDf(tableSQ.tail())
+  stWriteDf(tableSQ.tail())
   tableSQ2 = ul.merge(d['ibsSQ'], d['preState3SQ'], d['stateSQ'].ffill(), how='inner')
-  ul.stWriteDf(tableSQ2.tail())
+  stWriteDf(tableSQ2.tail())
   #####
   st.subheader(d['undG'])
   tableSG = ul.merge(d['cSG'].round(2), d['hSG'].round(2), d['cond1S'], d['cond2S'], d['cond3S'], d['preState1SG'], how='inner')
-  ul.stWriteDf(tableSG.tail())
+  stWriteDf(tableSG.tail())
   tableSG2 = ul.merge(d['ibsSG'].round(3), d['adxSG'].round(1), d['cond4S'], d['preState2SG'], d['stateSG'].ffill(), how='inner')
-  ul.stWriteDf(tableSG2.tail())
+  stWriteDf(tableSG2.tail())
   #####
   st.header('Weights')
   dwTail(d['dw'])
@@ -728,7 +739,7 @@ def runAggregate(yrStart,strategies,weights,script):
   st.header('Weights')
   z = zip(strategies, weights)
   df = pd.DataFrame(z, columns=ul.spl('Strategy,Weight')).set_index('Strategy')
-  ul.stWriteDf(df)
+  stWriteDf(df)
   #####
   # Calcs
   dp = pd.DataFrame()
@@ -736,7 +747,7 @@ def runAggregate(yrStart,strategies,weights,script):
     dp[strategy] = ul.cachePersist('r', strategy)
   dp = applyDates(dp, dp.iloc[:,-1]).ffill()
   dw = dp * np.nan
-  pe = endpoints(dw, 'ME')
+  pe = endpoints(dw)
   for i in range(len(weights)):
     dw.iloc[pe, i] = weights[i]
   #####
@@ -750,7 +761,7 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = dp2[[script] + strategies]
   dp2 = (dp2 / dp2.iloc[-1]).tail(23) * 100
   dp2 = dp2.round(2)
-  ul.stWriteDf(dp2, isMaxHeight=True)
+  stWriteDf(dp2, isMaxHeight=True)
 
 def runCore(yrStart=START_YEAR_DICT['Core']):
   runIBS()
