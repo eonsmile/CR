@@ -373,19 +373,21 @@ def getYFinanceS(ticker, fromYear=START_YEAR_DICT['YFinance']):
   toDate = pendulum.today().format('YYYY-MM-DD')
   return yf.download(ticker, start=fromDate, end=toDate)['Adj Close'].rename(ticker)
 
-def stWriteDf(df,isStateRed=True,isMaxHeight=False):
+def stWriteDf(df,isMaxHeight=False):
+  def formatter(n):
+    if isinstance(n,float):
+      return f"{n:g}" if ~np.isnan(n) else ''
+    else:
+      return n
+  #####
   df2 = df.copy()
+  height=((len(df2) + 1) * 35 + 3)
   if isinstance(df2.index, pd.DatetimeIndex):
     df2.index = pd.to_datetime(df2.index).strftime('%Y-%m-%d')
-
-  if isStateRed:
-    if 'State' in df.columns:
-      df2['State'] = df2['State'].astype(int)
-      m = lambda val: 'color: red'
-      df2 = df2.style.map(m, subset=['State'])
-
+  df2 = df2.replace(-0.0, 0.0).style.format(formatter)
+  if 'State' in df2.columns:
+    df2 = df2.map(lambda n: f"color: {'red' if n==0 else '#228B22'}", subset=['State'])
   if isMaxHeight:
-    height = (len(df2) + 1) * 35 + 3
     st.dataframe(df2, height=height)
   else:
     st.write(df2)
