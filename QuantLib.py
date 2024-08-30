@@ -397,7 +397,7 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 # Scripts
 #########
-def runIBSCore():
+def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
   def m(und, dfDict, isMondayS=None):
     df = dfDict[und]
     ibsS = getIbsS(df)
@@ -420,16 +420,16 @@ def runIBSCore():
   undB = 'TLT'
   volTgt = .16
   maxWgt = 1
-  dp, dw, dfDict, hv = btSetup([undE, undQ, undB])
+  dp, dw, dfDict, hv = btSetup([undE, undQ, undB],yrStart=yrStart-1)
   #####
   isMondayS = dfDict[undE]['Close'].rename('Monday?') * 0
   isMondayS[isMondayS.index.weekday == 0] = 1
   ibsSE, stateSE = m(undE, dfDict, isMondayS=isMondayS)
   ibsSQ, stateSQ = m(undQ, dfDict)
   ibsSB, stateSB = m(undB, dfDict)
-  dw[undE] = stateSE
-  dw[undQ] = stateSQ
-  dw[undB] = stateSB
+  dw[undE] = stateSE*multE
+  dw[undQ] = stateSQ*multQ
+  dw[undB] = stateSB*multB
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   d=dict()
@@ -448,7 +448,7 @@ def runIBSCore():
   d['stateSB']=stateSB
   return d
 
-def runIBS(yrStart=START_YEAR_DICT['IBS']):
+def runIBS(yrStart=START_YEAR_DICT['IBS'],multE=1, multQ=1, multB=1,isSkipTitle=False):
   def m(d, und, ibsS, stateS, isMondayS=None):
     df=d['dfDict'][und]
     st.subheader(und)
@@ -458,8 +458,10 @@ def runIBS(yrStart=START_YEAR_DICT['IBS']):
     stWriteDf(df2.tail())
   #####
   script = 'IBS'
-  st.header(script)
-  d=runIBSCore()
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runIBSCore(yrStart,multE=multE,multQ=multQ,multB=multB)
   st.header('Tables')
   m(d, d['undE'], d['ibsSE'], d['stateSE'], isMondayS=d['isMondayS'])
   m(d, d['undQ'], d['ibsSQ'], d['stateSQ'])
@@ -501,7 +503,7 @@ def runBTSCore(yrStart):
   und = 'BTC'
   volTgt = .24
   maxWgt = 1
-  df = getPriceHistory(und, yrStart)
+  df = getPriceHistory(und, yrStart=yrStart-1)
   dp = df[['Close']]
   dp.columns = [und]
   ratio1S = dp[und] / dp[und].shift(28)
