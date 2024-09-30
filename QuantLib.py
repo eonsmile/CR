@@ -620,7 +620,7 @@ def runARTCore(yrStart, multE=1, multQ=1, multG=1):
   stateSQ = (preState1SQ + preState2SQ + preState3SQ).clip(-1, 1).rename('State')
   #####
   # GLD
-  cSB = applyDates(getPriceHistory('TLT')['Close'],cSG)
+  cSB = applyDates(getPriceHistory('TLT',yrStart=yrStart)['Close'],cSG)
   cond1S = (cSG > hSG.rolling(3).max().shift())*1
   cond2S = (cSB > cSB.shift())*1
   cond3S = (cSG * 0).astype(int)
