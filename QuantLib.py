@@ -158,46 +158,6 @@ def endpoints(df, offset=0):
   out = np.unique(date_idx)
   return out
 
-def getBizDayPriorNYSE(y,m,d):
-  dt0=pendulum.date(y,m,d)
-  dt=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0.subtract(days=1)).iloc[-1]['market_close']
-  return pendulum.datetime(dt.year, dt.month, dt.day).naive()
-
-def getBizDayNYSE(y,m,d,isAdjForward=True):
-  dt0 = pendulum.date(y, m, d)
-  if isAdjForward:
-    dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0, end_date=dt0.add(days=8)).iloc[0]['market_close']
-  else:
-    dt = pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dt0.subtract(days=8), end_date=dt0).iloc[-1]['market_close']
-  return pendulum.datetime(dt.year, dt.month, dt.day).naive()
-
-def getNYSECloseHourHKT():
-  return 4 if pendulum.now('US/Eastern').is_dst() else 5
-
-def getTodayNYSE():
-  today = pendulum.today().naive()
-  return getBizDayNYSE(today.year, today.month, today.day)
-
-def getTomS(s, offsetBegin, offsetEnd, isNYSE=False): # 0,0 means hold one day starting from monthend
-  s=s.copy()
-  dtLast=s.index[-1]
-  dtLast2=pendulum.instance(dtLast)
-  if isNYSE:
-    dts=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=dtLast2, end_date=dtLast2.add(days=30)).index
-  else:
-    dts = [dtLast2.add(days=i).date() for i in range(30)]
-    dts = pd.DatetimeIndex(pd.to_datetime(dts))
-  s = s.reindex(s.index.union(dts))
-  s[:]=0
-  for i in range(offsetBegin, offsetEnd+1):
-    s.iloc[endpoints(s, offset=i)]=1
-  return s[s.index <= dtLast].rename('TOM?')
-
-def getYestNYSE():
-  today = pendulum.today().naive()
-  yest=pandas_market_calendars.get_calendar('NYSE').schedule(start_date=today.subtract(days=8), end_date=today.subtract(days=1)).iloc[-1]['market_close']
-  return pendulum.datetime(yest.year, yest.month, yest.day).naive()
-
 #############################################################################################
 
 #####
