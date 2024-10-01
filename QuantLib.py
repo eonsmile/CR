@@ -8,9 +8,7 @@ import pandas as pd
 import requests
 import math
 import pendulum
-import pykalman
 import yfinance as yf
-import pandas_market_calendars
 from sklearn.linear_model import LinearRegression
 
 ###########
@@ -23,7 +21,6 @@ START_YEAR_DICT={
   'IBS':2013,
   'TPP':2013,
   'Core':2013,
-  'CSS':2013,
 }
 
 #############################################################################################
@@ -182,17 +179,6 @@ def cleanS(s, isMonthlyRebal=True):
 def EMA(s, n):
   return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
 
-def extend(df, df2):
-  dtAnchor=df['Close'].first_valid_index()
-  if df2.index[-1] >= dtAnchor:
-    ratio= df.loc[dtAnchor]['Close'] / df2.loc[dtAnchor]['Close']
-    df2= df2[:dtAnchor][:-1]
-    df2[ul.spl('Open,High,Low,Close')] *= ratio
-    df2['Volume'] /= ratio
-    return pd.concat([df2, df.loc[dtAnchor:]])
-  else:
-    return df
-
 def getBeta(ts1, ts2, lookbackWindow=90):
   pcDf=ul.merge(ts1, ts2,how='inner').pct_change().tail(lookbackWindow)
   regressor = LinearRegression(fit_intercept=False)
@@ -266,17 +252,6 @@ def getIbsS(df):
   ibsS = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
   ibsS.rename('IBS',inplace=True)
   return ibsS
-
-def getKFMeans(s):
-  kf = pykalman.KalmanFilter(n_dim_obs=1, n_dim_state=1,
-                             initial_state_mean=0,
-                             initial_state_covariance=1,
-                             transition_matrices=[1],
-                             observation_matrices=[1],
-                             observation_covariance=1,
-                             transition_covariance=0.05)
-  means, _ = kf.filter(s)
-  return pd.Series(means.flatten(), index=s.index)
 
 def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   dtStart=str(yrStart)+ '-1-1'
