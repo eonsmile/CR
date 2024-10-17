@@ -402,16 +402,21 @@ def runIBS(yrStart=START_YEAR_DICT['IBS'],multE=1, multQ=1, multB=1,isSkipTitle=
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runTPP(yrStart=START_YEAR_DICT['TPP']):
-  tickers = ul.spl('SPY,QQQ,IEF,GLD,UUP')
+def runTPP(yrStart=START_YEAR_DICT['TPP'],multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
+  undE = 'SPY'
+  undQ = 'QQQ'
+  undB = 'IEF'
+  undG = 'GLD'
+  undD = 'UUP'
   lookback = 32
   volTgt = .16
   maxWgt = 3
   ######
   script = 'TPP'
-  st.header(script)
+  if not isSkipTitle:
+    st.header(script)
   ######
-  dp, dw, dfDict, hv = btSetup(tickers,yrStart=yrStart-1)
+  dp, dw, dfDict, hv = btSetup([undE,undQ,undB,undG,undD],yrStart=yrStart-1)
   ratioDf = dp / dp.rolling(200).mean()
   isOkDf = (ratioDf >= 1) * 1
   wDf = (1 / hv) * isOkDf
@@ -422,6 +427,11 @@ def runTPP(yrStart=START_YEAR_DICT['TPP']):
       prS = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
       pHv = ((prS ** 2).mean()) ** .5 * (252 ** .5)
       dw.iloc[i] = wDf.iloc[i] * volTgt / pHv
+  dw[undE]=dw[undE]*multE
+  dw[undQ]=dw[undQ]*multQ
+  dw[undB]=dw[undB]*multB
+  dw[undG]=dw[undG]*multG
+  dw[undD]=dw[undD]*multD
   dw.clip(0, maxWgt, inplace=True)
   st.header('Prices')
   stWriteDf(dp.tail())
