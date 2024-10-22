@@ -330,7 +330,7 @@ def stWriteDf(df,isMaxHeight=False):
 # Scripts
 #########
 def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
-  def m(und, dfDict, isMondayS=None):
+  def m(und, dfDict, isMondayS=None, sma200S=None):
     df = dfDict[und]
     ibsS = getIbsS(df)
     if und == undE:
@@ -340,7 +340,7 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
       isEntryS = ibsS < .1
       isExitS = df['Close'] > df['High'].shift(1)
     elif und == undB:
-      isEntryS = (ibsS < .15) & (df['Low'] < df['Low'].shift(1))
+      isEntryS = (df['Close']<sma200S) & (ibsS < .15)
       isExitS = ibsS > .55
     else:
       ul.iExit('runIBS')
@@ -356,9 +356,10 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
   #####
   isMondayS = dfDict[undE]['Close'].rename('Monday?') * 0
   isMondayS[isMondayS.index.weekday == 0] = 1
+  sma200S = dfDict[undB]['Close'].rolling(200).mean().rename('SMA200')
   ibsSE, stateSE = m(undE, dfDict, isMondayS=isMondayS)
   ibsSQ, stateSQ = m(undQ, dfDict)
-  ibsSB, stateSB = m(undB, dfDict)
+  ibsSB, stateSB = m(undB, dfDict, sma200S=sma200S)
   dw[undE] = stateSE*multE
   dw[undQ] = stateSQ*multQ
   dw[undB] = stateSB*multB
@@ -372,6 +373,7 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
   d['dw']=dw
   d['dfDict']=dfDict
   d['isMondayS']=isMondayS
+  d['sma200S']=sma200S
   d['ibsSE']=ibsSE
   d['ibsSQ']=ibsSQ
   d['ibsSB']=ibsSB
@@ -381,11 +383,12 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
   return d
 
 def runIBS(yrStart=START_YEAR_DICT['IBS'],multE=1, multQ=1, multB=1,isSkipTitle=False):
-  def m(d, und, ibsS, stateS, isMondayS=None):
+  def m(d, und, ibsS, stateS, isMondayS=None, sma200S=None):
     df=d['dfDict'][und]
     st.subheader(und)
     df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
     if isMondayS is not None: df2 = ul.merge(df2, isMondayS, how='inner')
+    if sma200S is not None: df2 = ul.merge(df2, sma200S.round(2), how='inner')
     df2 = ul.merge(df2, stateS.ffill(), how='inner')
     stWriteDf(df2.tail())
   #####
@@ -397,7 +400,7 @@ def runIBS(yrStart=START_YEAR_DICT['IBS'],multE=1, multQ=1, multB=1,isSkipTitle=
   st.header('Tables')
   m(d, d['undE'], d['ibsSE'], d['stateSE'], isMondayS=d['isMondayS'])
   m(d, d['undQ'], d['ibsSQ'], d['stateSQ'])
-  m(d, d['undB'], d['ibsSB'], d['stateSB'])
+  m(d, d['undB'], d['ibsSB'], d['stateSB'], sma200S=d['sma200S'])
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
