@@ -24,9 +24,24 @@ def checkPassword():
   else:    
     return True
 
+def bt2008():
+  st.divider()
+  ql.runCore(2008)
+
+def bt2013():
+  st.divider()
+  ql.runCore(2013)
+
+######
+# Init
+######
+if 'button_clicked' not in st.session_state:
+  st.session_state.button_clicked = None
+
 ######
 # Main
 ######
+isOk=False
 z='Core Reporter'
 st.set_page_config(page_title=z)
 st.title(z)
@@ -47,9 +62,20 @@ if ul.stCheckPW('password_CR'):
   m('ZB_TLT beta',zb_tlt_beta)
   m('ZN_IEF beta',zn_ief_beta)
   m('TN_IEF beta',tn_ief_beta)
+  isOk=True
 
   # Backtest
   st.header('Backtest')
-  if st.button('Run'):
-    st.divider()
-    ql.runCore()
+  col1, col2 = st.columns(2)
+  with col1:
+    if st.button('From 2013'):
+      st.session_state.button_clicked = '2013'
+  with col2:
+    if st.button('From 2008'):
+      st.session_state.button_clicked = '2008'
+
+  if st.session_state.button_clicked == '2008':
+    bt2008()
+  elif st.session_state.button_clicked=='2013':
+    bt2013()
+

@@ -383,7 +383,7 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
   d['stateSB']=stateSB
   return d
 
-def runIBS(yrStart=START_YEAR_DICT['IBS'],multE=1, multQ=1, multB=1,isSkipTitle=False):
+def runIBS(yrStart,multE=1, multQ=1, multB=1,isSkipTitle=False):
   def m(d, und, ibsS, stateS, isMondayS=None, sma200S=None):
     df=d['dfDict'][und]
     st.subheader(und)
@@ -406,7 +406,7 @@ def runIBS(yrStart=START_YEAR_DICT['IBS'],multE=1, multQ=1, multB=1,isSkipTitle=
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runTPP(yrStart=START_YEAR_DICT['TPP'],multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
+def runTPP(yrStart,multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undE = 'SPY'
   undQ = 'QQQ'
   undB = 'IEF'
@@ -478,10 +478,10 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = dp2.round(2)
   stWriteDf(dp2, isMaxHeight=True)
 
-def runCore(yrStart=START_YEAR_DICT['Core']):
-  runIBS()
+def runCore(yrStart):
+  runIBS(yrStart)
   st.divider()
-  runTPP()
+  runTPP(yrStart)
   st.divider()
   strategies = ul.spl('IBS,TPP')
   weights = [1 / 2, 1 / 2]
