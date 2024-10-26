@@ -16,11 +16,11 @@ from sklearn.linear_model import LinearRegression
 ###########
 CC_API_KEY = st.secrets['cc_api_key']
 START_YEAR_DICT={
-  'priceHistory':2013-1,
+  'priceHistory':2015-1,
   'YFinance':2023,
-  'IBS':2013,
-  'TPP':2013,
-  'Core':2013,
+  'IBS':2015,
+  'TPP':2015,
+  'Core':2015,
 }
 
 #############################################################################################

@@ -28,9 +28,9 @@ def bt2008():
   st.divider()
   ql.runCore(2008)
 
-def bt2013():
+def bt2015():
   st.divider()
-  ql.runCore(2013)
+  ql.runCore(2015)
 
 ######
 # Init
@@ -68,14 +68,14 @@ if ul.stCheckPW('password_CR'):
   st.header('Backtest')
   col1, col2 = st.columns(2)
   with col1:
-    if st.button('From 2013'):
-      st.session_state.button_clicked = '2013'
+    if st.button('From 2015'):
+      st.session_state.button_clicked = '2015'
   with col2:
     if st.button('From 2008'):
       st.session_state.button_clicked = '2008'
 
   if st.session_state.button_clicked == '2008':
     bt2008()
-  elif st.session_state.button_clicked=='2013':
+  elif st.session_state.button_clicked=='2015':
     bt2013()
 
