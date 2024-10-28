@@ -1,9 +1,8 @@
 filelock
-yfinance
+yfinance==0.2.37
 scikit-learn
 pendulum
 pretty_errors
 pandas_market_calendars
-pykalman-py311-update
 pandas-ta
 numpy==1.26.4
