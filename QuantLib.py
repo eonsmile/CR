@@ -303,7 +303,9 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
 def getYFinanceS(ticker, fromYear=START_YEAR_DICT['YFinance']):
   fromDate = f"{fromYear}-01-01"
   toDate = pendulum.today().format('YYYY-MM-DD')
-  return yf.download(ticker, start=fromDate, end=toDate)['Adj Close'].rename(ticker)
+  df = yf.download(ticker, start=fromDate, end=toDate)
+  df.columns = df.columns.droplevel(1)
+  return df['Adj Close'].rename(ticker)
 
 def stWriteDf(df,isMaxHeight=False):
   def formatter(n):
