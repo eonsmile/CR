@@ -474,7 +474,7 @@ def runGQSCore(yrStart):
   isEntryS = (cond1S|cond2S)*1
   isExitS = ((cS>cS.shift()) & (cS.shift()>cS.shift(2))|(cS>hS.shift()))*1
   isExitS.loc[isEntryS == 1] = 0
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False).rename('State')
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True).rename('State')
   #####
   # Summary
   dp=dp.drop(undB,axis=1)
