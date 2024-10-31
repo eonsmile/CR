@@ -14,7 +14,6 @@ from sklearn.linear_model import LinearRegression
 ###########
 # Constants
 ###########
-CC_API_KEY = st.secrets['cc_api_key']
 START_YEAR_DICT={
   'priceHistory':2015-1,
   'YFinance':2023,
@@ -344,7 +343,6 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
       isExitS = df['Close'] > df['High'].shift(1)
     elif und == undB:
       isEntryS = (df['Close']<sma200S) & (ibsS < .15)
-      #isEntryS = (ibsS < .15) & (df['Low'] < df['Low'].shift(1))
       isExitS = ibsS > .55
     else:
       ul.iExit('runIBS')
@@ -453,6 +451,8 @@ def runGQSCore(yrStart):
   #####
   undG = 'GLD'
   undB = 'TLT'
+  volTgt = .16
+  maxWgt = 1
   tickers = [undG,undB]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
@@ -475,12 +475,13 @@ def runGQSCore(yrStart):
   isExitS = ((cS>cS.shift()) & (cS.shift()>cS.shift(2))|(cS>hS.shift()))*1
   isExitS.loc[isEntryS == 1] = 0
   stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=False).rename('State')
-
   #####
   # Summary
   dp=dp.drop(undB,axis=1)
   dw=dw.drop(undB,axis=1)
+  hv=hv.drop(undB,axis=1)
   dw[undG] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
   dw.loc[dw.index.year < yrStart] = 0
   #####
   d=dict()
