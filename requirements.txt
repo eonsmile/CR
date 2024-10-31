@@ -3,5 +3,4 @@ yfinance
 scikit-learn
 pendulum
 pretty_errors
-pandas_market_calendars
 numpy==1.26.4
