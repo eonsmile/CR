@@ -4,5 +4,4 @@ scikit-learn
 pendulum
 pretty_errors
 pandas_market_calendars
-pandas-ta
 numpy==1.26.4

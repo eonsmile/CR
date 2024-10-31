@@ -8,7 +8,6 @@ import pandas as pd
 import requests
 import math
 import pendulum
-import pandas_ta
 import yfinance as yf
 from sklearn.linear_model import LinearRegression
 
@@ -450,6 +449,8 @@ def runTPP(yrStart,multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   bt(script, dp, dw, yrStart)
 
 def runGQSCore(yrStart):
+  import pandas_ta
+  #####
   undG = 'GLD'
   undB = 'TLT'
   tickers = [undG,undB]
