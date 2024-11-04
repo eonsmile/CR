@@ -17,10 +17,6 @@ from sklearn.linear_model import LinearRegression
 START_YEAR_DICT={
   'priceHistory':2015-1,
   'YFinance':2023,
-  'IBS':2015,
-  'TPP':2015,
-  'Core':2015,
-  'GQS':2015
 }
 
 #############################################################################################
@@ -255,31 +251,35 @@ def getIbsS(df):
 
 def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   dtStart=str(yrStart)+ '-1-1'
-  if und in ul.spl('BTC,ETH'):
-    def m(toTs=None):
-      z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={CC_API_KEY}"
-      if toTs is not None:
-        z = f"{z}&toTs={toTs}"
-      data = requests.get(z).json()['Data']
-      return pd.DataFrame(data['Data']), data['TimeFrom']
-    #####
-    df, toTs = m()
-    for i in range(2 if yrStart<2015 else 1):
-      df2, toTs = m(toTs)
-      df = pd.concat([df2.drop(df2.index[-1]), df])
-    df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
-    df = df[df['date'] > '2010-7-16']
-    df['open'] = df['close'].shift()
-    df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
-  else: # EODHD
-    ticker='VIX.INDX' if und=='VIX' else f"{und}.US"
-    df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
-    df['date'] = pd.to_datetime(df['date'])
-    df['ratio'] = df['adjusted_close'] / df['close']
-    for field in ul.spl('open,high,low'):
-      df[f"adjusted_{field}"] = df[field] * df['ratio']
-    df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
+  ticker='VIX.INDX' if und=='VIX' else f"{und}.US"
+  df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
+  df['date'] = pd.to_datetime(df['date'])
+  df['ratio'] = df['adjusted_close'] / df['close']
+  for field in ul.spl('open,high,low'):
+    df[f"adjusted_{field}"] = df[field] * df['ratio']
+  df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
   #####
+  df = df.set_index('date')
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_values(by=['date']).round(10)
+  return df
+
+def getPriceHistoryCrypto(und,yrStart=START_YEAR_DICT['priceHistory']):
+  def m(toTs=None):
+    z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key=b962cd4056b17d2b232b8605073f2a467d887ae2d56daed661ca5a8cde76f840"
+    if toTs is not None:
+      z = f"{z}&toTs={toTs}"
+    data = requests.get(z).json()['Data']
+    return pd.DataFrame(data['Data']), data['TimeFrom']
+  #####
+  df, toTs = m()
+  for i in range(2 if yrStart<2015 else 1):
+    df2, toTs = m(toTs)
+    df = pd.concat([df2.drop(df2.index[-1]), df])
+  df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
+  df = df[df['date'] > '2010-7-16']
+  df['open'] = df['close'].shift()
+  df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
@@ -445,6 +445,122 @@ def runTPP(yrStart,multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
+
+def runGQSCore(yrStart):
+  import pandas_ta
+  #####
+  undG = 'GLD'
+  undB = 'TLT'
+  volTgt = .16
+  maxWgt = 1
+  tickers = [undG,undB]
+  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
+  #####
+  hS = dfDict[undG]['High']
+  lS = dfDict[undG]['Low']
+  cS = dfDict[undG]['Close']
+  cSB = dfDict[undB]['Close']
+  #####
+  ibsS = getIbsS(dfDict[undG])
+  adxS = pandas_ta.adx(hS, lS, cS, length=5)['ADX_5'].rename('ADX5')
+  cond11S = cS > hS.rolling(3).max().shift()
+  cond12S = cSB > cSB.shift()
+  cond13S = (cS * 0).astype(int)
+  cond13S.loc[cond13S.index.weekday != 3] = 1
+  cond1S = (cond11S & cond12S & cond13S)*1
+  cond2S = ((ibsS < .15) & (adxS > 30) & (cS.index.day >= 15))*1
+  cond1S.rename('Conditon 1?', inplace=True)
+  cond2S.rename('Conditon 2?', inplace=True)
+  isEntryS = (cond1S|cond2S)*1
+  isExitS = ((cS>cS.shift()) & (cS.shift()>cS.shift(2))|(cS>hS.shift()))*1
+  isExitS.loc[isEntryS == 1] = 0
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dp=dp.drop(undB,axis=1)
+  dw=dw.drop(undB,axis=1)
+  hv=hv.drop(undB,axis=1)
+  dw[undG] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  #####
+  d['cS'] = cS
+  d['hS'] = hS
+  d['cSB'] = cSB
+  d['ibsS']=ibsS
+  d['adxS']=adxS
+  d['cond1S']=cond1S
+  d['cond2S']=cond2S
+  d['stateS']=stateS
+  return d
+
+def runGQS(yrStart, isSkipTitle=False):
+  script = 'GQS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runGQSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2), d['ibsS'].round(3), d['adxS'].round(1),
+                    d['cond1S'], d['cond2S'],d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  #####
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runBTSCore(yrStart):
+  und = 'BTC'
+  volTgt=.16
+  maxWgt=1
+  df = getPriceHistoryCrypto(und, yrStart=yrStart-1)
+  dp = df[['Close']]
+  dp.columns = [und]
+  hv = getHV(dp, n=8, af=365)
+  ratio1S = dp[und] / dp[und].shift(28)
+  ratio1S.rename('Ratio 1', inplace=True)
+  ratio2S = dp[und] / dp[und].rolling(5).mean()
+  ratio2S.rename('Ratio 2', inplace=True)
+  ratio3S = hv[und]/.24
+  ratio3S.rename('Ratio 3', inplace=True)
+  scoreS = (ratio1S >= 1)*1 + (ratio2S >= 1)*1 + (ratio3S <=1)*1
+  scoreS.rename('Score', inplace=True)
+  #####
+  isEntryS=scoreS>=3
+  isExitS=scoreS<=1
+  stateS = getStateS(isEntryS,isExitS,isCleaned=True, isMonthlyRebal=True)
+  #####
+  dw = dp.copy()
+  dw[und]=stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  d=dict()
+  d['und']=und
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratio1S']=ratio1S
+  d['ratio2S']=ratio2S
+  d['ratio3S']=ratio3S
+  d['scoreS']=scoreS
+  d['stateS']=stateS
+  return d
+
+def runBTS(yrStart=2015, isSkipTitle=False):
+  script = 'BTS'
+  if not isSkipTitle:
+    st.header(script)
+  d=runBTSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['ratio3S'].round(3), d['scoreS'],d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 
