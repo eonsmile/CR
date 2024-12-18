@@ -264,6 +264,27 @@ def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   df = df.sort_values(by=['date']).round(10)
   return df
 
+def getPriceHistoryCrypto(und,yrStart=START_YEAR_DICT['priceHistory']):
+  def m(toTs=None):
+    z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={st.secrets['cc_api_key']}"
+    if toTs is not None:
+      z = f"{z}&toTs={toTs}"
+    data = requests.get(z).json()['Data']
+    return pd.DataFrame(data['Data']), data['TimeFrom']
+  #####
+  df, toTs = m()
+  for i in range(2 if yrStart<2015 else 1):
+    df2, toTs = m(toTs)
+    df = pd.concat([df2.drop(df2.index[-1]), df])
+  df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
+  df = df[df['date'] > '2010-7-16']
+  df['open'] = df['close'].shift()
+  df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
+  df = df.set_index('date')
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_values(by=['date']).round(10)
+  return df
+
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if len(isEntryS)!=len(isExitS):
     ul.iExit('getStateS')
@@ -424,6 +445,54 @@ def runTPP(yrStart,multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
+
+def runBTSCore(yrStart):
+  und = 'BTC'
+  volTgt=.32
+  maxWgt=1
+  df = getPriceHistoryCrypto(und, yrStart=yrStart-1)
+  dp = df[['Close']]
+  dp.columns = [und]
+  hv = getHV(dp, n=8, af=365)
+  ratio1S = dp[und] / dp[und].shift(28)
+  ratio1S.rename('Ratio 1', inplace=True)
+  ratio2S = dp[und] / dp[und].rolling(5).mean()
+  ratio2S.rename('Ratio 2', inplace=True)
+  ratio3S = hv[und]/.24
+  ratio3S.rename('Ratio 3', inplace=True)
+  scoreS = (ratio1S >= 1)*1 + (ratio2S >= 1)*1 + (ratio3S <=1)*1
+  scoreS.rename('Score', inplace=True)
+  #####
+  isEntryS=scoreS>=3
+  isExitS=scoreS<=1
+  stateS = getStateS(isEntryS,isExitS,isCleaned=True, isMonthlyRebal=True)
+  #####
+  dw = dp.copy()
+  dw[und]=stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  d=dict()
+  d['und']=und
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratio1S']=ratio1S
+  d['ratio2S']=ratio2S
+  d['ratio3S']=ratio3S
+  d['scoreS']=scoreS
+  d['stateS']=stateS
+  return d
+
+def runBTS(yrStart, isSkipTitle=False):
+  script = 'BTS'
+  if not isSkipTitle:
+    st.header(script)
+  d=runBTSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['ratio3S'].round(3), d['scoreS'],d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 
