@@ -251,7 +251,8 @@ def getIbsS(df):
 
 def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   dtStart=str(yrStart)+ '-1-1'
-  ticker=f"{und}.US"
+  suffix='.FOREX' if und=='CNY' else '.US'
+  ticker=f"{und}{suffix}"
   df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
   df['date'] = pd.to_datetime(df['date'])
   df['ratio'] = df['adjusted_close'] / df['close']
@@ -490,6 +491,30 @@ def runBTS(yrStart, isSkipTitle=False):
   st.header('Table')
   tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['ratio3S'].round(3), d['scoreS'],d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runRMBCore(yrStart):
+  und = 'CNY'
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  dpm = dp.iloc[endpoints(dp)]
+  dw[und] = cleanS(applyDates(dpm[und]>(dpm[und].shift()),dp),isMonthlyRebal=True)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['dpm']=dpm
+  return d
+
+def runRMB(yrStart,isSkipTitle=False):
+  script = 'RMB'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runRMBCore(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dpm'].tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
