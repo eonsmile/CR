@@ -1,5 +1,5 @@
 filelock
-yfinance
+yfinance==0.2.50
 scikit-learn
 pendulum
 pretty_errors
