@@ -16,7 +16,7 @@ from sklearn.linear_model import LinearRegression
 ###########
 START_YEAR_DICT={
   'priceHistory':2015-1,
-  'YFinance':2023,
+  'YFinance':2024,
 }
 
 #############################################################################################
@@ -195,12 +195,14 @@ def getCoreBetas():
   tltS = getYFinanceS('TLT')
   iefS = getYFinanceS('IEF')
   zbS = getYFinanceS('ZB=F')
+  ubS = getYFinanceS('UB=F')
   znS = getYFinanceS('ZN=F')
   tnS = getYFinanceS('TN=F')
   zb_tlt_beta=getBeta(zbS, tltS)
+  ub_tlt_beta=getBeta(ubS, tltS)
   zn_ief_beta=getBeta(znS, iefS)
   tn_ief_beta=getBeta(tnS, iefS)
-  return zb_tlt_beta,zn_ief_beta,tn_ief_beta
+  return zb_tlt_beta,ub_tlt_beta,zn_ief_beta,tn_ief_beta
 
 def getCoreWeightsDf():
   lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
