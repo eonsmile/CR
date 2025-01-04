@@ -3,3 +3,4 @@ yfinance
 scikit-learn
 pendulum
 pretty_errors
+numpy==1.26.4
