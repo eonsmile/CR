@@ -454,7 +454,7 @@ def runQSGCore(yrStart):
   undG = 'GLD'
   undB = 'TLT'
   volTgt = .16
-  maxWgt = 2
+  maxWgt = 1.5
   tickers = [undG,undB]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   #####
