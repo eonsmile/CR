@@ -518,28 +518,29 @@ def runQSG(yrStart, isSkipTitle=False):
 
 def runBTSCore(yrStart):
   und = 'BTC'
-  volTgt=.16
-  maxWgt=1.5
+  volTgt=.32
+  maxWgt=2
   df = getPriceHistoryCrypto(und, yrStart=yrStart-1)
   dp = df[['Close']]
   dp.columns = [und]
   hv = getHV(dp, n=8, af=365)
-  ratio1S = dp[und] / dp[und].shift(28)
+  ratio1S = dp[und] / dp[und].rolling(5).mean()
   ratio1S.rename('Ratio 1', inplace=True)
-  ratio2S = dp[und] / dp[und].rolling(5).mean()
+  ratio2S = dp[und] / dp[und].rolling(30).mean()
   ratio2S.rename('Ratio 2', inplace=True)
-  ratio3S = hv[und]/.24
-  ratio3S.rename('Ratio 3', inplace=True)
-  scoreS = (ratio1S >= 1)*1 + (ratio2S >= 1)*1 + (ratio3S <=1)*1
-  scoreS.rename('Score', inplace=True)
   #####
-  isEntryS=scoreS>=3
-  isExitS=scoreS<=1
+  isEntryS=(ratio1S>=1)&(ratio2S>=1)
+  isExitS=ratio1S<1
   stateS = getStateS(isEntryS,isExitS,isCleaned=True, isMonthlyRebal=True)
   #####
   dw = dp.copy()
   dw[und]=stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  n=2
+  dw = (dw * volTgt**n/hv**n).clip(0, maxWgt)
+  wRawS = dw[und].ffill().rename('Weight (Raw)')
+  dw[dw<1]=0
+  stateS=(dw[und]>0)*1
+  stateS.rename('State',inplace=True)
   dw.loc[dw.index.year < yrStart] = 0
   d=dict()
   d['und']=und
@@ -547,8 +548,7 @@ def runBTSCore(yrStart):
   d['dw'] = dw
   d['ratio1S']=ratio1S
   d['ratio2S']=ratio2S
-  d['ratio3S']=ratio3S
-  d['scoreS']=scoreS
+  d['wRawS']=wRawS
   d['stateS']=stateS
   return d
 
@@ -558,7 +558,7 @@ def runBTS(yrStart, isSkipTitle=False):
     st.header(script)
   d=runBTSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['ratio3S'].round(3), d['scoreS'],d['stateS'].ffill(), how='inner')
+  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['wRawS'].round(3), d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
