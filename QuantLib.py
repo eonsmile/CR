@@ -518,7 +518,7 @@ def runQSG(yrStart, isSkipTitle=False):
 
 def runBTSCore(yrStart):
   und = 'BTC'
-  volTgt=.32
+  volTgt=.27
   maxWgt=2
   df = getPriceHistoryCrypto(und, yrStart=yrStart-1)
   dp = df[['Close']]
@@ -538,9 +538,8 @@ def runBTSCore(yrStart):
   n=2
   dw = (dw * volTgt**n/hv**n).clip(0, maxWgt)
   wRawS = dw[und].ffill().rename('Weight (Raw)')
-  dw[dw<1]=0
-  stateS=(dw[und]>0)*1
-  stateS.rename('State',inplace=True)
+  dw[dw<0.5]=0
+  stateS=(wRawS>0).rename('State')*1
   dw.loc[dw.index.year < yrStart] = 0
   d=dict()
   d['und']=und
