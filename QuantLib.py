@@ -347,7 +347,7 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
       isExitS = df['Close'] > df['High'].shift(1)
     elif und == undB:
       isEntryS = (df['Close']<sma200S) & (ibsS < .15)
-      isExitS = ibsS > .55
+      isExitS = (df['Close'] > df['High'].shift(1)) | (ibsS > .7)
     else:
       ul.iExit('runIBS')
     stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
