@@ -199,11 +199,12 @@ def getCoreBetas():
   ubS = getYFinanceS('UB=F')
   znS = getYFinanceS('ZN=F')
   tnS = getYFinanceS('TN=F')
-  zb_tlt_beta=getBeta(zbS, tltS)
-  ub_tlt_beta=getBeta(ubS, tltS)
-  zn_ief_beta=getBeta(znS, iefS)
-  tn_ief_beta=getBeta(tnS, iefS)
-  return zb_tlt_beta,ub_tlt_beta,zn_ief_beta,tn_ief_beta
+  d=dict()
+  d['ZB_TLT']=getBeta(zbS, tltS)
+  d['UB_TLT']=getBeta(ubS, tltS)
+  d['ZN_IEF']=getBeta(znS, iefS)
+  d['TN_IEF']=getBeta(tnS, iefS)
+  return d
 
 def getCoreWeightsDf():
   lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
@@ -254,8 +255,7 @@ def getIbsS(df):
 
 def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   dtStart=str(yrStart)+ '-1-1'
-  suffix='.US'
-  ticker=f"{und}{suffix}"
+  ticker='VIX.INDX' if und=='VIX' else f"{und}.US"
   df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
   df['date'] = pd.to_datetime(df['date'])
   df['ratio'] = df['adjusted_close'] / df['close']
@@ -486,6 +486,47 @@ def runWRE(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+# https://www.youtube.com/watch?v=dVfsbA-_vNs&t=591s
+def runRSQCore(yrStart):
+  und='QQQ'
+  volTgt = .16
+  maxWgt = 1
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  cS = dfDict[und]['Close']
+  vixS = applyDates(getPriceHistory('VIX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
+  rsiS = pandas_ta.rsi(cS, length=2).rename('RSI2')
+  vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
+  isEntryS = (rsiS < 25) & (vixRatioS < 1)
+  isExitS = (rsiS > 75)
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True).rename('State')
+  #####
+  # Summary
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d=dict()
+  d['und']=und
+  d['dp']=dp
+  d['dw']=dw
+  d['vixS']=vixS
+  d['rsiS']=rsiS
+  d['vixRatioS']=vixRatioS
+  d['stateS']=stateS
+  return d
+
+def runRSQ(yrStart,isSkipTitle=False):
+  script = 'RSQ'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runRSQCore(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'][d['und']],d['vixS'],d['rsiS'].round(1),d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runQSGCore(yrStart):
   undG = 'GLD'
   undB = 'TLT'
@@ -641,7 +682,7 @@ def runBTS2(yrStart, isSkipTitle=False):
 
 #####
 
-def runAggregate(yrStart,strategies,weights,script):
+def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
   st.header(script)
   #####
   # Weights
@@ -671,6 +712,11 @@ def runAggregate(yrStart,strategies,weights,script):
   dp2 = (dp2 / dp2.iloc[-1]).tail(23) * 100
   dp2 = dp2.round(2)
   stWriteDf(dp2, isMaxHeight=True)
+  #####
+  # Corrs
+  if isCorrs:
+    st.header('Corrs')
+    stWriteDf(dp.pct_change().corr().round(3))
 
 def runCore(yrStart):
   runIBS(yrStart)

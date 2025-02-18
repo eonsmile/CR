@@ -57,12 +57,12 @@ if ul.stCheckPW('password_CR'):
 
   # Beta
   st.header('Betas (Return regressions of futures vs. ETFs)')
-  zb_tlt_beta, ub_tlt_beta, zn_ief_beta, tn_ief_beta = ql.getCoreBetas()
+  d = ql.getCoreBetas()
   def m(label, beta): st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
-  m('ZB_TLT beta',zb_tlt_beta)
-  m('UB_TLT beta',ub_tlt_beta)
-  m('ZN_IEF beta',zn_ief_beta)
-  m('TN_IEF beta',tn_ief_beta)
+  m('ZB_TLT beta',d['ZB_TLT'])
+  m('UB_TLT beta',d['UB_TLT'])
+  m('ZN_IEF beta',d['ZN_IEF'])
+  m('TN_IEF beta',d['TN_IEF'])
   isOk=True
 
   # Backtest
