@@ -9,15 +9,15 @@ import pandas as pd
 import requests
 import math
 import pendulum
-import yfinance as yf
+import yahooquery
+import warnings
 from sklearn.linear_model import LinearRegression
 
 ###########
 # Constants
 ###########
-START_YEAR_DICT={
-  'priceHistory':2015-1,
-  'YFinance':2024,
+SHARED_DICT={
+  'yrStart':2015-1,
 }
 
 #############################################################################################
@@ -75,7 +75,7 @@ def bt(script,dp,dw,yrStart):
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
-def btSetup(tickers, hvN=32, yrStart=START_YEAR_DICT['priceHistory'], applyDatesS=None):
+def btSetup(tickers, hvN=32, yrStart=SHARED_DICT['yrStart'], applyDatesS=None):
   class m:
     def __init__(self, und,yrStart):
       self.und = und
@@ -192,14 +192,14 @@ def getBeta(ts1, ts2, lookbackWindow=90):
   #####
   return coef1 if mae1<mae2 else coef2
 
-def getCoreBetas():
-  yrStart=START_YEAR_DICT['YFinance']
+def getCoreBetas():  
+  yrStart=pendulum.now().year-2
   tltS=getPriceHistory('TLT',yrStart=yrStart)['Close']
   iefS=getPriceHistory('IEF',yrStart=yrStart)['Close']
-  zbS = getYFinanceS('ZB=F')
-  ubS = getYFinanceS('UB=F')
-  znS = getYFinanceS('ZN=F')
-  tnS = getYFinanceS('TN=F')
+  zbS = getYClose2Y('ZB=F')
+  ubS = getYClose2Y('UB=F')
+  znS = getYClose2Y('ZN=F')
+  tnS = getYClose2Y('TN=F')
   d=dict()
   d['ZB_TLT']=getBeta(zbS, tltS)
   d['UB_TLT']=getBeta(ubS, tltS)
@@ -254,9 +254,10 @@ def getIbsS(df):
   ibsS.rename('IBS',inplace=True)
   return ibsS
 
-def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
+def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
-  ticker='VIX.INDX' if und=='VIX' else f"{und}.US"
+  ticker=und
+  if '.' not in ticker: ticker=f"{und}.US"
   df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
   df['date'] = pd.to_datetime(df['date'])
   df['ratio'] = df['adjusted_close'] / df['close']
@@ -269,7 +270,7 @@ def getPriceHistory(und,yrStart=START_YEAR_DICT['priceHistory']):
   df = df.sort_values(by=['date']).round(10)
   return df
 
-def getPriceHistoryCrypto(und,yrStart=START_YEAR_DICT['priceHistory']):
+def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   def m(toTs=None):
     z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={st.secrets['cc_api_key']}"
     if toTs is not None:
@@ -305,17 +306,13 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
 
-def getYFinanceS(ticker, fromYear=START_YEAR_DICT['YFinance']):
-  fromDate = f"{fromYear}-01-01"
-  toDate = pendulum.today().format('YYYY-MM-DD')
-  import time
-  for i in range(30):
-    r=yf.Ticker(ticker).history(start=fromDate, end=toDate)
-    if len(r)>0: break
-    time.sleep(1)
-  df=r['Close'].rename(ticker)
-  df.index = pd.to_datetime([pendulum.instance(dt).date() for dt in df.index])
-  return df
+def getYClose2Y(ticker):
+  with warnings.catch_warnings():
+    warnings.simplefilter('ignore', category=FutureWarning)
+    df = yahooquery.Ticker(ticker).history(period='2y')
+  df.index = df.index.droplevel('symbol')
+  df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
+  return df['adjclose'].rename(ticker)
 
 def stWriteDf(df,isMaxHeight=False):
   def formatter(n):
@@ -500,7 +497,7 @@ def runRSQCore(yrStart):
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   cS = dfDict[und]['Close']
-  vixS = applyDates(getPriceHistory('VIX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
+  vixS = applyDates(getPriceHistory('VIX.INDX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
   rsiS = pandas_ta.rsi(cS, length=2).rename('RSI2')
   vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
   isEntryS = (rsiS < 25) & (vixRatioS < 1)
