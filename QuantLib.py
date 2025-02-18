@@ -193,8 +193,9 @@ def getBeta(ts1, ts2, lookbackWindow=90):
   return coef1 if mae1<mae2 else coef2
 
 def getCoreBetas():
-  tltS = getYFinanceS('TLT')
-  iefS = getYFinanceS('IEF')
+  yrStart=START_YEAR_DICT['YFinance']
+  tltS=getPriceHistory('TLT',yrStart=yrStart)['Close']
+  iefS=getPriceHistory('IEF',yrStart=yrStart)['Close']
   zbS = getYFinanceS('ZB=F')
   ubS = getYFinanceS('UB=F')
   znS = getYFinanceS('ZN=F')
@@ -307,8 +308,13 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
 def getYFinanceS(ticker, fromYear=START_YEAR_DICT['YFinance']):
   fromDate = f"{fromYear}-01-01"
   toDate = pendulum.today().format('YYYY-MM-DD')
-  df=yf.Ticker(ticker).history(start=fromDate, end=toDate)['Close'].rename(ticker)
-  df.index = [pendulum.instance(dt).date() for dt in df.index]
+  import time
+  for i in range(30):
+    r=yf.Ticker(ticker).history(start=fromDate, end=toDate)
+    if len(r)>0: break
+    time.sleep(1)
+  df=r['Close'].rename(ticker)
+  df.index = pd.to_datetime([pendulum.instance(dt).date() for dt in df.index])
   return df
 
 def stWriteDf(df,isMaxHeight=False):
