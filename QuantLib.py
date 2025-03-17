@@ -216,7 +216,7 @@ def getCoreWeightsDf():
   l = list()
   d = ul.cachePersist('r', 'CR')['IBSDict']
   ep = 1e-9
-  ibsDict = {'SPY': d['SPY'] + ep,
+  ibsDict = {'SPY': 0,
              'QQQ': d['QQQ'] + ep,
              'TLT': d['TLT'] + ep,
              'IEF': 0,
@@ -338,14 +338,11 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 # Scripts
 #########
-def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
-  def m(und, dfDict, isMondayS=None, sma200S=None):
+def runIBSCore(yrStart, multQ=1, multB=1):
+  def m(und, dfDict, sma200S=None):
     df = dfDict[und]
     ibsS = getIbsS(df)
-    if und == undE:
-      isEntryS = (isMondayS == 1) & (ibsS < .2) & (df['Low'] < df['Low'].shift(1))
-      isExitS = df['Close'] > df['High'].shift(1)
-    elif und == undQ:
+    if und == undQ:
       isEntryS = ibsS < .1
       isExitS = df['Close'] > df['High'].shift(1)
     elif und == undB:
@@ -356,47 +353,37 @@ def runIBSCore(yrStart, multE=1, multQ=1, multB=1):
     stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
     return ibsS, stateS
   #####
-  undE = 'SPY'
   undQ = 'QQQ'
   undB = 'TLT'
   volTgt = .16
   maxWgt = 1
-  dp, dw, dfDict, hv = btSetup([undE, undQ, undB],yrStart=yrStart-1)
+  dp, dw, dfDict, hv = btSetup([undQ, undB],yrStart=yrStart-1)
   #####
-  isMondayS = dfDict[undE]['Close'].rename('Monday?') * 0
-  isMondayS[isMondayS.index.weekday == 0] = 1
   sma200S = dfDict[undB]['Close'].rolling(200).mean().rename('SMA200')
-  ibsSE, stateSE = m(undE, dfDict, isMondayS=isMondayS)
   ibsSQ, stateSQ = m(undQ, dfDict)
   ibsSB, stateSB = m(undB, dfDict, sma200S=sma200S)
-  dw[undE] = stateSE*multE
   dw[undQ] = stateSQ*multQ
   dw[undB] = stateSB*multB
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   d=dict()
-  d['undE']=undE
   d['undQ']=undQ
   d['undB']=undB
   d['dp']=dp
   d['dw']=dw
   d['dfDict']=dfDict
-  d['isMondayS']=isMondayS
   d['sma200S']=sma200S
-  d['ibsSE']=ibsSE
   d['ibsSQ']=ibsSQ
   d['ibsSB']=ibsSB
-  d['stateSE']=stateSE
   d['stateSQ']=stateSQ
   d['stateSB']=stateSB
   return d
 
-def runIBS(yrStart,multE=1, multQ=1, multB=1,isSkipTitle=False):
-  def m(d, und, ibsS, stateS, isMondayS=None, sma200S=None):
+def runIBS(yrStart,multQ=1, multB=1,isSkipTitle=False):
+  def m(d, und, ibsS, stateS, sma200S=None):
     df=d['dfDict'][und]
     st.subheader(und)
     df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
-    if isMondayS is not None: df2 = ul.merge(df2, isMondayS, how='inner')
     if sma200S is not None: df2 = ul.merge(df2, sma200S.round(2), how='inner')
     df2 = ul.merge(df2, stateS.ffill(), how='inner')
     stWriteDf(df2.tail())
@@ -405,9 +392,8 @@ def runIBS(yrStart,multE=1, multQ=1, multB=1,isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runIBSCore(yrStart,multE=multE,multQ=multQ,multB=multB)
+  d=runIBSCore(yrStart,multQ=multQ,multB=multB)
   st.header('Tables')
-  m(d, d['undE'], d['ibsSE'], d['stateSE'], isMondayS=d['isMondayS'])
   m(d, d['undQ'], d['ibsSQ'], d['stateSQ'])
   m(d, d['undB'], d['ibsSB'], d['stateSB'], sma200S=d['sma200S'])
   st.header('Weights')
@@ -452,6 +438,58 @@ def runTPP(yrStart,multE=1,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
+
+def runMRECore(yrStart):
+  und='SPY'
+  volTgt = .16
+  maxWgt = 2
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  cS = dfDict[und]['Close']
+  vixS = applyDates(getPriceHistory('VIX.INDX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
+  rsiS = pandas_ta.rsi(cS, length=2).rename('RSI2')
+  vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
+  rocS = cS.pct_change()
+  #####
+  # https://www.youtube.com/watch?v=dVfsbA-_vNs
+  isEntry1S = (rsiS < 25) & (vixRatioS < 1)
+  isExit1S = (rsiS > 75)
+  state1S = getStateS(isEntry1S, isExit1S, isCleaned=False, isMonthlyRebal=False).rename('State1')
+  #####
+  # QS Bundle 3 / Short-Selling Strategies / #1
+  isEntry2S = (cS>cS.shift()) & (cS.shift()>cS.shift(2)) & (rocS==rocS.rolling(2).max()) & (cS<cS.rolling(200).mean())
+  isExit2S = cS<cS.rolling(6).mean()
+  state2S = -getStateS(isEntry2S, isExit2S, isCleaned=False, isMonthlyRebal=False).rename('State2')
+  #####
+  stateS=cleanS(state1S+state2S,isMonthlyRebal=True).rename('State')
+  #####
+  # Summary
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(-maxWgt, maxWgt)
+  d=dict()
+  d['und']=und
+  d['dp']=dp
+  d['dw']=dw
+  d['vixS']=vixS
+  d['rsiS']=rsiS
+  d['vixRatioS']=vixRatioS
+  d['state1S']=state1S
+  d['state2S']=state2S
+  d['stateS']=stateS
+  return d
+
+def runMRE(yrStart,isSkipTitle=False):
+  script = 'MRE'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runMRECore(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'][d['und']],d['vixS'],d['rsiS'].round(1),d['vixRatioS'].round(3), d['state1S'],d['state2S'],d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 def runQSGCore(yrStart):
   undG = 'GLD'
@@ -519,42 +557,6 @@ def runQSG(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runRMBCore(yrStart):
-  und = 'USDCNH.FOREX'
-  volTgt = .16
-  maxWgt = 3
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  #####
-  ratio1S = dp[und] / dp[und].rolling(5).mean()
-  ratio1S.rename('Ratio 1', inplace=True)
-  ratio2S = dp[und] / dp[und].rolling(50).mean()
-  ratio2S.rename('Ratio 2', inplace=True)
-  isEntryS = (ratio1S<1) & (ratio2S>1)
-  isExitS = (ratio1S>1) & (ratio2S<1)
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['ratio1S'] = ratio1S
-  d['ratio2S'] = ratio2S
-  d['stateS'] = stateS
-  return d
-
-def runRMB(yrStart,isSkipTitle=False):
-  script = 'RMB'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runRMBCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'], d['ratio1S'].round(6), d['ratio2S'].round(6), d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
 def runBTSCore(yrStart):
   und = 'BTC'
   volTgt=.27
@@ -598,45 +600,6 @@ def runBTS(yrStart, isSkipTitle=False):
   d=runBTSCore(yrStart)
   st.header('Table')
   tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['rawMultS'].round(3), d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runBTS2Core(yrStart):
-  dtsHalving = ['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-19', '2028-03-18']
-  #####
-  und = 'BTC'
-  volTgt=.08
-  maxWgt=0.5
-  #####
-  df = getPriceHistoryCrypto(und, yrStart=yrStart-1)
-  dp = df[['Close']]
-  dp.columns = [und]
-  cS = df['Close']
-  #####
-  stateS = cS.rename('State') * 0
-  for dt in pd.to_datetime(dtsHalving):
-    start = dt - pd.DateOffset(months=6)
-    end = dt + pd.DateOffset(months=18)
-    stateS.loc[start:end] = 1
-  #####
-  dw = dp.copy()
-  dw[und]=cleanS(stateS,isMonthlyRebal=True) * volTgt / getHV(dp[und], n=8, af=365).clip(0, maxWgt)
-  d=dict()
-  d['und']=und
-  d['dp'] = dp
-  d['dw'] = dw
-  d['stateS']=stateS
-  return d
-
-def runBTS2(yrStart, isSkipTitle=False):
-  script = 'BTS2'
-  if not isSkipTitle:
-    st.header(script)
-  d=runBTS2Core(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'][d['und']], d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
