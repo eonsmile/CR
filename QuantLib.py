@@ -435,6 +435,72 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
+def runQSGCore(yrStart):
+  undG = 'GLD'
+  undB = 'TLT'
+  volTgt = .16
+  maxWgt = 1.5
+  tickers = [undG,undB]
+  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
+  #####
+  hS = dfDict[undG]['High']
+  lS = dfDict[undG]['Low']
+  cS = dfDict[undG]['Close']
+  cSB = dfDict[undB]['Close']
+  #####
+  ibsS = getIbsS(dfDict[undG])
+  adxS = pandas_ta.adx(hS, lS, cS, length=5)['ADX_5'].rename('ADX5')
+  cond11S = cS > hS.rolling(3).max().shift()
+  cond12S = cSB > cSB.shift()
+  cond13S = (cS * 0).astype(int)
+  cond13S.loc[cond13S.index.weekday != 3] = 1
+  cond1S = (cond11S & cond12S & cond13S)*1
+  cond2S = ((ibsS < .15) & (adxS > 30) & (cS.index.day >= 15))*1
+  cond1S.rename('Conditon 1?', inplace=True)
+  cond2S.rename('Conditon 2?', inplace=True)
+  isEntryS = (cond1S|cond2S)*1
+  isExitS = ((cS>cS.shift()) & (cS.shift()>cS.shift(2))|(cS>hS.shift()))*1
+  isExitS.loc[isEntryS == 1] = 0
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dp=dp.drop(undB,axis=1)
+  dw=dw.drop(undB,axis=1)
+  hv=hv.drop(undB,axis=1)
+  dw[undG] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  #####
+  d['cS'] = cS
+  d['hS'] = hS
+  d['cSB'] = cSB
+  d['ibsS']=ibsS
+  d['adxS']=adxS
+  d['cond1S']=cond1S
+  d['cond2S']=cond2S
+  d['stateS']=stateS
+  return d
+
+def runQSG(yrStart, isSkipTitle=False):
+  script = 'QSG'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runQSGCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2), d['ibsS'].round(3), d['adxS'].round(1),
+                    d['cond1S'], d['cond2S'],d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  #####
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runBTSCore(yrStart):
   und = 'BTC'
   volTgt=.24
