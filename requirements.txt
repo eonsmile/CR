@@ -1,5 +1,5 @@
 filelock
-yahooquery
+yahooquery==2.3.7
 scikit-learn
 pendulum
 pretty_errors
