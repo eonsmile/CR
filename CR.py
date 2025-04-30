@@ -41,7 +41,6 @@ if 'button_clicked' not in st.session_state:
 ######
 # Main
 ######
-isOk=False
 z='Core Reporter'
 st.set_page_config(page_title=z)
 st.title(z)
@@ -55,28 +54,32 @@ if ul.stCheckPW('password_CR'):
   df[cols] = df[cols].map(lambda n: '' if n == 0 else f"{n:.1%}")
   st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if row['Last Update']==lastUpdate else [''] * len(row), axis=1))
 
-  # Beta
-  st.header('Betas (Return regressions of futures vs. ETFs)')
-  d = ql.getCoreBetas()
-  def m(label, beta): st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
-  m('ZB_TLT beta',d['ZB_TLT'])
-  m('UB_TLT beta',d['UB_TLT'])
-  m('ZN_IEF beta',d['ZN_IEF'])
-  m('TN_IEF beta',d['TN_IEF'])
-  isOk=True
-
-  # Backtest
-  st.header('Backtest')
-  col1, col2 = st.columns(2)
+  # Choices
+  st.header('Choices')
+  col1, col2, col3 = st.columns(3)
   with col1:
-    if st.button('From 2015'):
-      st.session_state.button_clicked = '2015'
+    if st.button('Betas'):
+      st.session_state.button_clicked = 'betas'
   with col2:
-    if st.button('From 2008'):
+    if st.button('Backtest (2015)'):
+      st.session_state.button_clicked = '2015'
+  with col3:
+    if st.button('Backtest (2008)'):
       st.session_state.button_clicked = '2008'
 
+  # Process
   if st.session_state.button_clicked == '2008':
     bt2008()
   elif st.session_state.button_clicked=='2015':
     bt2015()
+  if st.session_state.button_clicked=='betas':
+    st.header('Betas (Return regressions of futures vs. ETFs)')
+    d = ql.getCoreBetas()
+    def m(label, beta):
+      st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
+    m('ZB_TLT beta', d['ZB_TLT'])
+    m('UB_TLT beta', d['UB_TLT'])
+    m('ZN_IEF beta', d['ZN_IEF'])
+    m('TN_IEF beta', d['TN_IEF'])
+
 
