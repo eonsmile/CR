@@ -304,12 +304,44 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
 
+'''
 def getYClose2Y(ticker):
   with warnings.catch_warnings():
     warnings.simplefilter('ignore', category=FutureWarning)
     df = yahooquery.Ticker(ticker).history(period='2y')
   df.index = df.index.droplevel('symbol')
   df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
+  return df['adjclose'].rename(ticker)
+'''
+
+
+def getYClose2Y(ticker):
+  with warnings.catch_warnings():
+    warnings.simplefilter('ignore', category=FutureWarning)
+
+    # Configure Ticker with robust connection settings
+    ticker_obj = yahooquery.Ticker(
+      ticker,
+      retry=10,  # Increased from default 5
+      status_forcelist=[404, 429, 500, 502, 503, 504],  # Added 404 handling
+      timeout=15  # Increased from default 10s
+    )
+
+    try:
+      df = ticker_obj.history(period='2y')
+
+      # Handle empty response edge case
+      if df.empty:
+        raise ValueError(f"No data returned for {ticker}")
+
+    except Exception as e:
+      print(f"Error fetching {ticker}: {str(e)}")
+      return pd.Series(name=ticker)  # Return empty series as fallback
+
+  # Existing processing logic
+  df.index = df.index.droplevel('symbol')
+  df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
+
   return df['adjclose'].rename(ticker)
 
 def stWriteDf(df,isMaxHeight=False):
