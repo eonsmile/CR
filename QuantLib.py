@@ -3,7 +3,6 @@
 ###############
 import UtilLib as ul
 import streamlit as st
-import pandas_ta
 import numpy as np
 import pandas as pd
 import requests
@@ -268,27 +267,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   df = df.sort_values(by=['date']).round(10)
   return df
 
-def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  def m(toTs=None):
-    z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={st.secrets['cc_api_key']}"
-    if toTs is not None:
-      z = f"{z}&toTs={toTs}"
-    data = requests.get(z).json()['Data']
-    return pd.DataFrame(data['Data']), data['TimeFrom']
-  #####
-  df, toTs = m()
-  for i in range(2 if yrStart<2015 else 1):
-    df2, toTs = m(toTs)
-    df = pd.concat([df2.drop(df2.index[-1]), df])
-  df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
-  df = df[df['date'] > '2010-7-16']
-  df['open'] = df['close'].shift()
-  df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
-  df = df.set_index('date')
-  df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df.sort_values(by=['date']).round(10)
-  return df
-
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if len(isEntryS)!=len(isExitS):
     ul.iExit('getStateS')
@@ -435,116 +413,6 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
-
-def runQSGCore(yrStart):
-  undG = 'GLD'
-  undB = 'TLT'
-  volTgt = .16
-  maxWgt = 1.5
-  tickers = [undG,undB]
-  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
-  #####
-  hS = dfDict[undG]['High']
-  lS = dfDict[undG]['Low']
-  cS = dfDict[undG]['Close']
-  cSB = dfDict[undB]['Close']
-  #####
-  ibsS = getIbsS(dfDict[undG])
-  adxS = pandas_ta.adx(hS, lS, cS, length=5)['ADX_5'].rename('ADX5')
-  cond11S = cS > hS.rolling(3).max().shift()
-  cond12S = cSB > cSB.shift()
-  cond13S = (cS * 0).astype(int)
-  cond13S.loc[cond13S.index.weekday != 3] = 1
-  cond1S = (cond11S & cond12S & cond13S)*1
-  cond2S = ((ibsS < .15) & (adxS > 30) & (cS.index.day >= 15))*1
-  cond1S.rename('Conditon 1?', inplace=True)
-  cond2S.rename('Conditon 2?', inplace=True)
-  isEntryS = (cond1S|cond2S)*1
-  isExitS = ((cS>cS.shift()) & (cS.shift()>cS.shift(2))|(cS>hS.shift()))*1
-  isExitS.loc[isEntryS == 1] = 0
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-  #####
-  # Summary
-  dp=dp.drop(undB,axis=1)
-  dw=dw.drop(undB,axis=1)
-  hv=hv.drop(undB,axis=1)
-  dw[undG] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  #####
-  d=dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  #####
-  d['cS'] = cS
-  d['hS'] = hS
-  d['cSB'] = cSB
-  d['ibsS']=ibsS
-  d['adxS']=adxS
-  d['cond1S']=cond1S
-  d['cond2S']=cond2S
-  d['stateS']=stateS
-  return d
-
-def runQSG(yrStart, isSkipTitle=False):
-  script = 'QSG'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runQSGCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2), d['ibsS'].round(3), d['adxS'].round(1),
-                    d['cond1S'], d['cond2S'],d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  #####
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runBTSCore(yrStart):
-  und = 'BTC'
-  volTgt=.24
-  maxWgt=1
-  #####
-  df = getPriceHistoryCrypto(und, yrStart=yrStart-1)
-  dp = df[['Close']]
-  dp.columns = [und]
-  cS = df['Close']
-  ratio1S = cS / cS.rolling(5).mean()
-  ratio1S.rename('Ratio 1', inplace=True)
-  ratio2S = cS / cS.rolling(30).mean()
-  ratio2S.rename('Ratio 2', inplace=True)
-  hv = getHV(dp[und], n=8, af=365).rename('HV')
-  #####
-  isEntryS=(ratio1S>=1)&(ratio2S>=1)&(hv<.24)
-  isExitS=ratio1S<1
-  stateS = getStateS(isEntryS,isExitS,isCleaned=True,isMonthlyRebal=True)
-  #####
-  dw = dp.copy()
-  dw[und]=stateS*(volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  d=dict()
-  d['und']=und
-  d['dp'] = dp
-  d['dw'] = dw
-  d['ratio1S']=ratio1S
-  d['ratio2S']=ratio2S
-  d['hv']=hv
-  d['stateS']=stateS
-  return d
-
-def runBTS(yrStart, isSkipTitle=False):
-  script = 'BTS'
-  if not isSkipTitle:
-    st.header(script)
-  d=runBTSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'][d['und']], d['ratio1S'].round(3), d['ratio2S'].round(3), d['hv'].round(3), d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 
