@@ -283,18 +283,7 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
 
-'''
 def getYClose2Y(ticker):
-  proxies = {'http': st.secrets['proxy'], 'https': st.secrets['proxy']}
-  with warnings.catch_warnings():
-    warnings.simplefilter('ignore', category=FutureWarning)
-    df = yahooquery.Ticker(ticker,proxies=proxies).history(period='2y')
-  df.index = df.index.droplevel('symbol')
-  df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
-  return df['adjclose'].rename(ticker)
-'''
-def getYClose2Y(ticker):
-  #proxies = {'http': st.secrets['proxy'], 'https': st.secrets['proxy']}
   with warnings.catch_warnings():
     warnings.simplefilter('ignore', category=FutureWarning)
     session = curl_cffi.Session(impersonate="chrome")
