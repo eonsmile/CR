@@ -316,64 +316,41 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 # Scripts
 #########
-def runIBSCore(yrStart, multQ=1, multB=1):
-  def m(und, dfDict, sma200S=None):
-    df = dfDict[und]
-    ibsS = getIbsS(df)
-    if und == undQ:
-      isEntryS = ibsS < .1
-      isExitS = df['Close'] > df['High'].shift(1)
-    elif und == undB:
-      isEntryS = (df['Close']<sma200S) & (ibsS < .15)
-      isExitS = (df['Close'] > df['High'].shift(1)) | (ibsS > .7)
-    else:
-      ul.iExit('runIBS')
-    stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-    return ibsS, stateS
+def runIBSCore(yrStart, mult=1):
+  und = 'QQQ'
+  volTgt = .18
+  maxWgt = 2
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
-  undQ = 'QQQ'
-  undB = 'TLT'
-  volTgt = .16
-  maxWgt = 1
-  dp, dw, dfDict, hv = btSetup([undQ, undB],yrStart=yrStart-1)
-  #####
-  sma200S = dfDict[undB]['Close'].rolling(200).mean().rename('SMA200')
-  ibsSQ, stateSQ = m(undQ, dfDict)
-  ibsSB, stateSB = m(undB, dfDict, sma200S=sma200S)
-  dw[undQ] = stateSQ*multQ
-  dw[undB] = stateSB*multB
+  df = dfDict[und]
+  ibsS = getIbsS(df)
+  isEntryS = ibsS < .1
+  isExitS = df['Close'] > df['High'].shift(1)
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS*mult
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   d=dict()
-  d['undQ']=undQ
-  d['undB']=undB
+  d['und']=und
   d['dp']=dp
   d['dw']=dw
   d['dfDict']=dfDict
-  d['sma200S']=sma200S
-  d['ibsSQ']=ibsSQ
-  d['ibsSB']=ibsSB
-  d['stateSQ']=stateSQ
-  d['stateSB']=stateSB
+  d['ibsS']=ibsS
+  d['stateS']=stateS
   return d
 
-def runIBS(yrStart,multQ=1, multB=1,isSkipTitle=False):
-  def m(d, und, ibsS, stateS, sma200S=None):
-    df=d['dfDict'][und]
-    st.subheader(und)
-    df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), ibsS.round(3), how='inner')
-    if sma200S is not None: df2 = ul.merge(df2, sma200S.round(2), how='inner')
-    df2 = ul.merge(df2, stateS.ffill(), how='inner')
-    stWriteDf(df2.tail())
-  #####
+def runIBS(yrStart,mult=1, isSkipTitle=False):
   script = 'IBS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runIBSCore(yrStart,multQ=multQ,multB=multB)
+  d=runIBSCore(yrStart,mult=mult)
   st.header('Tables')
-  m(d, d['undQ'], d['ibsSQ'], d['stateSQ'])
-  m(d, d['undB'], d['ibsSB'], d['stateSB'], sma200S=d['sma200S'])
+  st.subheader(d['und'])
+  df = d['dfDict'][d['und']]
+  df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
+  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
+  stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -384,8 +361,8 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undG = 'GLD'
   undD = 'UUP'
   lookback = 32
-  volTgt = .16
-  maxWgt = 3
+  volTgt = .1
+  maxWgt = 2
   ######
   script = 'TPP'
   if not isSkipTitle:
