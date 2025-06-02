@@ -194,15 +194,10 @@ def getBeta(ts1, ts2, lookbackWindow=90):
 
 def getCoreBetas():  
   yrStart=pendulum.now().year-2
-  tltS=getPriceHistory('TLT',yrStart=yrStart)['Close']
   iefS=getPriceHistory('IEF',yrStart=yrStart)['Close']
-  zbS = getYClose2Y('ZB=F')
-  ubS = getYClose2Y('UB=F')
   znS = getYClose2Y('ZN=F')
   tnS = getYClose2Y('TN=F')
   d=dict()
-  d['ZB_TLT']=getBeta(zbS, tltS)
-  d['UB_TLT']=getBeta(ubS, tltS)
   d['ZN_IEF']=getBeta(znS, iefS)
   d['TN_IEF']=getBeta(tnS, iefS)
   return d

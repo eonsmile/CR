@@ -77,8 +77,6 @@ if ul.stCheckPW('password_CR'):
     d = ql.getCoreBetas()
     def m(label, beta):
       st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
-    m('ZB_TLT beta', d['ZB_TLT'])
-    m('UB_TLT beta', d['UB_TLT'])
     m('ZN_IEF beta', d['ZN_IEF'])
     m('TN_IEF beta', d['TN_IEF'])
 
