@@ -212,19 +212,17 @@ def getCoreWeightsDf():
   d = ul.cachePersist('r', 'CR')['IBSDict']
   ep = 1e-9
   ibsDict = {'QQQ': d['QQQ'] + ep,
-             'TLT': d['TLT'] + ep,
              'IEF': 0,
              'GLD': 0,
              'UUP': 0}
   d = ul.cachePersist('r', 'CR')['TPPDict']
   tppDict = {'QQQ': d['QQQ'] + ep,
-             'TLT': 0,
              'IEF': d['IEF'] + ep,
              'GLD': d['GLD'] + ep,
              'UUP': d['UUP'] + ep}
   dts=list(lastUpdateDict.values())
   i = 0
-  for und in ul.spl('QQQ,TLT,IEF,GLD,UUP'):
+  for und in ul.spl('QQQ,IEF,GLD,UUP'):
     l.append([dts[i], und, (ibsDict[und] + tppDict[und]) / 2, ibsDict[und], tppDict[und]])
     i += 1
   df = pd.DataFrame(l)
