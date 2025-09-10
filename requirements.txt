@@ -3,6 +3,6 @@ yahooquery
 scikit-learn
 pendulum
 pretty_errors
-numpy==1.26.4
+numpy
 pandas-ta
 curl_cffi
