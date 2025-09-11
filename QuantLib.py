@@ -11,6 +11,7 @@ import pendulum
 import yahooquery
 import curl_cffi
 import warnings
+import pandas_ta_classic as ta
 from sklearn.linear_model import LinearRegression
 
 ###########
@@ -385,6 +386,50 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
+def runRSSCore(yrStart):
+  und='SPY'
+  volTgt = .32
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  cS = dfDict[und]['Close']
+  vixS = applyDates(getPriceHistory('VIX.INDX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
+  rsiS = ta.rsi(cS, length=2).rename('RSI2')
+  ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
+  vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
+  #####
+  isEntryS = (rsiS < 25) & (ratioS>1) & (vixRatioS<1)
+  isExitS = (rsiS > 75)
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  d=dict()
+  d['und']=und
+  d['dp']=dp
+  d['dw']=dw
+  d['vixS']=vixS
+  d['rsiS']=rsiS
+  d['ratioS']=ratioS
+  d['vixRatioS']=vixRatioS
+  d['stateS']=stateS
+  return d
+
+def runRSS(yrStart,isSkipTitle=False):
+  script = 'RSS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runRSSCore(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'][d['und']],d['rsiS'].round(1),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 #####
 
 def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
@@ -432,3 +477,15 @@ def runCore(yrStart):
   weights = [1 / 2, 1 / 2]
   script = 'Core'
   runAggregate(yrStart, strategies, weights, script)
+
+def runCore2(yrStart):
+  runIBS(yrStart)
+  st.divider()
+  runTPP(yrStart)
+  st.divider()
+  runRSS(yrStart)
+  st.divider()
+  strategies = ul.spl('IBS,TPP,RSS')
+  weights = [1/3, 1/3, 1/3]
+  script = 'Core Pre-Release'
+  runAggregate(yrStart, strategies, weights, script, isCorrs=True)

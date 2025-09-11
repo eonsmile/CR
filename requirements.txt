@@ -5,3 +5,4 @@ pendulum
 pretty_errors
 numpy
 curl_cffi
+pandas-ta-classic

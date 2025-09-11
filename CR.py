@@ -32,6 +32,14 @@ def bt2015():
   st.divider()
   ql.runCore(2015)
 
+def bt2008_2():
+  st.divider()
+  ql.runCore2(2008)
+
+def bt2015_2():
+  st.divider()
+  ql.runCore2(2015)
+
 ######
 # Init
 ######
@@ -56,7 +64,7 @@ if ul.stCheckPW('password_CR'):
 
   # Choices
   st.header('Choices')
-  col1, col2, col3 = st.columns(3)
+  col1, col2, col3, col4, col5 = st.columns(5)
   with col1:
     if st.button('Betas'):
       st.session_state.button_clicked = 'betas'
@@ -66,12 +74,22 @@ if ul.stCheckPW('password_CR'):
   with col3:
     if st.button('Backtest (2008)'):
       st.session_state.button_clicked = '2008'
+  with col4:
+    if st.button('Backtest (2015) Core Pre-Release'):
+      st.session_state.button_clicked = '2015_2'
+  with col5:
+    if st.button('Backtest (2008) Core Pre-Release'):
+      st.session_state.button_clicked = '2008_2'
 
   # Process
   if st.session_state.button_clicked == '2008':
     bt2008()
   elif st.session_state.button_clicked=='2015':
     bt2015()
+  elif st.session_state.button_clicked == '2008_2':
+    bt2008_2()
+  elif st.session_state.button_clicked=='2015_2':
+    bt2015_2()
   if st.session_state.button_clicked=='betas':
     st.header('Betas (Return regressions of futures vs. ETFs)')
     d = ql.getCoreBetas()
