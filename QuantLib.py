@@ -210,24 +210,38 @@ def getCoreWeightsDf():
   lastUpdate = max(dts).format(fmt)
 
   l = list()
-  d = ul.cachePersist('r', 'CR')['IBSDict']
+
   ep = 1e-9
-  ibsDict = {'QQQ': d['QQQ'] + ep,
-             'IEF': 0,
-             'GLD': 0,
-             'UUP': 0}
+  #####
   d = ul.cachePersist('r', 'CR')['TPPDict']
-  tppDict = {'QQQ': d['QQQ'] + ep,
+  tppDict = {'SPY':0,
+             'QQQ': d['QQQ'] + ep,
              'IEF': d['IEF'] + ep,
              'GLD': d['GLD'] + ep,
              'UUP': d['UUP'] + ep}
+  ####
+  d = ul.cachePersist('r', 'CR')['RSSDict']
+  rssDict = {'SPY': d['SPY'] + ep,
+             'QQQ': 0,
+             'IEF': 0,
+             'GLD': 0,
+             'UUP': 0}
+  ####
+  d = ul.cachePersist('r', 'CR')['IBSDict']
+  ibsDict = {'SPY': 0,
+             'QQQ': d['QQQ'] + ep,
+             'IEF': 0,
+             'GLD': 0,
+             'UUP': 0}
+  #####
   dts=list(lastUpdateDict.values())
   i = 0
-  for und in ul.spl('QQQ,IEF,GLD,UUP'):
-    l.append([dts[i], und, (ibsDict[und] + tppDict[und]) / 2, ibsDict[und], tppDict[und]])
+  for und in ul.spl('SPY,QQQ,IEF,GLD,UUP'):
+    totalWeight = (tppDict[und]+ibsDict[und]) / 2
+    l.append([dts[i], und, totalWeight, tppDict[und], rssDict[und], ibsDict[und]])
     i += 1
   df = pd.DataFrame(l)
-  df.columns = ul.spl('Last Update,ETF,Total Weight,IBS (1/2),TPP (1/2)')
+  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/2),RSS (0),IBS (1/2)')
   df.set_index(['ETF'], inplace=True)
   return df,lastUpdate
 
@@ -310,10 +324,13 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 # Scripts
 #########
-def runIBSCore(yrStart, mult=1):
+def runIBSCore(yrStart, mult=1, isBeta=False):
   und = 'QQQ'
   volTgt = .18
   maxWgt = 2
+  if isBeta:
+    volTgt = .23
+    maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   df = dfDict[und]
@@ -333,12 +350,12 @@ def runIBSCore(yrStart, mult=1):
   d['stateS']=stateS
   return d
 
-def runIBS(yrStart,mult=1, isSkipTitle=False):
+def runIBS(yrStart,mult=1, isSkipTitle=False, isBeta=False):
   script = 'IBS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runIBSCore(yrStart,mult=mult)
+  d=runIBSCore(yrStart,mult=mult, isBeta=isBeta)
   st.header('Tables')
   st.subheader(d['und'])
   df = d['dfDict'][d['und']]
@@ -349,7 +366,7 @@ def runIBS(yrStart,mult=1, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
+def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False,isBeta=False):
   undQ = 'QQQ'
   undB = 'IEF'
   undG = 'GLD'
@@ -357,6 +374,9 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   lookback = 32
   volTgt = .1
   maxWgt = 2
+  if isBeta:
+    volTgt = .125
+    maxWgt = 2
   ######
   script = 'TPP'
   if not isSkipTitle:
@@ -390,6 +410,9 @@ def runRSSCore(yrStart):
   und='SPY'
   volTgt = .32
   maxWgt = 1.5
+  if True:
+    volTgt = .165
+    maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   cS = dfDict[und]['Close']
@@ -454,6 +477,11 @@ def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
   # Backtest
   bt(script, dp, dw, yrStart)
   #####
+  # Corrs
+  if isCorrs:
+    st.header('Corrs')
+    stWriteDf(dp.pct_change().corr().round(3))
+  #####
   # Recent performance
   st.header('Recent Performance')
   dp2 = dp.copy()
@@ -462,30 +490,25 @@ def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
   dp2 = (dp2 / dp2.iloc[-1]).tail(23) * 100
   dp2 = dp2.round(2)
   stWriteDf(dp2, isMaxHeight=True)
-  #####
-  # Corrs
-  if isCorrs:
-    st.header('Corrs')
-    stWriteDf(dp.pct_change().corr().round(3))
 
 def runCore(yrStart):
-  runIBS(yrStart)
-  st.divider()
   runTPP(yrStart)
   st.divider()
-  strategies = ul.spl('IBS,TPP')
+  runIBS(yrStart)
+  st.divider()
+  strategies = ul.spl('TPP,IBS')
   weights = [1 / 2, 1 / 2]
   script = 'Core'
   runAggregate(yrStart, strategies, weights, script)
 
 def runCore2(yrStart):
-  runIBS(yrStart)
-  st.divider()
-  runTPP(yrStart)
+  runTPP(yrStart,isBeta=True)
   st.divider()
   runRSS(yrStart)
   st.divider()
-  strategies = ul.spl('IBS,TPP,RSS')
-  weights = [1/3, 1/3, 1/3]
+  runIBS(yrStart,isBeta=True)
+  st.divider()
+  strategies = ul.spl('TPP,RSS,IBS')
+  weights = [1/2, 1/4, 1/4]
   script = 'Core Pre-Release'
   runAggregate(yrStart, strategies, weights, script, isCorrs=True)

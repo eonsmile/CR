@@ -58,7 +58,7 @@ if ul.stCheckPW('password_CR'):
   st.header('Weights')
   df,lastUpdate=ql.getCoreWeightsDf()
   st.markdown(f"Last Update: <font color='red'>{lastUpdate}</font>", unsafe_allow_html=True)
-  cols=['Total Weight','IBS (1/2)','TPP (1/2)']
+  cols=['Total Weight','TPP (1/2)','RSS (0)','IBS (1/2)']
   df[cols] = df[cols].map(lambda n: '' if n == 0 else f"{n:.1%}")
   st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if row['Last Update']==lastUpdate else [''] * len(row), axis=1))
 
