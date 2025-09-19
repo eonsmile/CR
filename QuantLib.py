@@ -18,7 +18,7 @@ from sklearn.linear_model import LinearRegression
 # Constants
 ###########
 SHARED_DICT={
-  'yrStart':2015-1,
+  'yrStart':2016-1,
 }
 
 #############################################################################################
@@ -177,6 +177,17 @@ def cleanS(s, isMonthlyRebal=True):
 def EMA(s, n):
   return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
 
+def extend(df, df2):
+  dtAnchor=df['Close'].first_valid_index()
+  if df2.index[-1] >= dtAnchor:
+    ratio= df.loc[dtAnchor]['Close'] / df2.loc[dtAnchor]['Close']
+    df2= df2[:dtAnchor][:-1]
+    df2[ul.spl('Open,High,Low,Close')] *= ratio
+    df2['Volume'] /= ratio
+    return pd.concat([df2, df.loc[dtAnchor:]])
+  else:
+    return df
+
 def getBeta(ts1, ts2, lookbackWindow=90):
   pcDf=ul.merge(ts1, ts2,how='inner').pct_change().tail(lookbackWindow)
   regressor = LinearRegression(fit_intercept=False)
@@ -208,31 +219,23 @@ def getCoreWeightsDf():
   fmt='DDMMMYY'
   dts = [pendulum.from_format(dt, fmt) for dt in lastUpdateDict.values()]
   lastUpdate = max(dts).format(fmt)
-
   l = list()
-
   ep = 1e-9
   #####
+  emptyDict = {'SPY':0,'QQQ':0,'IEF':0,'GLD':0,'UUP':0}
+  #####
   d = ul.cachePersist('r', 'CR')['TPPDict']
-  tppDict = {'SPY':0,
-             'QQQ': d['QQQ'] + ep,
-             'IEF': d['IEF'] + ep,
-             'GLD': d['GLD'] + ep,
-             'UUP': d['UUP'] + ep}
+  tppDict=emptyDict.copy()
+  for und in ul.spl('QQQ,IEF,GLD,UUP'):
+    tppDict[und] = d[und] + ep
   ####
   d = ul.cachePersist('r', 'CR')['RSSDict']
-  rssDict = {'SPY': d['SPY'] + ep,
-             'QQQ': 0,
-             'IEF': 0,
-             'GLD': 0,
-             'UUP': 0}
+  rssDict = emptyDict.copy()
+  rssDict['SPY'] = d['SPY'] + ep
   ####
   d = ul.cachePersist('r', 'CR')['IBSDict']
-  ibsDict = {'SPY': 0,
-             'QQQ': d['QQQ'] + ep,
-             'IEF': 0,
-             'GLD': 0,
-             'UUP': 0}
+  ibsDict = emptyDict.copy()
+  ibsDict['QQQ'] = d['QQQ'] + ep
   #####
   dts=list(lastUpdateDict.values())
   i = 0
@@ -274,6 +277,15 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
+  #####
+  if und=='IBIT':
+    df2 = pd.read_csv('BTC_NYSE_Close.csv')
+    df2.columns = ['Date', 'Close']
+    df2['Date'] = pd.to_datetime(df2['Date'].apply(lambda x: pendulum.parse(x, strict=False).date()))
+    df2 = df2.set_index('Date')
+    for col in ['Open', 'High', 'Low', 'Volume']:
+      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
+    df = extend(df, df2)
   return df
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
@@ -397,6 +409,46 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False,isBeta=Fals
   dw[undB]=dw[undB]*multB
   dw[undG]=dw[undG]*multG
   dw[undD]=dw[undD]*multD
+  dw.clip(0, maxWgt, inplace=True)
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Ratios')
+  stWriteDf(ratioDf.round(3).tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+def runTPP2(yrStart,multQ=1,multB=1,multG=1,multD=1,multC=1,isSkipTitle=False):
+  undQ = 'QQQ'
+  undB = 'IEF'
+  undG = 'GLD'
+  undD = 'UUP'
+  undC = 'IBIT'
+  lookback = 32
+  volTgt = .11
+  maxWgt = 2
+  ######
+  script = 'TPP2'
+  if not isSkipTitle:
+    st.header(script)
+  ######
+  dp, dw, dfDict, hv = btSetup([undQ,undB,undG,undD,undC],yrStart=yrStart-1)
+  ratioDf = dp / dp.rolling(200).mean()
+  isOkDf = (ratioDf >= 1) * 1
+  wDf = (1 / hv) * isOkDf
+  wDf[undC]*=.5
+  rDf = np.log(dp / dp.shift(1))
+  for i in endpoints(rDf):
+    origin = i - lookback + 1
+    if origin >= 0:
+      prS = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
+      pHv = ((prS ** 2).mean()) ** .5 * (252 ** .5)
+      dw.iloc[i] = wDf.iloc[i] * volTgt / pHv
+  dw[undQ]=dw[undQ]*multQ
+  dw[undB]=dw[undB]*multB
+  dw[undG]=dw[undG]*multG
+  dw[undD]=dw[undD]*multD
+  dw[undC]=dw[undC]*multC
   dw.clip(0, maxWgt, inplace=True)
   st.header('Prices')
   stWriteDf(dp.tail())
