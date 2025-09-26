@@ -418,46 +418,6 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False,isBeta=Fals
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
-def runTPP2(yrStart,multQ=1,multB=1,multG=1,multD=1,multC=1,isSkipTitle=False):
-  undQ = 'QQQ'
-  undB = 'IEF'
-  undG = 'GLD'
-  undD = 'UUP'
-  undC = 'IBIT'
-  lookback = 32
-  volTgt = .11
-  maxWgt = 2
-  ######
-  script = 'TPP2'
-  if not isSkipTitle:
-    st.header(script)
-  ######
-  dp, dw, dfDict, hv = btSetup([undQ,undB,undG,undD,undC],yrStart=yrStart-1)
-  ratioDf = dp / dp.rolling(200).mean()
-  isOkDf = (ratioDf >= 1) * 1
-  wDf = (1 / hv) * isOkDf
-  wDf[undC]*=.5
-  rDf = np.log(dp / dp.shift(1))
-  for i in endpoints(rDf):
-    origin = i - lookback + 1
-    if origin >= 0:
-      prS = rDf.iloc[origin:(i + 1)].multiply(wDf.iloc[i], axis=1).sum(axis=1)
-      pHv = ((prS ** 2).mean()) ** .5 * (252 ** .5)
-      dw.iloc[i] = wDf.iloc[i] * volTgt / pHv
-  dw[undQ]=dw[undQ]*multQ
-  dw[undB]=dw[undB]*multB
-  dw[undG]=dw[undG]*multG
-  dw[undD]=dw[undD]*multD
-  dw[undC]=dw[undC]*multC
-  dw.clip(0, maxWgt, inplace=True)
-  st.header('Prices')
-  stWriteDf(dp.tail())
-  st.header('Ratios')
-  stWriteDf(ratioDf.round(3).tail())
-  st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
-
 def runRSSCore(yrStart):
   und='SPY'
   volTgt = .32
