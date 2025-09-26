@@ -40,14 +40,6 @@ def bt2016_2():
   st.divider()
   ql.runCore2(2016)
 
-def bt2012_tpp2():
-  st.divider()
-  ql.runTPP2(2012)
-
-def bt2016_tpp2():
-  st.divider()
-  ql.runTPP2(2016)
-
 ######
 # Init
 ######
@@ -72,7 +64,7 @@ if ul.stCheckPW('password_CR'):
 
   # Choices
   st.header('Choices')
-  col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+  col1, col2, col3, col4, col5 = st.columns(5)
   with col1:
     if st.button('Betas'):
       st.session_state.button_clicked = 'betas'
@@ -88,12 +80,6 @@ if ul.stCheckPW('password_CR'):
   with col5:
     if st.button('Backtest (2008) Pre-Release'):
       st.session_state.button_clicked = '2008_2'
-  with col6:
-    if st.button('Backtest (2016) TPP2 Pre-Release'):
-      st.session_state.button_clicked = '2016_tpp2'
-  with col7:
-    if st.button('Backtest (2012) TPP2 Pre-Release'):
-      st.session_state.button_clicked = '2012_tpp2'
 
   # Process
   if st.session_state.button_clicked == '2008':
@@ -104,10 +90,6 @@ if ul.stCheckPW('password_CR'):
     bt2008_2()
   elif st.session_state.button_clicked=='2016_2':
     bt2016_2()
-  elif st.session_state.button_clicked=='2012_tpp2':
-    bt2012_tpp2()
-  elif st.session_state.button_clicked=='2016_tpp2':
-    bt2016_tpp2()
   elif st.session_state.button_clicked=='betas':
     st.header('Betas (Return regressions of futures vs. ETFs)')
     d = ql.getCoreBetas()
