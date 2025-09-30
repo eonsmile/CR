@@ -32,14 +32,6 @@ def bt2016():
   st.divider()
   ql.runCore(2016)
 
-def bt2008_2():
-  st.divider()
-  ql.runCore2(2008)
-
-def bt2016_2():
-  st.divider()
-  ql.runCore2(2016)
-
 ######
 # Init
 ######
@@ -58,13 +50,13 @@ if ul.stCheckPW('password_CR'):
   st.header('Weights')
   df,lastUpdate=ql.getCoreWeightsDf()
   st.markdown(f"Last Update: <font color='red'>{lastUpdate}</font>", unsafe_allow_html=True)
-  cols=['Total Weight','TPP (1/2)','RSS (0)','IBS (1/2)']
+  cols=['Total Weight','TPP (1/2)','RSS (1/4)','IBS (1/4)']
   df[cols] = df[cols].map(lambda n: '' if n == 0 else f"{n:.1%}")
   st.dataframe(df.style.apply(lambda row: ['background-color:red'] * len(row) if row['Last Update']==lastUpdate else [''] * len(row), axis=1))
 
   # Choices
   st.header('Choices')
-  col1, col2, col3, col4, col5 = st.columns(5)
+  col1, col2, col3 = st.columns(3)
   with col1:
     if st.button('Betas'):
       st.session_state.button_clicked = 'betas'
@@ -74,22 +66,12 @@ if ul.stCheckPW('password_CR'):
   with col3:
     if st.button('Backtest (2008)'):
       st.session_state.button_clicked = '2008'
-  with col4:
-    if st.button('Backtest (2016) Pre-Release'):
-      st.session_state.button_clicked = '2016_2'
-  with col5:
-    if st.button('Backtest (2008) Pre-Release'):
-      st.session_state.button_clicked = '2008_2'
 
   # Process
   if st.session_state.button_clicked == '2008':
     bt2008()
   elif st.session_state.button_clicked=='2016':
     bt2016()
-  elif st.session_state.button_clicked == '2008_2':
-    bt2008_2()
-  elif st.session_state.button_clicked=='2016_2':
-    bt2016_2()
   elif st.session_state.button_clicked=='betas':
     st.header('Betas (Return regressions of futures vs. ETFs)')
     d = ql.getCoreBetas()

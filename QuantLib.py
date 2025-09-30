@@ -244,7 +244,7 @@ def getCoreWeightsDf():
     l.append([dts[i], und, totalWeight, tppDict[und], rssDict[und], ibsDict[und]])
     i += 1
   df = pd.DataFrame(l)
-  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/2),RSS (0),IBS (1/2)')
+  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/2),RSS (1/4),IBS (1/4)')
   df.set_index(['ETF'], inplace=True)
   return df,lastUpdate
 
@@ -336,13 +336,10 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 # Scripts
 #########
-def runIBSCore(yrStart, mult=1, isBeta=False):
+def runIBSCore(yrStart, mult=1):
   und = 'QQQ'
-  volTgt = .18
+  volTgt = .23
   maxWgt = 2
-  if isBeta:
-    volTgt = .23
-    maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   df = dfDict[und]
@@ -362,12 +359,12 @@ def runIBSCore(yrStart, mult=1, isBeta=False):
   d['stateS']=stateS
   return d
 
-def runIBS(yrStart,mult=1, isSkipTitle=False, isBeta=False):
+def runIBS(yrStart,mult=1, isSkipTitle=False):
   script = 'IBS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runIBSCore(yrStart,mult=mult, isBeta=isBeta)
+  d=runIBSCore(yrStart,mult=mult)
   st.header('Tables')
   st.subheader(d['und'])
   df = d['dfDict'][d['und']]
@@ -378,17 +375,14 @@ def runIBS(yrStart,mult=1, isSkipTitle=False, isBeta=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False,isBeta=False):
+def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undQ = 'QQQ'
   undB = 'IEF'
   undG = 'GLD'
   undD = 'UUP'
   lookback = 32
-  volTgt = .1
+  volTgt = .125
   maxWgt = 2
-  if isBeta:
-    volTgt = .125
-    maxWgt = 2
   ######
   script = 'TPP'
   if not isSkipTitle:
@@ -506,21 +500,11 @@ def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
 def runCore(yrStart):
   runTPP(yrStart)
   st.divider()
-  runIBS(yrStart)
-  st.divider()
-  strategies = ul.spl('TPP,IBS')
-  weights = [1 / 2, 1 / 2]
-  script = 'Core'
-  runAggregate(yrStart, strategies, weights, script)
-
-def runCore2(yrStart):
-  runTPP(yrStart,isBeta=True)
-  st.divider()
   runRSS(yrStart)
   st.divider()
-  runIBS(yrStart,isBeta=True)
+  runIBS(yrStart)
   st.divider()
   strategies = ul.spl('TPP,RSS,IBS')
-  weights = [1/2, 1/4, 1/4]
-  script = 'Core Pre-Release'
+  weights = [1 / 2, 1 / 4, 1 / 4]
+  script = 'Core'
   runAggregate(yrStart, strategies, weights, script, isCorrs=True)
