@@ -226,7 +226,7 @@ def getCoreWeightsDf():
   #####
   d = ul.cachePersist('r', 'CR')['TPPDict']
   tppDict=emptyDict.copy()
-  for und in ul.spl('QQQ,IEF,GLD,UUP'):
+  for und in ul.spl('SPY,QQQ,IEF,GLD,UUP'):
     tppDict[und] = d[und] + ep
   ####
   d = ul.cachePersist('r', 'CR')['RSSDict']
