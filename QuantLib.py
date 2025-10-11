@@ -414,11 +414,8 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
 
 def runRSSCore(yrStart):
   und='SPY'
-  volTgt = .32
-  maxWgt = 1.5
-  if True:
-    volTgt = .165
-    maxWgt = 2
+  volTgt = .165
+  maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   cS = dfDict[und]['Close']
@@ -458,6 +455,7 @@ def runRSS(yrStart,isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
+
 
 #####
 
