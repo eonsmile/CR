@@ -278,11 +278,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
   #####
-  if und=='IBIT':
-    df2 = pd.read_csv('BTC_NYSE_Close.csv')
-    df2.columns = ['Date', 'Close']
-    df2['Date'] = pd.to_datetime(df2['Date'].apply(lambda x: pendulum.parse(x, strict=False).date()))
-    df2 = df2.set_index('Date')
+  if und=='CAOS':
+    df2 = pd.read_csv('AVOLX.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
     for col in ['Open', 'High', 'Low', 'Volume']:
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     df = extend(df, df2)
@@ -456,6 +453,44 @@ def runRSS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runLI3(yrStart,isSkipTitle=False):
+  und = 'LI3'
+  ######
+  script = 'LI3'
+  if not isSkipTitle:
+    st.header(script)
+  ######
+  df = pd.read_csv('LI3.csv', index_col=0)
+  s=df['ar']
+  s.index = pd.to_datetime(s.index)
+  s=applyDates(s,getPriceHistory('SPY',yrStart=yrStart-1))
+  dp=s.to_frame()
+  dp.columns = [und]
+  dw = dp.copy()
+  dw[:] = 1
+  dw[und] = cleanS(dw[und], isMonthlyRebal=True)
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+def runCAOS(yrStart,isSkipTitle=False):
+  und = 'CAOS'
+  ######
+  script = 'CAOS'
+  if not isSkipTitle:
+    st.header(script)
+  ######
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  s = dw[und].copy()
+  s[:]=1
+  dw[und]=cleanS(s,isMonthlyRebal=True)
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
 
 #####
 
