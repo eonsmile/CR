@@ -453,14 +453,14 @@ def runRSS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runLI3(yrStart,isSkipTitle=False):
-  und = 'LI3'
+def runWTOP4(yrStart,isSkipTitle=False):
+  und = 'WTOP4'
   ######
-  script = 'LI3'
+  script = 'WTOP4'
   if not isSkipTitle:
     st.header(script)
   ######
-  df = pd.read_csv('LI3.csv', index_col=0)
+  df = pd.read_csv('WTOP4.csv', index_col=0)
   s=df['ar']
   s.index = pd.to_datetime(s.index)
   s=applyDates(s,getPriceHistory('SPY',yrStart=yrStart-1))
