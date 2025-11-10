@@ -204,7 +204,7 @@ def getBeta(ts1, ts2, lookbackWindow=90):
   #####
   return coef1 if mae1<mae2 else coef2
 
-def getCoreBetas():  
+def getCoreBetas(isZB=False):
   yrStart=pendulum.now().year-2
   iefS=getPriceHistory('IEF',yrStart=yrStart)['Close']
   znS = getYClose2Y('ZN=F')
@@ -212,6 +212,10 @@ def getCoreBetas():
   d=dict()
   d['ZN_IEF']=getBeta(znS, iefS)
   d['TN_IEF']=getBeta(tnS, iefS)
+  if isZB:
+    tltS=getPriceHistory('TLT',yrStart=yrStart)['Close']
+    zbS = getYClose2Y('ZB=F')
+    d['ZB_TLT'] = getBeta(zbS, tltS)
   return d
 
 def getCoreWeightsDf():
@@ -453,22 +457,17 @@ def runRSS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runWTOP4(yrStart,isSkipTitle=False):
-  und = 'WTOP4'
+def runBTAL(yrStart,isSkipTitle=False):
+  und = 'BTAL'
   ######
-  script = 'WTOP4'
+  script = 'BTAL'
   if not isSkipTitle:
     st.header(script)
   ######
-  df = pd.read_csv('WTOP4.csv', index_col=0)
-  s=df['ar']
-  s.index = pd.to_datetime(s.index)
-  s=applyDates(s,getPriceHistory('SPY',yrStart=yrStart-1))
-  dp=s.to_frame()
-  dp.columns = [und]
-  dw = dp.copy()
-  dw[:] = 1
-  dw[und] = cleanS(dw[und], isMonthlyRebal=True)
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  s = dw[und].copy()
+  s[:]=1
+  dw[und]=cleanS(s,isMonthlyRebal=True)
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
@@ -486,6 +485,28 @@ def runCAOS(yrStart,isSkipTitle=False):
   s = dw[und].copy()
   s[:]=1
   dw[und]=cleanS(s,isMonthlyRebal=True)
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+def runHEDGE(yrStart,isSkipTitle=False):
+  und = 'HEDGE'
+  ######
+  script = 'HEDGE'
+  if not isSkipTitle:
+    st.header(script)
+  ######
+  df = pd.read_csv('HEDGE.csv', index_col=0)
+  s=df['ar']
+  s.index = pd.to_datetime(s.index)
+  s=applyDates(s,getPriceHistory('SPY',yrStart=yrStart-1))
+  dp=s.to_frame()
+  dp.columns = [und]
+  dw = dp.copy()
+  dw[:] = 1
+  dw[und] = cleanS(dw[und], isMonthlyRebal=True)
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
