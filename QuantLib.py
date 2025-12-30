@@ -209,13 +209,16 @@ def getCoreBetas(isZB=False):
   iefS=getPriceHistory('IEF',yrStart=yrStart)['Close']
   znS = getYClose2Y('ZN=F')
   tnS = getYClose2Y('TN=F')
+
   d=dict()
   d['ZN_IEF']=getBeta(znS, iefS)
   d['TN_IEF']=getBeta(tnS, iefS)
   if isZB:
     tltS=getPriceHistory('TLT',yrStart=yrStart)['Close']
     zbS = getYClose2Y('ZB=F')
+    ubS = getYClose2Y('UB=F')
     d['ZB_TLT'] = getBeta(zbS, tltS)
+    d['UB_TLT'] = getBeta(ubS, tltS)
   return d
 
 def getCoreWeightsDf():
@@ -284,6 +287,16 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   #####
   if und=='CAOS':
     df2 = pd.read_csv('AVOLX.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
+    for col in ['Open', 'High', 'Low', 'Volume']:
+      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
+    df = extend(df, df2)
+  elif und=='DBMF':
+    df2 = pd.read_csv('DBMF.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
+    for col in ['Open', 'High', 'Low', 'Volume']:
+      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
+    df = extend(df, df2)
+  elif und=='KMLM':
+    df2 = pd.read_csv('KMLM.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
     for col in ['Open', 'High', 'Low', 'Volume']:
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     df = extend(df, df2)
@@ -457,56 +470,29 @@ def runRSS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runBTAL(yrStart,isSkipTitle=False):
-  und = 'BTAL'
-  ######
-  script = 'BTAL'
+def runMM(yrStart,isSkipTitle=False):
+  script = 'MM'
   if not isSkipTitle:
     st.header(script)
-  ######
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  s = dw[und].copy()
-  s[:]=1
-  dw[und]=cleanS(s,isMonthlyRebal=True)
-  st.header('Prices')
-  stWriteDf(dp.tail())
-  st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  #####
+  h=.125
+  d = {'SPMO':(1-h*4),
+       'DBMF':h,
+       'KMLM':h,
+       'BTAL':h,
+       'CAOS':h}
 
-def runCAOS(yrStart,isSkipTitle=False):
-  und = 'CAOS'
-  ######
-  script = 'CAOS'
-  if not isSkipTitle:
-    st.header(script)
-  ######
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  s = dw[und].copy()
-  s[:]=1
-  dw[und]=cleanS(s,isMonthlyRebal=True)
-  st.header('Prices')
-  stWriteDf(dp.tail())
-  st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  # d = {'SPMO':1}
+  # yrStart=2018
 
-def runHEDGE(yrStart,isSkipTitle=False):
-  und = 'HEDGE'
+  # Calmar: 1.60          MAR: 0.87          Sharpe: 1.06          Cagr: 10.3%          MDD: 11.8%
+
   ######
-  script = 'HEDGE'
-  if not isSkipTitle:
-    st.header(script)
-  ######
-  df = pd.read_csv('HEDGE.csv', index_col=0)
-  s=df['ar']
-  s.index = pd.to_datetime(s.index)
-  s=applyDates(s,getPriceHistory('SPY',yrStart=yrStart-1))
-  dp=s.to_frame()
-  dp.columns = [und]
-  dw = dp.copy()
-  dw[:] = 1
-  dw[und] = cleanS(dw[und], isMonthlyRebal=True)
+  dp, dw, dfDict, hv = btSetup(d.keys(),yrStart=yrStart-1)
+  pe = endpoints(dw)
+  for und in d.keys():
+    dw.iloc[pe,dw.columns.get_loc(und)]=d[und]
+
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
@@ -515,7 +501,7 @@ def runHEDGE(yrStart,isSkipTitle=False):
 
 #####
 
-def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
+def runAggregate(yrStart,strategies,weights,script,isBFill=False, isCorrs=False):
   st.header(script)
   #####
   # Weights
@@ -529,6 +515,7 @@ def runAggregate(yrStart,strategies,weights,script,isCorrs=False):
   for strategy in strategies:
     dp[strategy] = ul.cachePersist('r', strategy)
   dp = applyDates(dp, dp.iloc[:,-1]).ffill()
+  if isBFill: dp=dp.bfill()
   dw = dp * np.nan
   pe = endpoints(dw)
   for i in range(len(weights)):
