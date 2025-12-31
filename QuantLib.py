@@ -475,24 +475,30 @@ def runMM(yrStart,isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
-  h=.125
-  d = {'SPMO':(1-h*4),
-       'DBMF':h,
-       'KMLM':h,
-       'BTAL':h,
-       'CAOS':h}
+  d = {'SPMO':.5,
+       'DBMF':.1,
+       'KMLM':.1,
+       'BTAL':.1,
+       'CAOS':.1,
+       'H':.1}
 
-  # d = {'SPMO':1}
-  # yrStart=2018
+  #d = {'AQMIX':1,'H':0}
+  #yrStart=2018
 
-  # Calmar: 1.60          MAR: 0.87          Sharpe: 1.06          Cagr: 10.3%          MDD: 11.8%
+  # base Calmar: 1.77          MAR: 0.88          Sharpe: 1.13          Cagr: 10.9%          MDD: 12.3%
 
   ######
   dp, dw, dfDict, hv = btSetup(d.keys(),yrStart=yrStart-1)
   pe = endpoints(dw)
   for und in d.keys():
     dw.iloc[pe,dw.columns.get_loc(und)]=d[und]
-
+  #####
+  df = pd.read_csv('Logical-invest.csv', index_col=0)
+  s = df['ar']
+  s.index = pd.to_datetime(s.index)
+  s = applyDates(s, dp)
+  dp['H'] = s
+  #####
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
