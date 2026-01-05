@@ -50,6 +50,7 @@ def bt(script,dp,dw,yrStart):
       p = dp2.iloc[i]
       ec = ecS.iloc[i]
   printCalendar(ecS)
+  #ecS.to_csv(f"c:\\cache\\ec_{script}.csv")
   #####
   def m(s):
     d=dict()
@@ -58,8 +59,9 @@ def bt(script,dp,dw,yrStart):
     dd = s / s.cummax() - 1
     vol = ((np.log(s / s.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
     d['sharpe'] = d['cagr'] / vol
-    d['mdd'] = -min(dd)
-    d['mar'] = d['cagr']/d['mdd']
+    d['maxdd'] = -min(dd)
+    #d['avgdd'] = -dd.mean()
+    d['mar'] = d['cagr']/d['maxdd']
     return d
   #####
   d=m(ecS)
@@ -68,11 +70,12 @@ def bt(script,dp,dw,yrStart):
   m=lambda label,z: f"{label}: <font color='red'>{z}</font>"
   sep='&nbsp;'*10
   st.markdown(sep.join([
-    m('&nbsp;'*3+'Calmar', f"{d3['mar']:.2f}"),
+    m('&nbsp;' * 3 + 'Calmar', f"{d3['mar']:.2f}"),
     m('MAR', f"{d['mar']:.2f}"),
     m('Sharpe', f"{d['sharpe']:.2f}"),
     m('Cagr', f"{d['cagr']:.1%}"),
-    m('MDD', f"{d['mdd']:.1%}"),
+    m('MaxDD', f"{d['maxdd']:.1%}"),
+    #m('AvgDD', f"{d['avgdd']:.1%}")
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
@@ -273,7 +276,10 @@ def getIbsS(df):
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
   ticker=und
-  if '.' not in ticker: ticker=f"{und}.US"
+  if len(ticker) >= 3 and ticker.startswith('LU') and ticker[2].isdigit():
+    ticker=f"{und}.EUFUND"
+  elif '.' not in ticker:
+    ticker=f"{und}.US"
   df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
   df['date'] = pd.to_datetime(df['date'])
   df['ratio'] = df['adjusted_close'] / df['close']
@@ -285,21 +291,22 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
   #####
+  def m(df,fn):
+    df2 = pd.read_csv(fn, index_col=0, parse_dates=True, date_format='%m/%d/%Y')
+    for col in ['Open', 'High', 'Low', 'Volume']:
+      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
+    return extend(df, df2)
+  #####
   if und=='CAOS':
-    df2 = pd.read_csv('AVOLX.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
-    for col in ['Open', 'High', 'Low', 'Volume']:
-      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
-    df = extend(df, df2)
+    df = m(df,'AVOLX.csv')
   elif und=='DBMF':
-    df2 = pd.read_csv('DBMF.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
-    for col in ['Open', 'High', 'Low', 'Volume']:
-      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
-    df = extend(df, df2)
+    df = m(df, 'DBMF.csv')
   elif und=='KMLM':
-    df2 = pd.read_csv('KMLM.csv', index_col=0, parse_dates=True, date_format='%m/%d/%Y')
-    for col in ['Open', 'High', 'Low', 'Volume']:
-      df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
-    df = extend(df, df2)
+    df = m(df,'KMLM.csv')
+  elif und=='CTA':
+    df = m(df, 'CTA.csv')
+  #elif und=='JQUA':
+  #  df = extend(df, getPriceHistory('SPHQ',yrStart=yrStart))
   return df
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
@@ -470,40 +477,96 @@ def runRSS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runMM(yrStart,isSkipTitle=False):
-  script = 'MM'
+#############################################################################################
+
+def runQS12Core(yrStart):
+  undG = 'GLD'
+  undB = 'TLT'
+  volTgt = .16
+  maxWgt = 2
+  tickers = [undG,undB]
+  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
+  hS = dfDict[undG]['High']
+  cS = dfDict[undG]['Close']
+  cSB = dfDict[undB]['Close']
+  #####
+  cond1S = cS > hS.shift(1).rolling(3).max()
+  cond2S = cSB > cSB.shift()
+  cond3S = (cS * 0).astype(int)
+  cond3S.loc[cond3S.index.weekday != 3] = 1
+  isEntryS = (cond1S & cond2S & cond3S)*1
+  isExitS = (cS>hS.shift())*1
+  isExitS.loc[isEntryS == 1] = 0
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dp=dp.drop(undB,axis=1)
+  dw=dw.drop(undB,axis=1)
+  hv=hv.drop(undB,axis=1)
+  dw[undG] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  #####
+  d['cS'] = cS
+  d['hS'] = hS
+  d['cSB'] = cSB
+  d['stateS']=stateS
+  return d
+
+def runQS12(yrStart, isSkipTitle=False):
+  script = 'QS12'
   if not isSkipTitle:
     st.header(script)
   #####
-  d = {'SPMO':.5,
-       'DBMF':.1,
-       'KMLM':.1,
-       'BTAL':.1,
-       'CAOS':.1,
-       'H':.1}
-
-  #d = {'AQMIX':1,'H':0}
-  #yrStart=2018
-
-  # base Calmar: 1.77          MAR: 0.88          Sharpe: 1.13          Cagr: 10.9%          MDD: 12.3%
-
-  ######
-  dp, dw, dfDict, hv = btSetup(d.keys(),yrStart=yrStart-1)
-  pe = endpoints(dw)
-  for und in d.keys():
-    dw.iloc[pe,dw.columns.get_loc(und)]=d[und]
+  d=runQS12Core(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
   #####
-  df = pd.read_csv('Logical-invest.csv', index_col=0)
-  s = df['ar']
-  s.index = pd.to_datetime(s.index)
-  s = applyDates(s, dp)
-  dp['H'] = s
-  #####
-  st.header('Prices')
-  stWriteDf(dp.tail())
   st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runVRSCore(yrStart):
+  lw = .5
+  sw = lw/2
+  #    Calmar: 4.20          MAR: 4.18          Sharpe: 3.02          Cagr: 36.0%          MaxDD: 8.6%
+  #####
+  und='VIXY'
+  etc=ul.spl('VIX1D.INDX,VIX.INDX,VIX3M.INDX')
+  dp, dw, dfDict, _ = btSetup([und]+etc, yrStart=yrStart - 1)
+  s=dp['VIX1D.INDX']
+  dw[und]=((s<=10)*lw-(s>=15)*sw)*(dp['VIX.INDX']<=dp['VIX3M.INDX'])
+  #####
+  dp2 = dp.copy()
+  for und in etc:
+    dp = dp.drop(und, axis=1)
+    dw = dw.drop(und, axis=1)
+  #####
+  dw = cleanS(dw,isMonthlyRebal=False)
+  dw.loc[dw.index.year < yrStart] = 0
+  d=dict()
+  d['dp']=dp
+  d['dp2']=dp2
+  d['dw']=dw
+  return d
+
+def runVRS(yrStart,isSkipTitle=False):
+  script = 'VRS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runVRSCore(yrStart)
+  st.header('Prices')
+  dwTail(d['dp2'])
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 
@@ -555,3 +618,55 @@ def runCore(yrStart):
   weights = [1 / 2, 1 / 4, 1 / 4]
   script = 'Core'
   runAggregate(yrStart, strategies, weights, script, isCorrs=True)
+
+def runSatellite(yrStart, isSkipTitle=False):
+  script = 'Satellite'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  h=.1
+  d = {'SPMO':.3,
+       'LI':h,
+       'QS':h,
+       'VRS': h, # skip funding
+       #####
+       'CTA': h,
+       'DBMF':h,
+       'KMLM':h,
+       #####
+       'BTAL':h,
+       'CAOS':h,
+       }
+  #d={'CAOS':1,'SPMO':0}
+
+  ######
+  #       Calmar: 2.36          MAR: 1.43          Sharpe: 1.54          Cagr: 10.7%          MaxDD: 7.5%
+
+  ######
+  dp, dw, dfDict, hv = btSetup(d.keys(),yrStart=yrStart-1)
+  pe = endpoints(dw)
+  for und in d.keys():
+    dw.iloc[pe,dw.columns.get_loc(und)]=d[und]
+  #####
+  def m(d,dp,key,fn):
+    if key in d.keys():
+      df = pd.read_csv(fn, index_col=0)
+      s = df['ar']
+      s.index = pd.to_datetime(s.index)
+      s = applyDates(s, dp)
+      dp[key] = s
+  m(d,dp,'LI','Logical-Invest.csv')
+  #####
+  def m(d,dp,key,key2):
+    if key in d.keys():
+      dp[key]=applyDates(ul.cachePersist('r', key2), dp)
+  m(d,dp,'QS','QS12')
+  m(d,dp,'VRS','VRS')
+  #####
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  if True:
+    dp = dp.bfill()
+  bt(script, dp, dw, yrStart)
