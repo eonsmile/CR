@@ -8,6 +8,7 @@ import pandas as pd
 import requests
 import math
 import pendulum
+import pandas_market_calendars
 import yahooquery
 import curl_cffi
 import warnings
@@ -155,6 +156,30 @@ def endpoints(df, offset=0):
     date_idx[date_idx > df.shape[0] - 1] = df.shape[0] - 1
   out = np.unique(date_idx)
   return out
+
+
+def getNYSEMonthEnd(offset=0):
+  tz = 'America/New_York'
+  now = pendulum.now(tz)
+
+  monthStart = now.start_of('month').to_date_string()
+  monthEnd = now.end_of('month').to_date_string()
+
+  nyseCalendar = pandas_market_calendars.get_calendar('NYSE')
+  schedule = nyseCalendar.schedule(start_date=monthStart, end_date=monthEnd)
+
+  sessions = schedule.index
+  if len(sessions) == 0:
+    raise ValueError(f'No NYSE sessions found for {now.format("YYYY-MM")}')
+
+  targetIdx = (len(sessions) - 1) + offset
+  if targetIdx < 0 or targetIdx >= len(sessions):
+    raise ValueError(
+      f'offset {offset} is out of range for {now.format("YYYY-MM")} '
+      f'(valid offsets: {-len(sessions) + 1}..0)'
+    )
+
+  return pd.Timestamp(sessions[targetIdx]).normalize()
 
 #############################################################################################
 
@@ -479,6 +504,57 @@ def runRSS(yrStart,isSkipTitle=False):
 
 #############################################################################################
 
+def runBSSCore(yrStart):
+  und = 'TLT'
+  dp, dw, dfDict, hv = btSetup([und,'SPY'],yrStart=yrStart-1)
+  cS = dp['SPY']
+  dp = dp.drop('SPY', axis=1)
+  dw = dw.drop('SPY', axis=1)
+  #####
+  pe = endpoints(cS)[:-1]
+  anchorS=cS.copy()
+  anchorS[:]=np.nan
+  anchorS.iloc[pe+1]=cS.iloc[pe]
+  anchorS=anchorS.ffill()
+  mtdS=(cS/anchorS-1).rename('SPY MTD')
+  isOkS = (mtdS>0)*1
+  dw[:]=np.nan
+  #####
+  pe = endpoints(dp, -6)[:-1]
+  dw.loc[dw.index[pe], und] = isOkS
+  dt = getNYSEMonthEnd(-6)
+  if dt in dw.index:
+    dw.loc[dt]=isOkS[dt]
+  dtMEMinus6=dt
+  #####
+  pe = endpoints(dp)[:-1]
+  dw.loc[dw.index[pe], und] = 0
+  dt = getNYSEMonthEnd()
+  if dt in dw.index:
+    dw.loc[dt]=0
+  #####
+  dw=cleanS(dw)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['mtdS']=mtdS
+  d['dtMEMinus6']=dtMEMinus6
+  return d
+
+def runBSS(yrStart,isSkipTitle=False):
+  script = 'BSS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runBSSCore(yrStart)
+  st.write(f"ME-6: {d['dtMEMinus6']:%Y-%m-%d}")
+  st.header('Tables')
+  tableS = ul.merge(d['dp'], d['mtdS'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runQS12Core(yrStart):
   undG = 'GLD'
   undB = 'TLT'
@@ -627,8 +703,10 @@ def runSatellite(yrStart, isSkipTitle=False):
   h=.1
   d = {'SPMO':.3,
        'LI':h,
-       'QS':h,
-       'VRS': h, # skip funding
+       'V': h, # skip funding
+       #####
+       'B': h,  # skip funding
+       'Q': h,
        #####
        'CTA': h,
        'DBMF':h,
@@ -640,7 +718,7 @@ def runSatellite(yrStart, isSkipTitle=False):
   #d={'CAOS':1,'SPMO':0}
 
   ######
-  #       Calmar: 2.36          MAR: 1.43          Sharpe: 1.54          Cagr: 10.7%          MaxDD: 7.5%
+  #    Calmar: 2.67          MAR: 1.58          Sharpe: 1.63          Cagr: 11.3%          MaxDD: 7.2%
 
   ######
   dp, dw, dfDict, hv = btSetup(d.keys(),yrStart=yrStart-1)
@@ -660,8 +738,9 @@ def runSatellite(yrStart, isSkipTitle=False):
   def m(d,dp,key,key2):
     if key in d.keys():
       dp[key]=applyDates(ul.cachePersist('r', key2), dp)
-  m(d,dp,'QS','QS12')
-  m(d,dp,'VRS','VRS')
+  m(d, dp, 'V', 'VRS')
+  m(d, dp, 'B', 'BSS')
+  m(d,dp,'Q','QS12')
   #####
   st.header('Prices')
   stWriteDf(dp.tail())
