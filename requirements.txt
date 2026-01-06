@@ -6,3 +6,4 @@ pretty_errors
 numpy
 curl_cffi
 pandas-ta-classic
+pandas_market_calendars
