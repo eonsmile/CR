@@ -36,7 +36,11 @@ def bt(script,dp,dw,yrStart):
   dw2 = dw.copy()
   dwAllOrNone(dw2)
   validRows = ~dw2.isnull().any(axis=1)
-  dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
+  dtFirstValid=dw2[validRows].index[0]
+  if dtFirstValid.year < yrStart:
+    dtOrigin = dw2[validRows].index[np.where(dw2[validRows].index.year < yrStart)[0][-1]]
+  else:
+    dtOrigin = dtFirstValid
   dp2 = dp2.iloc[dp2.index >= dtOrigin]
   dw2 = dw2.iloc[dw2.index >= dtOrigin]
   ecS = dp2.iloc[:, 0].rename('Equity Curve') * 0
@@ -51,7 +55,6 @@ def bt(script,dp,dw,yrStart):
       p = dp2.iloc[i]
       ec = ecS.iloc[i]
   printCalendar(ecS)
-  #ecS.to_csv(f"c:\\cache\\ec_{script}.csv")
   #####
   def m(s):
     d=dict()
@@ -61,7 +64,6 @@ def bt(script,dp,dw,yrStart):
     vol = ((np.log(s / s.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
     d['sharpe'] = d['cagr'] / vol
     d['maxdd'] = -min(dd)
-    #d['avgdd'] = -dd.mean()
     d['mar'] = d['cagr']/d['maxdd']
     return d
   #####
@@ -76,7 +78,6 @@ def bt(script,dp,dw,yrStart):
     m('Sharpe', f"{d['sharpe']:.2f}"),
     m('Cagr', f"{d['cagr']:.1%}"),
     m('MaxDD', f"{d['maxdd']:.1%}"),
-    #m('AvgDD', f"{d['avgdd']:.1%}")
   ]), unsafe_allow_html=True)
   ul.cachePersist('w',script,ecS)
 
@@ -317,7 +318,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   df = df.sort_values(by=['date']).round(10)
   #####
   def m(df,fn):
-    df2 = pd.read_csv(fn, index_col=0, parse_dates=True, date_format='%m/%d/%Y')
+    df2 = pd.read_csv(f"data/{fn}", index_col=0, parse_dates=True, date_format='%m/%d/%Y')
     for col in ['Open', 'High', 'Low', 'Volume']:
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
@@ -330,8 +331,13 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = m(df,'KMLM.csv')
   elif und=='CTA':
     df = m(df, 'CTA.csv')
-  #elif und=='JQUA':
-  #  df = extend(df, getPriceHistory('SPHQ',yrStart=yrStart))
+  elif und == 'BDRY':
+    df = m(df, 'BDI.csv')
+  elif und == 'IBIT':
+    df = m(df, 'IBIT.csv')
+  elif und=='VIX1D.INDX':
+    dtStart = '2023-4-24'
+    df = df.loc[df.index>=dtStart]
   return df
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
@@ -369,7 +375,9 @@ def stWriteDf(df,isMaxHeight=False):
   height=((len(df2) + 1) * 35 + 3)
   if isinstance(df2.index, pd.DatetimeIndex):
     df2.index = pd.to_datetime(df2.index).strftime('%Y-%m-%d')
-  df2 = df2.replace(-0.0, 0.0).style.format(formatter)
+  with pd.option_context('future.no_silent_downcasting', True):
+    df2 = df2.replace(-0.0, 0.0)
+  df2 = df2.style.format(formatter)
   if 'State' in df2.columns:
     df2 = df2.map(lambda n: f"color: {'red' if n==0 else '#228B22'}", subset=['State'])
   if isMaxHeight:
@@ -504,52 +512,195 @@ def runRSS(yrStart,isSkipTitle=False):
 
 #############################################################################################
 
-def runBSSCore(yrStart):
-  und = 'TLT'
-  dp, dw, dfDict, hv = btSetup([und,'SPY'],yrStart=yrStart-1)
-  cS = dp['SPY']
-  dp = dp.drop('SPY', axis=1)
-  dw = dw.drop('SPY', axis=1)
+def runHYSCore(yrStart):
+  volTgt = .15
+  maxWgt = 2
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,BTAL,HYG'),yrStart=yrStart-1)
   #####
-  pe = endpoints(cS)[:-1]
-  anchorS=cS.copy()
-  anchorS[:]=np.nan
-  anchorS.iloc[pe+1]=cS.iloc[pe]
-  anchorS=anchorS.ffill()
-  mtdS=(cS/anchorS-1).rename('SPY MTD')
-  isOkS = (mtdS>0)*1
-  dw[:]=np.nan
+  hygS = dfDict['HYG']['Close'].rename('HYG')
+  ratioS = (hygS/EMA(hygS,100)).rename('Ratio')
+  stateS = applyDates(ratioS>1,dp)*1
   #####
-  pe = endpoints(dp, -6)[:-1]
-  dw.loc[dw.index[pe], und] = isOkS
-  dt = getNYSEMonthEnd(-6)
-  if dt in dw.index:
-    dw.loc[dt]=isOkS[dt]
-  dtMEMinus6=dt
+  dp = dp.drop('HYG', axis=1)
+  dw = dw.drop('HYG', axis=1)
+  hv = hv.drop('HYG', axis=1)
   #####
-  pe = endpoints(dp)[:-1]
-  dw.loc[dw.index[pe], und] = 0
-  dt = getNYSEMonthEnd()
-  if dt in dw.index:
-    dw.loc[dt]=0
+  dw['SPY'] = stateS
+  dw['BTAL'] = 1 - stateS
+  dw=cleanS(dw,isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
   #####
-  dw=cleanS(dw)
   d=dict()
   d['dp']=dp
   d['dw']=dw
-  d['mtdS']=mtdS
-  d['dtMEMinus6']=dtMEMinus6
+  d['hygS'] = hygS
+  d['ratioS']=ratioS
   return d
 
-def runBSS(yrStart,isSkipTitle=False):
-  script = 'BSS'
+def runHYS(yrStart,isSkipTitle=False):
+  script = 'HYS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runBSSCore(yrStart)
-  st.write(f"ME-6: {d['dtMEMinus6']:%Y-%m-%d}")
+  d=runHYSCore(yrStart)
   st.header('Tables')
-  tableS = ul.merge(d['dp'], d['mtdS'].round(3), how='inner')
+  tableS = ul.merge(d['dp'],d['hygS'],d['ratioS'], how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runJJ5Core(yrStart):
+  etc=ul.spl('BDRY,IGIB,VV,TQQQ')
+  dp, dw, dfDict, hv = btSetup(ul.spl('QQQ,VIXY,SPY,GLD,EEM')+etc,yrStart=yrStart-1)
+  #####
+  rsiS_TQQQ = ta.rsi(dfDict['TQQQ']['Close'], length=10).rename('RSI')
+  rsiS_BDRY = ta.rsi(dfDict['BDRY']['Close'], length=50)
+  rsiS_IGIB = ta.rsi(dfDict['IGIB']['Close'], length=10)
+  rsiS_VV = ta.rsi(dfDict['VV']['Close'], length=10)
+  isOversoldS_TQQQ = applyDates(rsiS_TQQQ.rolling(2).max() < 25, dp).rename('OS') * 1.0
+  isOverbotS_TQQQ = applyDates(rsiS_TQQQ.rolling(2).min() > 80, dp).rename('OB') * 1.0
+  isCanaryS_BDRY=applyDates(rsiS_BDRY.rolling(2).min()>50,dp).rename('BDRY Canary')*1.0
+  isCanaryS_IGIB=(applyDates(rsiS_IGIB>rsiS_VV,dp).rename('IGIB Canary'))*1.0
+  #####
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  dw['QQQ'] = (isOversoldS_TQQQ == 1) * 3
+  dw['VIXY'] = (isOverbotS_TQQQ == 1) * 1
+  s = isOverbotS_TQQQ+isOversoldS_TQQQ
+  dw['SPY'] = ((s == 0) & (isCanaryS_BDRY == 1)) * 2
+  dw['GLD'] = ((s == 0) & (isCanaryS_BDRY==0) & (isCanaryS_IGIB==1))*1
+  dw['EEM'] = ((s == 0) & (isCanaryS_BDRY==0) & (isCanaryS_IGIB==0))*-1
+  dw=cleanS(dw*.65,isMonthlyRebal=True)
+  #####
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['rsiS_TQQQ'] = rsiS_TQQQ
+  d['isOversoldS_TQQQ'] = isOversoldS_TQQQ
+  d['isOverbotS_TQQQ'] = isOverbotS_TQQQ
+  d['isCanaryS_BDRY']=isCanaryS_BDRY
+  d['isCanaryS_IGIB']=isCanaryS_IGIB
+  return d
+
+def runJJ5(yrStart, isSkipTitle=False):
+  script = 'JJ5'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJJ5Core(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'],d['rsiS_TQQQ'].round(1),d['isOversoldS_TQQQ'],d['isOverbotS_TQQQ'],d['isCanaryS_BDRY'],d['isCanaryS_IGIB'], how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runJJ3Core(yrStart):
+  def getSMA12Mom(s):
+    sum = 0
+    for i in range(13):
+      sum += s.shift(i * 21)
+    return 13 * s / sum - 1
+  #####
+  etc=ul.spl('TQQQ,SPHB,SPLV')
+  dp, dw, dfDict, hv = btSetup(ul.spl('QQQ,GLD,VIXY')+etc,yrStart=yrStart-1)
+  #####
+  rsi5S_TQQQ = ta.rsi(dfDict['TQQQ']['Close'], length=5)
+  rsi9S_TQQQ = ta.rsi(dfDict['TQQQ']['Close'], length=9)
+  rsi14S_TQQQ = ta.rsi(dfDict['TQQQ']['Close'], length=14)
+  isOversold5S_TQQQ= applyDates(rsi5S_TQQQ.rolling(2).max()<30,dp)*1.0
+  isOversold9S_TQQQ= applyDates(rsi9S_TQQQ.rolling(2).max()<30,dp)*1.0
+  isOversold14S_TQQQ= applyDates(rsi14S_TQQQ.rolling(2).max()<30,dp)*1.0
+  isOversoldCountS_TQQQ = (isOversold5S_TQQQ+isOversold9S_TQQQ+isOversold14S_TQQQ).rename('OS Count')
+  isOverbot5S_TQQQ = applyDates(rsi5S_TQQQ>80,dp)*1.0
+  isOverbot9S_TQQQ = applyDates(rsi9S_TQQQ>80,dp)*1.0
+  isOverbot14S_TQQQ = applyDates(rsi14S_TQQQ>80,dp)*1.0
+  isOverbotCountS_TQQQ = (isOverbot5S_TQQQ + isOverbot9S_TQQQ + isOverbot14S_TQQQ).rename('OB Count')
+  dw['VIXY']=(isOverbotCountS_TQQQ>=2)*0.5+(isOverbotCountS_TQQQ==3)*0.5
+  dw['QQQ']=((isOversoldCountS_TQQQ>=2)*0.5+(isOversoldCountS_TQQQ==3)*0.5)*3
+  ratioS=dfDict['SPHB']['Close']/dfDict['SPLV']['Close']
+  momS=applyDates(getSMA12Mom(ratioS),dp).rename('SPHB/SPLV Mom')
+  isRegularS = (isOverbotCountS_TQQQ <2) & (isOversoldCountS_TQQQ <2)
+  dw['QQQ']+=(isRegularS & (momS.rolling(2).min()>0))*2
+  dw['GLD']=(isRegularS & (momS.rolling(2).min()<=0))*1
+  #####
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  dw=cleanS(dw*.65,isMonthlyRebal=True)
+  #####
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['isOversoldCountS_TQQQ'] = isOversoldCountS_TQQQ
+  d['isOverbotCountS_TQQQ'] = isOverbotCountS_TQQQ
+  d['momS'] = momS
+  return d
+
+def runJJ3(yrStart, isSkipTitle=False):
+  script = 'JJ3'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJJ3Core(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'],d['isOversoldCountS_TQQQ'],d['isOverbotCountS_TQQQ'],d['momS'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runJJ2Core(yrStart):
+  etc=ul.spl('WOOD,XLU,BDRY')
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,GLD')+etc,yrStart=yrStart-1)
+  #####
+  isCanaryS_WOOD = applyDates((dfDict['WOOD']['Close'].pct_change(200)>dfDict['GLD']['Close'].pct_change(200)).rolling(5).sum()==5,dp).rename('WOOD Canary')*1.0
+  isCanaryS_XLU = applyDates(ta.rsi(dfDict['SPY']['Close'], length=20)>ta.rsi(dfDict['XLU']['Close'], length=20).rename('RSI'),dp).rename('XLU Canary')*1.0
+  cS_BDRY=dfDict['BDRY']['Close']
+  icb1 = (cS_BDRY>EMA(cS_BDRY,250)).rolling(3).sum()==3
+  icb2 = (cS_BDRY.pct_change(60)>.1).rolling(2).sum()==2
+  isCanaryS_BDRY = applyDates(icb1 | icb2,dp).rename('BDRY Canary')*1.0
+  nCanaries = isCanaryS_WOOD+isCanaryS_XLU+isCanaryS_BDRY
+  aroonUpS_SPY = applyDates(ta.aroon(dfDict['SPY']['High'], dfDict['SPY']['Low'], length=200)['AROONU_200'], dp).rename('SPY AroonUp')
+  #####
+  dw['SPY'] = nCanaries
+  mask=(nCanaries==3) & (aroonUpS_SPY>=95)
+  dw.loc[mask, 'SPY'] -= 1
+  dw['GLD']=(nCanaries==0)*1
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  dw = cleanS(dw*0.7, isMonthlyRebal=True)
+  #####
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['isCanaryS_WOOD']=isCanaryS_WOOD
+  d['isCanaryS_XLU']=isCanaryS_XLU
+  d['isCanaryS_BDRY']=isCanaryS_BDRY
+  d['aroonUpS_SPY']=aroonUpS_SPY
+  return d
+
+def runJJ2(yrStart, isSkipTitle=False):
+  script = 'JJ2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJJ2Core(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'], d['isCanaryS_WOOD'], d['isCanaryS_XLU'], d['isCanaryS_BDRY'], d['aroonUpS_SPY'], how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -604,6 +755,65 @@ def runQS12(yrStart, isSkipTitle=False):
   tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   #####
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+
+def runBSSCore(yrStart):
+  und = 'TLT'
+  etc = ul.spl('SPY')
+  dp, dw, dfDict, _ = btSetup([und] + etc, yrStart=yrStart - 1)
+  cS = dp['SPY']
+  pe = endpoints(cS)[:-1]
+  anchorS = cS.copy()
+  anchorS[:] = np.nan
+  anchorS.iloc[pe + 1] = cS.iloc[pe]
+  anchorS = anchorS.ffill()
+  mtdS = (cS / anchorS - 1).rename('SPY MTD')
+  isOkS = (mtdS > 0) * 1
+  #####
+  pe = endpoints(dp, -6)[:-1]
+  selection = dw.index[pe]
+  dw.loc[selection, und] = applyDates(isOkS, dw)[selection]
+  dt = getNYSEMonthEnd(-6)
+  msg=f"ME-6: {dt:%Y-%m-%d}"
+  if dt in dw.index:
+    dw.loc[dt, und] = isOkS[dt]
+  #####
+  pe = endpoints(dp)[:-1]
+  selection = dw.index[pe]
+  dw.loc[selection, und] = 0
+  dt = getNYSEMonthEnd()
+  if dt in dw.index:
+    dw.loc[dt] = 0
+  #####
+  dw[und] = cleanS(dw[und], isMonthlyRebal=False)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dp2']=dp2
+  d['dw']=dw
+  d['mtdS'] = mtdS
+  d['msg']=msg
+  return d
+
+def runBSS(yrStart, isSkipTitle=False):
+  script = 'BSS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runBSSCore(yrStart)
+  st.write(d['msg'])
+  st.header('Tables')
+  tableS = ul.merge(d['dp2'], d['mtdS'].round(3),how='inner')
+  stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -694,58 +904,3 @@ def runCore(yrStart):
   weights = [1 / 2, 1 / 4, 1 / 4]
   script = 'Core'
   runAggregate(yrStart, strategies, weights, script, isCorrs=True)
-
-def runSatellite(yrStart, isSkipTitle=False):
-  script = 'Satellite'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  h=.1
-  d = {'SPMO':.3,
-       'LI':h,
-       'V': h, # skip funding
-       #####
-       'B': h,  # skip funding
-       'Q': h,
-       #####
-       'CTA': h,
-       'DBMF':h,
-       'KMLM':h,
-       #####
-       'BTAL':h,
-       'CAOS':h,
-       }
-  #d={'CAOS':1,'SPMO':0}
-
-  ######
-  #    Calmar: 2.67          MAR: 1.58          Sharpe: 1.63          Cagr: 11.3%          MaxDD: 7.2%
-
-  ######
-  dp, dw, dfDict, hv = btSetup(d.keys(),yrStart=yrStart-1)
-  pe = endpoints(dw)
-  for und in d.keys():
-    dw.iloc[pe,dw.columns.get_loc(und)]=d[und]
-  #####
-  def m(d,dp,key,fn):
-    if key in d.keys():
-      df = pd.read_csv(fn, index_col=0)
-      s = df['ar']
-      s.index = pd.to_datetime(s.index)
-      s = applyDates(s, dp)
-      dp[key] = s
-  m(d,dp,'LI','Logical-Invest.csv')
-  #####
-  def m(d,dp,key,key2):
-    if key in d.keys():
-      dp[key]=applyDates(ul.cachePersist('r', key2), dp)
-  m(d, dp, 'V', 'VRS')
-  m(d, dp, 'B', 'BSS')
-  m(d,dp,'Q','QS12')
-  #####
-  st.header('Prices')
-  stWriteDf(dp.tail())
-  st.header('Weights')
-  dwTail(dw)
-  if True:
-    dp = dp.bfill()
-  bt(script, dp, dw, yrStart)
