@@ -323,21 +323,36 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und=='CAOS':
+  if und in ul.spl('COM,DBMF,KMLM,CTA,IBIT'):
+    df = m(df, f"{und}.csv")
+  elif und=='CAOS':
     df = m(df,'AVOLX.csv')
-  elif und=='DBMF':
-    df = m(df, 'DBMF.csv')
-  elif und=='KMLM':
-    df = m(df,'KMLM.csv')
-  elif und=='CTA':
-    df = m(df, 'CTA.csv')
   elif und == 'BDRY':
     df = m(df, 'BDI.csv')
-  elif und == 'IBIT':
-    df = m(df, 'IBIT.csv')
   elif und=='VIX1D.INDX':
     dtStart = '2023-4-24'
     df = df.loc[df.index>=dtStart]
+  return df
+
+def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
+  def m(toTs=None):
+    z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={st.secrets['cc_api_key']}"
+    if toTs is not None:
+      z = f"{z}&toTs={toTs}"
+    data = requests.get(z).json()['Data']
+    return pd.DataFrame(data['Data']), data['TimeFrom']
+  #####
+  df, toTs = m()
+  for i in range(2 if yrStart<2015 else 1):
+    df2, toTs = m(toTs)
+    df = pd.concat([df2.drop(df2.index[-1]), df])
+  df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
+  df = df[df['date'] > '2010-7-16']
+  df['open'] = df['close'].shift()
+  df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
+  df = df.set_index('date')
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_values(by=['date']).round(10)
   return df
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
@@ -512,44 +527,6 @@ def runRSS(yrStart,isSkipTitle=False):
 
 #############################################################################################
 
-def runHYSCore(yrStart):
-  volTgt = .15
-  maxWgt = 2
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,BTAL,HYG'),yrStart=yrStart-1)
-  #####
-  hygS = dfDict['HYG']['Close'].rename('HYG')
-  ratioS = (hygS/EMA(hygS,100)).rename('Ratio')
-  stateS = applyDates(ratioS>1,dp)*1
-  #####
-  dp = dp.drop('HYG', axis=1)
-  dw = dw.drop('HYG', axis=1)
-  hv = hv.drop('HYG', axis=1)
-  #####
-  dw['SPY'] = stateS
-  dw['BTAL'] = 1 - stateS
-  dw=cleanS(dw,isMonthlyRebal=True)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['hygS'] = hygS
-  d['ratioS']=ratioS
-  return d
-
-def runHYS(yrStart,isSkipTitle=False):
-  script = 'HYS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runHYSCore(yrStart)
-  st.header('Tables')
-  tableS = ul.merge(d['dp'],d['hygS'],d['ratioS'], how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
 
 def runJJ5Core(yrStart):
   etc=ul.spl('BDRY,IGIB,VV,TQQQ')
@@ -705,6 +682,79 @@ def runJJ2(yrStart, isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def runBCSCore(yrStart):
+  und='SPY'
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  btcS = getPriceHistoryCrypto('BTC', yrStart - 1)['Close'].rename('BTC')
+  ratio50S = (btcS/btcS.rolling(50).mean()).rename('Ratio 50D')
+  ratio300S = (btcS/btcS.rolling(300).mean()).rename('Ratio 300D')
+  dw[und]=cleanS(applyDates((ratio50S>1)&(ratio300S>1),dp),isMonthlyRebal=True)
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['btcS'] = btcS
+  d['ratio50S'] = ratio50S
+  d['ratio300S']=ratio300S
+  return d
+
+def runBCS(yrStart,isSkipTitle=False):
+  script = 'BCS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runBCSCore(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'],d['btcS'],d['ratio50S'].round(3),d['ratio300S'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runHYSCore(yrStart):
+  volTgt = .15
+  maxWgt = 2
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,BTAL,HYG'),yrStart=yrStart-1)
+  #####
+  hygS = dfDict['HYG']['Close'].rename('HYG')
+  ratioS = (hygS/EMA(hygS,100)).rename('Ratio')
+  stateS = applyDates(ratioS>1,dp)*1
+  #####
+  dp = dp.drop('HYG', axis=1)
+  dw = dw.drop('HYG', axis=1)
+  hv = hv.drop('HYG', axis=1)
+  #####
+  dw['SPY'] = stateS
+  dw['BTAL'] = 1 - stateS
+  dw=cleanS(dw,isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['hygS'] = hygS
+  d['ratioS']=ratioS
+  return d
+
+def runHYS(yrStart,isSkipTitle=False):
+  script = 'HYS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runHYSCore(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'],d['hygS'],d['ratioS'], how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
 
 def runQS12Core(yrStart):
   undG = 'GLD'
