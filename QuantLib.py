@@ -497,18 +497,19 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
 
 def runRSSCore(yrStart):
   und='SPY'
-  volTgt = .165
+  volTgt = .22
   maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   cS = dfDict[und]['Close']
   vixS = applyDates(getPriceHistory('VIX.INDX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
   rsiS = ta.rsi(cS, length=2).rename('RSI2')
+  ibsS = getIbsS(dfDict[und],4)
   ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
   vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
   #####
-  isEntryS = (rsiS < 25) & (ratioS>1) & (vixRatioS<1)
-  isExitS = (rsiS > 75)
+  isEntryS = (rsiS < 25) & (ibsS<.3) & (ratioS>1) & (vixRatioS<1)
+  isExitS = (rsiS > 75) | (ibsS>.7) | (ratioS<=1) | (vixRatioS>=1)
   stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
   #####
   # Summary
@@ -521,6 +522,7 @@ def runRSSCore(yrStart):
   d['dw']=dw
   d['vixS']=vixS
   d['rsiS']=rsiS
+  d['ibsS']=ibsS
   d['ratioS']=ratioS
   d['vixRatioS']=vixRatioS
   d['stateS']=stateS
@@ -533,7 +535,7 @@ def runRSS(yrStart,isSkipTitle=False):
   #####
   d=runRSSCore(yrStart)
   st.header('Tables')
-  tableS = ul.merge(d['dp'][d['und']],d['rsiS'].round(1),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
+  tableS = ul.merge(d['dp'][d['und']],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
