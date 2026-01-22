@@ -294,9 +294,14 @@ def getHV(s, n=32, af=252):
     variances= (np.log(s / s.shift(1))) ** 2
     return (EMA(variances,n)**.5*(af**.5)).rename(s.name)
 
-def getIbsS(df):
-  ibsS = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
-  ibsS.rename('IBS',inplace=True)
+def getIbsS(df,n=1):
+  if n==1:
+    ibsS = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+  else:
+    lS=df['Low'].rolling(n).min()
+    hS=df['High'].rolling(n).max()
+    ibsS = (df['Close'] - lS) / (hS - lS)
+  ibsS.name = 'IBS'
   return ibsS
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
@@ -323,7 +328,16 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und in ul.spl('COM,DBMF,KMLM,CTA,IBIT'):
+  if und in ul.spl('COM,CTA,DBMF,KMLM,ASMF,HFMF,ISMF,IBIT'):
+    if und=='ASMF':
+      dtStart = '2024-5-31'
+    elif und=='HFMF':
+      dtStart = '2025-7-31'
+    elif und=='ISMF':
+      dtStart = '2025-3-30'
+    else:
+      dtStart = None
+    if dtStart is not None: df = df.loc[df.index >= dtStart]
     df = m(df, f"{und}.csv")
   elif und=='CAOS':
     df = m(df,'AVOLX.csv')
@@ -871,25 +885,23 @@ def runBSS(yrStart, isSkipTitle=False):
 def runVRSCore(yrStart):
   lw = .5
   sw = lw/2
-  #    Calmar: 4.20          MAR: 4.18          Sharpe: 3.02          Cagr: 36.0%          MaxDD: 8.6%
+  #       Calmar: 4.39          MAR: 4.30          Sharpe: 3.01          Cagr: 36.5%          MaxDD: 8.5%
   #####
-  und='VIXY'
-  etc=ul.spl('VIX1D.INDX,VIX.INDX,VIX3M.INDX')
-  dp, dw, dfDict, _ = btSetup([und]+etc, yrStart=yrStart - 1)
-  s=dp['VIX1D.INDX']
-  dw[und]=((s<=10)*lw-(s>=15)*sw)*(dp['VIX.INDX']<=dp['VIX3M.INDX'])
+  und = 'VIXY'
+  etc = ul.spl('VIX1D.INDX,VIX.INDX,VIX3M.INDX')
+  dp, dw, dfDict, _ = btSetup([und], yrStart=yrStart - 1)
+  dp2, dw2, dfDict2, _ = btSetup(etc, yrStart=yrStart - 1)
+  vix1DS = applyDates(dfDict2['VIX1D.INDX']['Close'], dp)
+  vixS = applyDates(dfDict2['VIX.INDX']['Close'], dp)
+  vix3MS = applyDates(dfDict2['VIX3M.INDX']['Close'], dp)
+  dw[und] = ((vix1DS <= 10) * lw - (vix1DS >= 15) * sw) * (vixS <= vix3MS)
   #####
-  dp2 = dp.copy()
-  for und in etc:
-    dp = dp.drop(und, axis=1)
-    dw = dw.drop(und, axis=1)
-  #####
-  dw = cleanS(dw,isMonthlyRebal=False)
+  dw = cleanS(dw, isMonthlyRebal=False)
   dw.loc[dw.index.year < yrStart] = 0
-  d=dict()
-  d['dp']=dp
-  d['dp2']=dp2
-  d['dw']=dw
+  d = dict()
+  d['dp'] = dp
+  d['dp2'] = dp2
+  d['dw'] = dw
   return d
 
 def runVRS(yrStart,isSkipTitle=False):
@@ -899,7 +911,7 @@ def runVRS(yrStart,isSkipTitle=False):
   #####
   d=runVRSCore(yrStart)
   st.header('Prices')
-  dwTail(d['dp2'])
+  dwTail(ul.merge(d['dp'],d['dp2'],how='inner'))
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
