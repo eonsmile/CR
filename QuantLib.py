@@ -328,19 +328,43 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und in ul.spl('COM,CTA,DBMF,KMLM,ASMF,HFMF,ISMF,IBIT'):
-    if und=='ASMF':
+  if und in ul.spl('CAOS,ORR,CCOM,COM,HARD,HGER,ASMF,CTA,DBMF,FFUT,HFMF,ISMF,KMLM,TFPN,IBIT'):
+    if und=='CAOS':
+      dtStart = '2023-3-31'
+    elif und=='ORR':
+      dtStart = '2025-1-31'
+    elif und=='CCOM':
+      with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=FutureWarning)
+        session = curl_cffi.Session(impersonate="chrome")
+        df = yahooquery.Ticker(und, session=session).history()
+      df.index = df.index.droplevel('symbol')
+      df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
+      df=df[['open','high','low','adjclose','volume']]
+      df.columns=ul.spl('Open,High,Low,Close,Volume')
+      dtStart = '2026-1-27'
+    elif und=='HARD':
+      dtStart = '2023-3-31'
+    elif und=='HGER':
+      dtStart = '2022-2-28'
+    elif und=='ASMF':
       dtStart = '2024-5-31'
+    elif und=='CTA':
+      dtStart = '2022-3-31'
+    elif und=='DBMF':
+      dtStart = '2019-5-31'
+    elif und=='FFUT':
+      dtStart = '2025-6-30'
     elif und=='HFMF':
       dtStart = '2025-7-31'
     elif und=='ISMF':
-      dtStart = '2025-3-30'
+      dtStart = '2025-3-31'
+    elif und=='TFPN':
+      dtStart = '2023-7-31'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
     df = m(df, f"{und}.csv")
-  elif und=='CAOS':
-    df = m(df,'AVOLX.csv')
   elif und == 'BDRY':
     df = m(df, 'BDI.csv')
   elif und=='VIX1D.INDX':
