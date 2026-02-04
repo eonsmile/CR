@@ -328,39 +328,55 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und in ul.spl('CAOS,ORR,CCOM,COM,HARD,HGER,ASMF,CTA,DBMF,FFUT,HFMF,ISMF,KMLM,TFPN,IBIT'):
+  if und in ul.spl('CAOS,'
+                   'FLSP,GRIN,HFGM,ORR,QALT,VFLO,'
+                   'COM,HARD,HGER,'
+                   'AHLT,ASMF,CTA,DBMF,HFMF,ISMF,KMLM,TFPN,'
+                   'IALT,LALT,PFIX,TAIL,IBIT'):
     if und=='CAOS':
       dtStart = '2023-3-31'
+    #####
+    elif und=='FLSP':
+      dtStart='2019-12-31'
+    elif und=='GRIN':
+      dtStart='2025-6-30'
+    elif und=='HFGM':
+      dtStart='2025-4-30'
     elif und=='ORR':
       dtStart = '2025-1-31'
-    elif und=='CCOM':
-      with warnings.catch_warnings():
-        warnings.simplefilter('ignore', category=FutureWarning)
-        session = curl_cffi.Session(impersonate="chrome")
-        df = yahooquery.Ticker(und, session=session).history()
-      df.index = df.index.droplevel('symbol')
-      df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
-      df=df[['open','high','low','adjclose','volume']]
-      df.columns=ul.spl('Open,High,Low,Close,Volume')
-      dtStart = '2026-1-27'
+    elif und == 'QALT':
+      dtStart = '2025-8-29'
+    elif und == 'VFLO':
+      dtStart = '2023-6-30'
+    #####
     elif und=='HARD':
       dtStart = '2023-3-31'
     elif und=='HGER':
       dtStart = '2022-2-28'
+    #####
+    elif und=='AHLT':
+      dtStart = '2023-8-31'
     elif und=='ASMF':
       dtStart = '2024-5-31'
     elif und=='CTA':
       dtStart = '2022-3-31'
     elif und=='DBMF':
       dtStart = '2019-5-31'
-    elif und=='FFUT':
-      dtStart = '2025-6-30'
     elif und=='HFMF':
       dtStart = '2025-7-31'
     elif und=='ISMF':
       dtStart = '2025-3-31'
     elif und=='TFPN':
       dtStart = '2023-7-31'
+    #####
+    elif und=='IALT':
+      dtStart='2025-12-31'
+    elif und=='LALT':
+      dtStart='2023-2-28'
+    elif und=='PFIX':
+      dtStart='2021-5-28'
+    elif und=='TAIL':
+      dtStart = '2017-4-28'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
@@ -845,65 +861,6 @@ def runQS12(yrStart, isSkipTitle=False):
   tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   #####
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-
-def runBSSCore(yrStart):
-  und = 'TLT'
-  etc = ul.spl('SPY')
-  dp, dw, dfDict, _ = btSetup([und] + etc, yrStart=yrStart - 1)
-  cS = dp['SPY']
-  pe = endpoints(cS)[:-1]
-  anchorS = cS.copy()
-  anchorS[:] = np.nan
-  anchorS.iloc[pe + 1] = cS.iloc[pe]
-  anchorS = anchorS.ffill()
-  mtdS = (cS / anchorS - 1).rename('SPY MTD')
-  isOkS = (mtdS > 0) * 1
-  #####
-  pe = endpoints(dp, -6)[:-1]
-  selection = dw.index[pe]
-  dw.loc[selection, und] = applyDates(isOkS, dw)[selection]
-  dt = getNYSEMonthEnd(-6)
-  msg=f"ME-6: {dt:%Y-%m-%d}"
-  if dt in dw.index:
-    dw.loc[dt, und] = isOkS[dt]
-  #####
-  pe = endpoints(dp)[:-1]
-  selection = dw.index[pe]
-  dw.loc[selection, und] = 0
-  dt = getNYSEMonthEnd()
-  if dt in dw.index:
-    dw.loc[dt] = 0
-  #####
-  dw[und] = cleanS(dw[und], isMonthlyRebal=False)
-  dw.loc[dw.index.year < yrStart] = 0
-  #####
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dp2']=dp2
-  d['dw']=dw
-  d['mtdS'] = mtdS
-  d['msg']=msg
-  return d
-
-def runBSS(yrStart, isSkipTitle=False):
-  script = 'BSS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runBSSCore(yrStart)
-  st.write(d['msg'])
-  st.header('Tables')
-  tableS = ul.merge(d['dp2'], d['mtdS'].round(3),how='inner')
-  stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
