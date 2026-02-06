@@ -329,7 +329,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     return extend(df, df2)
   #####
   if und in ul.spl('CAOS,'
-                   'FLSP,GRIN,HFGM,ORR,QALT,VFLO,'
+                   'FLSP,GRIN,HECA,HFGM,ORR,QALT,VFLO,'
                    'COM,HARD,HGER,'
                    'AHLT,ASMF,CTA,DBMF,HFMF,ISMF,KMLM,TFPN,'
                    'IALT,LALT,PFIX,TAIL,IBIT'):
@@ -340,6 +340,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart='2019-12-31'
     elif und=='GRIN':
       dtStart='2025-6-30'
+    elif und == 'HECA':
+      dtStart = '2025-7-31'
     elif und=='HFGM':
       dtStart='2025-4-30'
     elif und=='ORR':
