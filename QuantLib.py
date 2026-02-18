@@ -743,36 +743,6 @@ def runJJ2(yrStart, isSkipTitle=False):
 
 #####
 
-def runBCSCore(yrStart):
-  und='SPY'
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  #####
-  btcS = getPriceHistoryCrypto('BTC', yrStart - 1)['Close'].rename('BTC')
-  ratio50S = (btcS/btcS.rolling(50).mean()).rename('Ratio 50D')
-  ratio300S = (btcS/btcS.rolling(300).mean()).rename('Ratio 300D')
-  dw[und]=cleanS(applyDates((ratio50S>1)&(ratio300S>1),dp),isMonthlyRebal=True)
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['btcS'] = btcS
-  d['ratio50S'] = ratio50S
-  d['ratio300S']=ratio300S
-  return d
-
-def runBCS(yrStart,isSkipTitle=False):
-  script = 'BCS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runBCSCore(yrStart)
-  st.header('Tables')
-  tableS = ul.merge(d['dp'],d['btcS'],d['ratio50S'].round(3),d['ratio300S'].round(3), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
 def runHYSCore(yrStart):
   volTgt = .15
   maxWgt = 2
