@@ -328,13 +328,15 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und in ul.spl('CAOS,'
+  if und in ul.spl('CAOS,GDXJ,'
                    'FLSP,GRIN,HECA,HFGM,ORR,QALT,VFLO,'
                    'COM,HARD,HGER,'
                    'AHLT,ASMF,CTA,DBMF,HFMF,ISMF,KMLM,TFPN,'
                    'IALT,LALT,PFIX,TAIL,IBIT'):
     if und=='CAOS':
       dtStart = '2023-3-31'
+    elif und=='GDXJ':
+      dtStart='2009-11-30'
     #####
     elif und=='FLSP':
       dtStart='2019-12-31'
@@ -870,6 +872,27 @@ def runVRS(yrStart,isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def runSCI(yrStart,isSkipTitle=False):
+  script = 'SCI'
+  if not isSkipTitle:
+    st.header(script)
+  ######
+  dp, dw, dfDict, hv = btSetup(ul.spl('IEI,REM,GLD,GDXJ,XLE,OIH'),yrStart=yrStart-1)
+  idx = dw.index[endpoints(dp)]
+  dw.loc[idx, 'IEI'] = 0.8
+  dw.loc[idx, 'REM'] = -0.4
+  dw.loc[idx, 'GLD'] = 0.6
+  dw.loc[idx, 'GDXJ'] = -0.2
+  dw.loc[idx, 'XLE'] = 0.6
+  dw.loc[idx, 'OIH'] = -0.4
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
 
 #####
 
