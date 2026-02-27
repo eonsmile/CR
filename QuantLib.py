@@ -236,16 +236,16 @@ def getBeta(ts1, ts2, lookbackWindow=90):
 def getCoreBetas(isZB=False):
   yrStart=pendulum.now().year-2
   iefS=getPriceHistory('IEF',yrStart=yrStart)['Close']
-  znS = getYClose2Y('ZN=F')
-  tnS = getYClose2Y('TN=F')
+  znS = getYClose('ZN=F')
+  tnS = getYClose('TN=F')
 
   d=dict()
   d['ZN_IEF']=getBeta(znS, iefS)
   d['TN_IEF']=getBeta(tnS, iefS)
   if isZB:
     tltS=getPriceHistory('TLT',yrStart=yrStart)['Close']
-    zbS = getYClose2Y('ZB=F')
-    ubS = getYClose2Y('UB=F')
+    zbS = getYClose('ZB=F')
+    ubS = getYClose('UB=F')
     d['ZB_TLT'] = getBeta(zbS, tltS)
     d['UB_TLT'] = getBeta(ubS, tltS)
   return d
@@ -329,10 +329,11 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     return extend(df, df2)
   #####
   if und in ul.spl('CAOS,GDXJ,'
-                   'FLSP,GRIN,HECA,HFGM,ORR,QALT,VFLO,'
+                   'FLSP,HECA,HFGM,ORR,PFMN.TO,QALT,'
+                   'GRIN,IFLO,VFLO,'
                    'COM,HARD,HGER,'
                    'AHLT,ASMF,CTA,DBMF,HFMF,ISMF,KMLM,TFPN,'
-                   'IALT,LALT,PFIX,TAIL,IBIT'):
+                   'FRDM,GGRA.LSE,IALT,LALT,PFIX,TAIL,IBIT'):
     if und=='CAOS':
       dtStart = '2023-3-31'
     elif und=='GDXJ':
@@ -340,16 +341,21 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     #####
     elif und=='FLSP':
       dtStart='2019-12-31'
-    elif und=='GRIN':
-      dtStart='2025-6-30'
     elif und == 'HECA':
       dtStart = '2025-7-31'
     elif und=='HFGM':
       dtStart='2025-4-30'
     elif und=='ORR':
       dtStart = '2025-1-31'
+    elif und=='PFMN.TO':
+      dtStart='2019-7-31'
     elif und == 'QALT':
       dtStart = '2025-8-29'
+    #####
+    elif und == 'GRIN':
+      dtStart = '2025-6-30'
+    elif und == 'IFLO':
+      dtStart = '2025-6-30'
     elif und == 'VFLO':
       dtStart = '2023-6-30'
     #####
@@ -373,6 +379,10 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     elif und=='TFPN':
       dtStart = '2023-7-31'
     #####
+    elif und=='FRDM':
+      dtStart='2019-5-31'
+    elif und=='GGRA.LSE':
+      dtStart='2016-6-30'
     elif und=='IALT':
       dtStart='2025-12-31'
     elif und=='LALT':
@@ -428,11 +438,11 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
 
-def getYClose2Y(ticker):
+def getYClose(ticker, period=2):
   with warnings.catch_warnings():
     warnings.simplefilter('ignore', category=FutureWarning)
     session = curl_cffi.Session(impersonate="chrome")
-    df = yahooquery.Ticker(ticker,session=session).history(period='2y')
+    df = yahooquery.Ticker(ticker,session=session).history(period=f"{period}y")
   df.index = df.index.droplevel('symbol')
   df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
   return df['adjclose'].rename(ticker)
@@ -492,7 +502,7 @@ def runIBS(yrStart,mult=1, isSkipTitle=False):
     st.header(script)
   #####
   d=runIBSCore(yrStart,mult=mult)
-  st.header('Tables')
+  st.header('Table')
   st.subheader(d['und'])
   df = d['dfDict'][d['und']]
   df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
@@ -578,7 +588,7 @@ def runRSS(yrStart,isSkipTitle=False):
     st.header(script)
   #####
   d=runRSSCore(yrStart)
-  st.header('Tables')
+  st.header('Table')
   tableS = ul.merge(d['dp'][d['und']],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
@@ -631,7 +641,7 @@ def runJJ5(yrStart, isSkipTitle=False):
     st.header(script)
   #####
   d=runJJ5Core(yrStart)
-  st.header('Tables')
+  st.header('Table')
   tableS = ul.merge(d['dp'],d['rsiS_TQQQ'].round(1),d['isOversoldS_TQQQ'],d['isOverbotS_TQQQ'],d['isCanaryS_BDRY'],d['isCanaryS_IGIB'], how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
@@ -689,7 +699,7 @@ def runJJ3(yrStart, isSkipTitle=False):
     st.header(script)
   #####
   d=runJJ3Core(yrStart)
-  st.header('Tables')
+  st.header('Table')
   tableS = ul.merge(d['dp'],d['isOversoldCountS_TQQQ'],d['isOverbotCountS_TQQQ'],d['momS'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
@@ -736,7 +746,7 @@ def runJJ2(yrStart, isSkipTitle=False):
     st.header(script)
   #####
   d=runJJ2Core(yrStart)
-  st.header('Tables')
+  st.header('Table')
   tableS = ul.merge(d['dp'], d['isCanaryS_WOOD'], d['isCanaryS_XLU'], d['isCanaryS_BDRY'], d['aroonUpS_SPY'], how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
@@ -777,7 +787,7 @@ def runHYS(yrStart,isSkipTitle=False):
     st.header(script)
   #####
   d=runHYSCore(yrStart)
-  st.header('Tables')
+  st.header('Table')
   tableS = ul.merge(d['dp'],d['hygS'],d['ratioS'], how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
@@ -888,6 +898,43 @@ def runSCI(yrStart,isSkipTitle=False):
   dw.loc[idx, 'GDXJ'] = -0.2
   dw.loc[idx, 'XLE'] = 0.6
   dw.loc[idx, 'OIH'] = -0.4
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+#####
+
+def runBAJ(yrStart,isSkipTitle=False):
+  script = 'BAJ'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  dp, dw, dfDict, _ = btSetup(ul.spl('SDIV,GGRA.LSE,VHYL.LSE'), yrStart=yrStart - 1)
+  cS=dfDict['SDIV']
+  dp = applyDates(dp, cS)
+  dw = applyDates(dw, cS)
+  dw[:] = .5
+  dw['SDIV'] *= -1
+  dw = cleanS(dw, isMonthlyRebal=True)
+  st.header('Prices')
+  stWriteDf(dp.tail())
+  st.header('Weights')
+  dwTail(dw)
+  bt(script, dp, dw, yrStart)
+
+def runJ1577(yrStart,isSkipTitle=False):
+  script = 'J1577'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  und = '1577.T'
+  spyS = getPriceHistory('SPY', yrStart=yrStart - 1)['Close']
+  dp = applyDates(getYClose(und, period=20), spyS).to_frame()
+  dw = dp.copy()
+  dw[und] = 1
+  dw = cleanS(dw, isMonthlyRebal=True)
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
