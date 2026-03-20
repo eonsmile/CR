@@ -158,7 +158,6 @@ def endpoints(df, offset=0):
   out = np.unique(date_idx)
   return out
 
-
 def getNYSEMonthEnd(offset=0):
   tz = 'America/New_York'
   now = pendulum.now(tz)
@@ -326,22 +325,24 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und in ul.spl('GDXJ,'
-                   'COM,DBMF,JEGA.LSE,ORR,PFMN.TO,'
+  if und in ul.spl('GDXJ,EUDF.XETRA,IPRE.XETRA,'
+                   'COM,DBMF,JEGA.LSE,PFMN.TO,'
                    'AHLT,ASMF,CTA,HFMF,ISMF,KMLM,TFPN,'
                    'CAOS,GRIN,HARD,HECA,IFLO,HFGM,HGER,QALT,VFLO,'                   
-                   'ENCO.LSE,GCOW,IALT,ICOW,PFIX,TAIL,'
+                   'ENCO.LSE,DFNS.LSE,GCOW,IALT,ICOW,ORR,PFIX,RARE.LSE,TAIL,WCOA.LSE,'
                    'IBIT'):
     if und=='GDXJ':
       dtStart='2009-11-30'
+    elif und == 'EUDF.XETRA':
+      dtStart = '2025-3-31'
+    elif und == 'IPRE.XETRA':
+      dtStart = '2018-12-28'
     #####
     # COM
     elif und=='DBMF':
       dtStart = '2019-5-31'
     elif und == 'JEGA.LSE':
       dtStart = '2023-12-29'
-    elif und=='ORR':
-      dtStart = '2025-1-31'
     elif und == 'PFMN.TO':
       dtStart = '2019-7-31'
     #####
@@ -380,16 +381,24 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     #####
     elif und=='ENCO.LSE':
       dtStart='2021-8-31'
+    elif und=='DFNS.LSE':
+      dtStart='2023-4-28'
     elif und=='GCOW':
       dtStart='2016-2-29'
     elif und=='IALT':
       dtStart='2025-12-31'
     elif und=='ICOW':
       dtStart='2017-6-30'
+    elif und=='ORR':
+      dtStart = '2025-1-31'
     elif und=='PFIX':
       dtStart='2021-5-28'
+    elif und=='RARE.LSE':
+      dtStart='2024-4-30'
     elif und=='TAIL':
       dtStart = '2017-4-28'
+    elif und=='WCOA.LSE':
+      dtStart = '2025-9-30'
     #####
     elif und=='IBIT':
       dtStart = '2024-1-11'
@@ -796,75 +805,64 @@ def runJJ1(yrStart,isSkipTitle=False):
 
 #####
 
-def runHYSCore(yrStart):
-  volTgt = .15
+def runTPP2Core(yrStart):
+  volTgt = .1
   maxWgt = 2
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,BTAL,HYG'),yrStart=yrStart-1)
+  etc=['HYG']
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,UUP,GLD,IEF')+etc,yrStart=yrStart-1)
   #####
-  hygS = dfDict['HYG']['Close'].rename('HYG')
-  ratioS = (hygS/EMA(hygS,100)).rename('Ratio')
-  stateS = applyDates(ratioS>1,dp)*1
-  #####
-  dp = dp.drop('HYG', axis=1)
-  dw = dw.drop('HYG', axis=1)
-  hv = hv.drop('HYG', axis=1)
-  #####
-  dw['SPY'] = stateS
-  dw['BTAL'] = 1 - stateS
-  dw=cleanS(dw,isMonthlyRebal=True)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['hygS'] = hygS
-  d['ratioS']=ratioS
-  return d
-
-def runHYS(yrStart,isSkipTitle=False):
-  script = 'HYS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runHYSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'],d['hygS'],d['ratioS'], how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-
-def runDTSCore(yrStart):
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,GLD'),yrStart=yrStart-1)
-  #####
+  hygS = dfDict['HYG']['Close']
   btcS = getPriceHistoryCrypto('BTC', yrStart - 1)['Close'].rename('BTC')
   gldS = dfDict['GLD']['Close']
-  ratio50S = (btcS/btcS.rolling(50).mean()).rename('BTC Ratio 50D')
-  ratio100S = (gldS/gldS.rolling(100).mean()).rename('GLD Ratio 100D')
-  dw['SPY']=applyDates(ratio50S>1,dw)*.6
-  dw['GLD']=applyDates(ratio100S>1,dw)*.4
+  ratio100S_HYG = (hygS / EMA(hygS, 100)).rename('HYG Ratio 100D')
+  ratio50S_BTC = (btcS/btcS.rolling(50).mean()).rename('BTC Ratio 50D')
+  ratio150S_BTC = (btcS / btcS.rolling(150).mean()).rename('BTC Ratio 150D')
+  ratio100S_GLD = (gldS/gldS.rolling(100).mean()).rename('GLD Ratio 100D')
+  #####
+  iefS = dfDict['IEF']['Close']
+  iefS2 = iefS.iloc[endpoints(iefS)]
+  ratio9S_IEF = (iefS2/iefS2.shift(9)).rename('IEF Ratio 9M')
+  #####
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  m=lambda n: applyDates(n,dw)*1
+  dw['SPY']=m(ratio100S_HYG>1)+m(ratio50S_BTC>1)
+  dw['UUP']=m(ratio150S_BTC<1)
+  dw['GLD']=m(ratio100S_GLD>1)
+  dw['IEF']=m(ratio9S_IEF>1)
+  stateDf=dw.astype(float).ffill()
+  stateDf = cleanS(stateDf, isMonthlyRebal=True)
   dw=cleanS(dw,isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
   #####
   d=dict()
   d['dp']=dp
   d['dw']=dw
+  d['stateDf']=stateDf
   d['btcS'] = btcS
-  d['ratio50S'] = ratio50S
-  d['ratio100S']=ratio100S
+  d['ratio100S_HYG'] = ratio100S_HYG
+  d['ratio50S_BTC'] = ratio50S_BTC
+  d['ratio150S_BTC'] = ratio150S_BTC
+  d['ratio100S_GLD']=ratio100S_GLD
+  d['ratio9S_IEF']=ratio9S_IEF
   return d
 
-def runDTS(yrStart, isSkipTitle=False):
-  script = 'DTS'
+def runTPP2(yrStart, isSkipTitle=False):
+  script = 'TPP2'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runDTSCore(yrStart)
-  st.header('Tables')
-  tableS = ul.merge(d['dp'],d['btcS'],d['ratio50S'].round(3),d['ratio100S'].round(3), how='inner')
-  stWriteDf(tableS.tail())
+  d=runTPP2Core(yrStart)
+  st.header('Prices')
+  dp=d['dp']
+  stWriteDf(ul.merge(dp,d['btcS'],how='inner').tail())
+  st.header('Ratios')
+  stWriteDf(ul.merge(applyDates(d['ratio100S_HYG'], dp).round(3), applyDates(d['ratio50S_BTC'], dp).round(3), applyDates(d['ratio150S_BTC'], dp).round(3), applyDates(d['ratio100S_GLD'], dp).round(3), applyDates(d['ratio9S_IEF'], dp).round(3), how='inner').tail())
+  st.header('States')
+  stWriteDf(d['stateDf'].tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -922,7 +920,7 @@ def runQS12(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runBERCore(yrStart):
+def runBEXCore(yrStart):
   volTgt = .24
   maxWgt = 1
   cS_BTC=getPriceHistoryCrypto('BTC',yrStart=yrStart)['Close']
@@ -945,6 +943,7 @@ def runBERCore(yrStart):
   #####
   hv = getHV(dp, af=365)
   dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
   d=dict()
   d['dp']=dp
   d['dw']=dw
@@ -952,12 +951,12 @@ def runBERCore(yrStart):
   d['rsiS_ETH']=rsiS_ETH
   return d
 
-def runBER(yrStart,isSkipTitle=False):
-  script = 'BER'
+def runBEX(yrStart,isSkipTitle=False):
+  script = 'BEX'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runBERCore(yrStart)
+  d=runBEXCore(yrStart)
   st.header('Table')
   tableS = ul.merge(d['dp'], d['rsiS_BTC'].round(1), d['rsiS_ETH'].round(1), how='inner')
   stWriteDf(tableS.tail())
@@ -1065,12 +1064,9 @@ def runSCI2(yrStart,isSkipTitle=False):
   ######
   volTgt = .08
   maxWgt = 1
-  #    Calmar: 1.30          MAR: 0.62          Sharpe: 0.86          Cagr: 12.4%          MaxDD: 19.9% # before
-  #    Calmar: 1.49          MAR: 0.58          Sharpe: 0.83          Cagr: 14.4%          MaxDD: 24.9% after
-
-  dp, _, _, _ = btSetup(ul.spl('XLRE,JETS,KRE,XLU'),yrStart=yrStart-1)
-  for und in ul.spl('DFND.SW,DB1.XETRA'):
-    dp[und]=applyDates(getPriceHistory(und,yrStart=yrStart-1)['Close'],dp)
+  spyS=getPriceHistory('SPY',yrStart=yrStart-1)
+  dp, _, _, _ = btSetup(ul.spl('XLRE,KBWD,JETS,IPRE.XETRA,KRE,'
+                               'XLU,MOAT,DFND.SW,EUDF.XETRA,DB1.XETRA'),yrStart=yrStart-1,applyDatesS=spyS)
   dp['S68.SI'] = applyDates(getYClose('S68.SI', period=20), dp)
   dw=dp.copy()
   dw[:]=np.nan
@@ -1078,33 +1074,18 @@ def runSCI2(yrStart,isSkipTitle=False):
   #####
   idx = dw.index[endpoints(dw)]
   dw.loc[idx, 'XLRE'] = -1
+  dw.loc[idx, 'KBWD'] = -1
   dw.loc[idx, 'JETS'] = -1
+  dw.loc[idx, 'IPRE.XETRA'] = -1
   dw.loc[idx, 'KRE'] = -1
   #####
   dw.loc[idx, 'XLU'] = 1
+  dw.loc[idx, 'MOAT'] = 1
   dw.loc[idx, 'DFND.SW'] = 1
+  dw.loc[idx, 'EUDF.XETRA'] = 1 # WDEF in IBKR
   dw.loc[idx, 'DB1.XETRA'] = .5
   dw.loc[idx, 'S68.SI'] = .5
   dw = (dw * volTgt / hv).clip(-maxWgt, maxWgt)
-  st.header('Prices')
-  stWriteDf(dp.tail())
-  st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
-
-#####
-
-def runJ1577(yrStart,isSkipTitle=False):
-  script = 'J1577'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  und = '1577.T'
-  spyS = getPriceHistory('SPY', yrStart=yrStart - 1)['Close']
-  dp = applyDates(getYClose(und, period=20), spyS).to_frame()
-  dw = dp.copy()
-  dw[und] = 1
-  dw = cleanS(dw, isMonthlyRebal=True)
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
