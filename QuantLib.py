@@ -967,6 +967,7 @@ def runBEX(yrStart,isSkipTitle=False):
 
 #####
 #    Calmar: 3.39          MAR: 1.75          Sharpe: 1.08          Cagr: 13.1%          MaxDD: 7.5%
+# sdfdslk fjdsjflk 
 def runVCACore(yrStart):
   und='VIXM'
   etc=ul.spl('SPY,VIX.INDX,VVIX.INDX,VIX1D.INDX')
