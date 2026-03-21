@@ -965,52 +965,23 @@ def runBEX(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runVRSCore(yrStart):
-  lw = .5
-  sw = lw/2
-  #       Calmar: 4.39          MAR: 4.30          Sharpe: 3.01          Cagr: 36.5%          MaxDD: 8.5%
-  #####
-  und = 'VIXY'
-  etc = ul.spl('VIX1D.INDX,VIX.INDX,VIX3M.INDX')
-  dp, dw, dfDict, _ = btSetup([und], yrStart=yrStart - 1)
-  dp2, dw2, dfDict2, _ = btSetup(etc, yrStart=yrStart - 1)
-  vix1DS = applyDates(dfDict2['VIX1D.INDX']['Close'], dp)
-  vixS = applyDates(dfDict2['VIX.INDX']['Close'], dp)
-  vix3MS = applyDates(dfDict2['VIX3M.INDX']['Close'], dp)
-  dw[und] = ((vix1DS <= 10) * lw - (vix1DS >= 15) * sw) * (vixS <= vix3MS)
-  #####
-  dw = cleanS(dw, isMonthlyRebal=False)
-  dw.loc[dw.index.year < yrStart] = 0
-  d = dict()
-  d['dp'] = dp
-  d['dp2'] = dp2
-  d['dw'] = dw
-  return d
-
-def runVRS(yrStart,isSkipTitle=False):
-  script = 'VRS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runVRSCore(yrStart)
-  st.header('Prices')
-  dwTail(ul.merge(d['dp'],d['dp2'],how='inner'))
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
 #####
 
 def runVCACore(yrStart):
   und='VIXM'
-  etc=ul.spl('SPY,VIX.INDX,VVIX.INDX')
+  etc=ul.spl('SPY,VIX.INDX,VVIX.INDX,VIX1D.INDX')
   dp, dw, dfDict, hv = btSetup([und]+etc,yrStart=yrStart-1)
   #####
-  vixS=dfDict['VIX.INDX']['Close'].rename('VIX')
-  eVRPS= (vixS-dfDict['SPY']['Close'].pct_change().rolling(10).std() * math.sqrt(252) * 100).rename('eVRPS')
+  vix1DS = dfDict['VIX1D.INDX']['Close'].rename('VIX1D')
+  vixS = dfDict['VIX.INDX']['Close'].rename('VIX')
+  hvS = (dfDict['SPY']['Close'].pct_change().rolling(10).std() * math.sqrt(252) * 100).rename('HV')
+  eVRPS= (vixS-hvS).rename('eVRPS')
   vixRatioS = (vixS/vixS.rolling(10).mean()).rename('VIX Ratio')
   vvixRankS = dfDict['VVIX.INDX']['Close'].rolling(126).rank(pct=True)
-  dw[und]=cleanS(applyDates((eVRPS<=0)&(vixRatioS>1),dw),isMonthlyRebal=False)*vvixRankS
+  isCondS = (eVRPS<=0)&(vixRatioS>1)
+  isCond2S = vix1DS<=10
+  isCond2S[isCond2S.isna()]=0
+  dw[und]=cleanS(applyDates(isCondS|isCond2S,dw),isMonthlyRebal=False)*vvixRankS
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
@@ -1020,7 +991,9 @@ def runVCACore(yrStart):
   d=dict()
   d['dp']=dp
   d['dw']=dw
+  d['VIX1D'] = vix1DS
   d['VIX'] = vixS
+  d['hvS']=hvS
   d['eVRPS'] = eVRPS
   d['vixRatioS'] = vixRatioS
   return d
@@ -1032,7 +1005,7 @@ def runVCA(yrStart,isSkipTitle=False):
   #####
   d=runVCACore(yrStart)
   st.header('Tables')
-  tableS = ul.merge(d['dp'],d['VIX'], d['eVRPS'].round(3),d['vixRatioS'].round(3), how='inner')
+  tableS = ul.merge(d['dp'],d['VIX1D'],d['VIX'],d['hvS'].round(2),d['eVRPS'].round(2),d['vixRatioS'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
