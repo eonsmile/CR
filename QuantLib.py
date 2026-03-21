@@ -967,7 +967,7 @@ def runBEX(yrStart,isSkipTitle=False):
 
 #####
 #    Calmar: 3.39          MAR: 1.75          Sharpe: 1.08          Cagr: 13.1%          MaxDD: 7.5%
-# sdfdslk fjdsjflk 
+
 def runVCACore(yrStart):
   und='VIXM'
   etc=ul.spl('SPY,VIX.INDX,VVIX.INDX,VIX1D.INDX')
@@ -982,7 +982,7 @@ def runVCACore(yrStart):
   m= lambda s: applyDates(s,dw).ffill().fillna(0)
   w1=m(vix1DS <= 10)
   w2=m((eVRPS<=0)&(vixRatioS>1))*applyDates(vvixRankS,dw)
-  dw[und]=cleanS(w1+w2,isMonthlyRebal=False)
+  dw[und]=cleanS((w1+w2).clip(upper=1),isMonthlyRebal=False)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
