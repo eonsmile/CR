@@ -4,11 +4,11 @@ import streamlit as st
 ######
 # Main
 ######
-z='VCA'
+z='QS12'
 st.set_page_config(page_title=z)
 st.title(z)
 
-chosenYear = st.radio('Start Year', ['2012', '2016'], index=1)
+chosenYear = st.radio('Start Year', ['2008','2016'], index=1)
 st.write('')
 y = int(chosenYear)
-ql.runVCA(y,isSkipTitle=True)
+ql.runQS12(y, isSkipTitle=True)

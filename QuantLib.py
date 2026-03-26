@@ -327,9 +327,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   #####
   if und in ul.spl('GDXJ,EUDF.XETRA,IPRE.XETRA,'
                    'COM,DBMF,JEGA.LSE,PFMN.TO,'
-                   'AHLT,ASMF,CTA,HFMF,ISMF,KMLM,TFPN,'
-                   'CAOS,GRIN,HARD,HECA,IFLO,HFGM,HGER,QALT,VFLO,'                   
-                   'ENCO.LSE,DFNS.LSE,GCOW,IALT,ICOW,ORR,PFIX,RARE.LSE,TAIL,WCOA.LSE,'
+                   'ENCO.LSE,DFNS.LSE,GCOW,ORR,PFIX,RARE.LSE,TAIL,WCOA.LSE,'
                    'IBIT'):
     if und=='GDXJ':
       dtStart='2009-11-30'
@@ -346,49 +344,13 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     elif und == 'PFMN.TO':
       dtStart = '2019-7-31'
     #####
-    elif und=='AHLT':
-      dtStart = '2023-8-31'
-    elif und=='ASMF':
-      dtStart = '2024-5-31'
-    elif und=='CTA':
-      dtStart = '2022-3-31'
-    elif und=='HFMF':
-      dtStart = '2025-7-31'
-    elif und=='ISMF':
-      dtStart = '2025-3-31'
-    # KMLM
-    elif und=='TFPN':
-      dtStart = '2023-7-31'
-    #####
-    elif und == 'CAOS':
-      dtStart = '2023-3-31'
-    elif und == 'GRIN':
-      dtStart = '2025-6-30'
-    elif und=='HARD':
-      dtStart = '2023-3-31'
-    elif und == 'HECA':
-      dtStart = '2025-7-31'
-    elif und == 'IFLO':
-      dtStart = '2025-6-30'
-    elif und=='HFGM':
-      dtStart='2025-4-30'
-    elif und=='HGER':
-      dtStart = '2022-2-28'
-    elif und == 'QALT':
-      dtStart = '2025-8-29'
-    elif und == 'VFLO':
-      dtStart = '2023-6-30'
-    #####
     elif und=='ENCO.LSE':
       dtStart='2021-8-31'
     elif und=='DFNS.LSE':
       dtStart='2023-4-28'
     elif und=='GCOW':
       dtStart='2016-2-29'
-    elif und=='IALT':
-      dtStart='2025-12-31'
-    elif und=='ICOW':
-      dtStart='2017-6-30'
+
     elif und=='ORR':
       dtStart = '2025-1-31'
     elif und=='PFIX':
@@ -438,6 +400,15 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
   return df
+
+def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
+  dtStart = f"{yrStart}-01-01"
+  url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={id}&cosd={dtStart}"
+  df = pd.read_csv(url, parse_dates=['observation_date'], index_col='observation_date')
+  df.columns = [id]
+  df = df.replace('.', np.nan).astype(float).dropna()
+  df.index.name = None
+  return df[id]
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if len(isEntryS)!=len(isExitS):
@@ -613,6 +584,266 @@ def runRSS(yrStart,isSkipTitle=False):
 
 #############################################################################################
 
+def runTPP2Core(yrStart):
+  volTgt = .14
+  maxWgt = 1.5
+  etc=ul.spl('HYG,SPHB,SPLV,WOOD')
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,UUP,GLD,IEF')+etc,yrStart=yrStart-1)
+  #####
+  hygS = dfDict['HYG']['Close']
+  btcS = getPriceHistoryCrypto('BTC', yrStart - 1)['Close'].rename('BTC')
+  gldS = dfDict['GLD']['Close']
+  sphbS = dfDict['SPHB']['Close']
+  splvS = dfDict['SPLV']['Close']
+  woodS = dfDict['WOOD']['Close']
+  sphb_lv_ratio = sphbS / splvS
+  #####
+  ratio100S_HYG = (hygS / EMA(hygS, 100)).rename('HYG Ratio 100D')
+  ratio50S_BTC = (btcS/btcS.rolling(50).mean()).rename('BTC Ratio 50D')
+  ratio150S_BTC = (btcS / btcS.rolling(150).mean()).rename('BTC Ratio 150D')
+  ratio200S_SPHB_LV = (sphb_lv_ratio / sphb_lv_ratio.rolling(252).mean()).rename('SPHB_LV 252D')
+  mom200S_GLD_WOOD = (gldS.pct_change(200)-woodS.pct_change(200)).rename('GLD_WOOD 200D')
+  #####
+  t10yie = applyDates(getPriceHistoryFred('T10YIE', yrStart - 1),dp)
+  t10yieM = t10yie.iloc[endpoints(t10yie)]
+  inflRatioS = (2.0 / t10yieM).rename('Inflation Ratio')
+  #####
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  m=lambda n: applyDates(n,dw)*1
+  dw['SPY']=m(ratio100S_HYG>1)+m(ratio50S_BTC>1)
+  dw['UUP']=m(ratio150S_BTC<1)
+  dw['GLD']=(m(ratio200S_SPHB_LV<1)+m(mom200S_GLD_WOOD>0))/2
+  dw['IEF'] = m(inflRatioS > 1)
+  stateDf=dw.astype(float).ffill()
+  dw=cleanS(dw,isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['stateDf']=stateDf
+  d['btcS'] = btcS
+  d['ratio100S_HYG'] = ratio100S_HYG
+  d['ratio50S_BTC'] = ratio50S_BTC
+  d['ratio150S_BTC'] = ratio150S_BTC
+  d['ratio200S_SPHB_LV']=ratio200S_SPHB_LV
+  d['mom200S_GLD_WOOD']=mom200S_GLD_WOOD
+  d['inflRatioS']=inflRatioS
+  return d
+
+def runTPP2(yrStart, isSkipTitle=False):
+  script = 'TPP2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runTPP2Core(yrStart)
+  st.header('Prices')
+  dp=d['dp']
+  stWriteDf(ul.merge(dp,d['btcS'],how='inner').tail())
+  st.header('Ratios')
+  stWriteDf(ul.merge(applyDates(d['ratio100S_HYG'], dp).round(3), applyDates(d['ratio50S_BTC'], dp).round(3), applyDates(d['ratio150S_BTC'], dp).round(3),
+                     applyDates(d['ratio200S_SPHB_LV'],dp).round(3), applyDates(d['mom200S_GLD_WOOD'], dp).round(3), applyDates(d['inflRatioS'], dp).round(3), how='inner').tail())
+  st.header('States')
+  stWriteDf(d['stateDf'].tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runCESCore(yrStart):
+  und = 'SPY'
+  maxWgt = 2
+  etc = ul.spl('BDRY,IGIB,VV,SPHB,SPLV,WOOD,GLD,XLU,TIP')
+  dp, dw, dfDict, hv = btSetup([und] + etc, yrStart=yrStart - 1)
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  # 1. BDRY ST
+  rsiS_BDRY_50 = ta.rsi(dfDict['BDRY']['Close'], length=50)
+  isCanaryS_BDRY_ST = applyDates(rsiS_BDRY_50.rolling(2).min() > 50, dp).rename('BDRY ST') * 1.0
+
+  # 2. BDRY LT
+  cS_BDRY = dfDict['BDRY']['Close']
+  icb1 = (cS_BDRY > EMA(cS_BDRY, 250)).rolling(3).sum() == 3
+  icb2 = (cS_BDRY.pct_change(60) > .1).rolling(2).sum() == 2
+  isCanaryS_BDRY_LT = applyDates(icb1 | icb2, dp).rename('BDRY LT') * 1.0
+
+  # 3. IGIB
+  rsiS_IGIB = ta.rsi(dfDict['IGIB']['Close'], length=10)
+  rsiS_VV = ta.rsi(dfDict['VV']['Close'], length=10)
+  isCanaryS_IGIB = (applyDates(rsiS_IGIB > rsiS_VV, dp).rename('IGIB')) * 1.0
+
+  # 4. SPHB/LV
+  def m(s):
+    sum = 0
+    for i in range(13):
+      sum += s.shift(i * 21)
+    return 13 * s / sum - 1
+  #####
+  ratioS_SPHB_LV = dfDict['SPHB']['Close'] / dfDict['SPLV']['Close']
+  momS_SPHB_LV = applyDates(m(ratioS_SPHB_LV), dp)
+  isCanaryS_Mom = (momS_SPHB_LV.rolling(2).min() > 0).rename('SPHB_LV') * 1.0
+
+  # 5. TIP
+  cS_TIP = dfDict['TIP']['Close']
+  momS_TIP = (cS_TIP.pct_change(21) + cS_TIP.pct_change(63) + cS_TIP.pct_change(126) + cS_TIP.pct_change(252)) / 4
+  isCanaryS_TIP = applyDates(momS_TIP.rolling(2).min() > 0, dp).rename('TIP') * 1.0
+
+  # 6. WOOD
+  isCanaryS_WOOD = applyDates((dfDict['WOOD']['Close'].pct_change(200) > dfDict['GLD']['Close'].pct_change(200)).rolling(5).sum() == 5,dp).rename('WOOD') * 1.0
+
+  # 7. XLU
+  isCanaryS_XLU = applyDates(ta.rsi(dfDict['SPY']['Close'], length=20) > ta.rsi(dfDict['XLU']['Close'], length=20),dp).rename('XLU') * 1.0
+  #####
+  voteDf = pd.DataFrame({
+    'BDRY ST': isCanaryS_BDRY_ST,
+    'BDRY LT': isCanaryS_BDRY_LT,
+    'IGIB': isCanaryS_IGIB,
+    'Mom': isCanaryS_Mom,
+    'TIP': isCanaryS_TIP,
+    'WOOD': isCanaryS_WOOD,
+    'XLU': isCanaryS_XLU,
+  })
+  voteCountS = voteDf.sum(axis=1).rename('Votes')
+  dw[und] = ((voteCountS >= 3) * (voteCountS / len(voteDf.columns)) * 2.4).clip(upper=maxWgt).rename('SPY Weight')
+  dw = cleanS(dw, isMonthlyRebal=True)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['voteDf'] = voteDf
+  d['voteCountS'] = voteCountS
+  d['isCanaryS_BDRY_ST'] = isCanaryS_BDRY_ST
+  d['isCanaryS_BDRY_LT'] = isCanaryS_BDRY_LT
+  d['isCanaryS_IGIB'] = isCanaryS_IGIB
+  d['isCanaryS_Mom'] = isCanaryS_Mom
+  d['isCanaryS_TIP'] = isCanaryS_TIP
+  d['isCanaryS_WOOD'] = isCanaryS_WOOD
+  d['isCanaryS_XLU'] = isCanaryS_XLU
+  return d
+
+def runCES(yrStart, isSkipTitle=False):
+  script = 'CES'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runCESCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(
+    d['dp'],
+    d['isCanaryS_BDRY_ST'], d['isCanaryS_BDRY_LT'],
+    d['isCanaryS_IGIB'], d['isCanaryS_Mom'], d['isCanaryS_TIP'],
+    d['isCanaryS_WOOD'], d['isCanaryS_XLU'],
+    d['voteCountS'],how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runBEXCore(yrStart):
+  volTgt = .22
+  maxWgt = 1
+  cS_BTC=getPriceHistoryCrypto('BTC',yrStart=yrStart)['Close']
+  cS_ETH=getPriceHistoryCrypto('ETH',yrStart=yrStart)['Close']
+  cSW_BTC = cS_BTC.resample('W-WED').last().dropna()
+  cSW_ETH = cS_ETH.resample('W-WED').last().dropna()
+  rsiS_BTC = ta.rsi(cSW_BTC, length=9).rename('BTC RSI')
+  rsiS_ETH = ta.rsi(cSW_ETH, length=9).rename('ETH RSI')
+  #####
+  isBullishS=rsiS_BTC>60
+  dw2 = (isBullishS*(rsiS_BTC>=rsiS_ETH)*1).rename('BTC').to_frame()
+  dw2['ETH'] =  (isBullishS*(rsiS_BTC<rsiS_ETH)*1)
+  dp = cS_BTC.rename('BTC').to_frame()
+  dp['ETH'] = cS_ETH
+  #####
+  dw=dp.copy()
+  dw[:]=np.nan
+  idx = dw.index.intersection(dw2.index)
+  dw.loc[idx] = dw2.loc[idx]
+  #####
+  hv = getHV(dp, af=365)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['rsiS_BTC']=rsiS_BTC
+  d['rsiS_ETH']=rsiS_ETH
+  return d
+
+def runBEX(yrStart,isSkipTitle=False):
+  script = 'BEX'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runBEXCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['dp'], d['rsiS_BTC'].round(1), d['rsiS_ETH'].round(1), how='inner')
+  stWriteDf(tableS.tail())
+
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runQS12Core(yrStart):
+  undG = 'GLD'
+  undB = 'TLT'
+  volTgt = .16
+  maxWgt = 2
+  tickers = [undG,undB]
+  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
+  hS = dfDict[undG]['High']
+  cS = dfDict[undG]['Close']
+  cSB = dfDict[undB]['Close']
+  #####
+  cond1S = cS > hS.shift(1).rolling(3).max()
+  cond2S = cSB > cSB.shift()
+  cond3S = (cS * 0).astype(int)
+  cond3S.loc[cond3S.index.weekday != 3] = 1
+  isEntryS = (cond1S & cond2S & cond3S)*1
+  isExitS = (cS>hS.shift())*1
+  isExitS.loc[isEntryS == 1] = 0
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dp=dp.drop(undB,axis=1)
+  dw=dw.drop(undB,axis=1)
+  hv=hv.drop(undB,axis=1)
+  dw[undG] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  #####
+  d['cS'] = cS
+  d['hS'] = hS
+  d['cSB'] = cSB
+  d['stateS']=stateS
+  return d
+
+def runQS12(yrStart, isSkipTitle=False):
+  script = 'QS12'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runQS12Core(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  #####
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
 
 def runJJ5Core(yrStart):
   etc=ul.spl('BDRY,IGIB,VV,TQQQ')
@@ -805,184 +1036,27 @@ def runJJ1(yrStart,isSkipTitle=False):
 
 #####
 
-def runTPP2Core(yrStart):
-  volTgt = .1
-  maxWgt = 2
-  etc=['HYG']
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,UUP,GLD,IEF')+etc,yrStart=yrStart-1)
-  #####
-  hygS = dfDict['HYG']['Close']
-  btcS = getPriceHistoryCrypto('BTC', yrStart - 1)['Close'].rename('BTC')
-  gldS = dfDict['GLD']['Close']
-  ratio100S_HYG = (hygS / EMA(hygS, 100)).rename('HYG Ratio 100D')
-  ratio50S_BTC = (btcS/btcS.rolling(50).mean()).rename('BTC Ratio 50D')
-  ratio150S_BTC = (btcS / btcS.rolling(150).mean()).rename('BTC Ratio 150D')
-  ratio100S_GLD = (gldS/gldS.rolling(100).mean()).rename('GLD Ratio 100D')
-  #####
-  iefS = dfDict['IEF']['Close']
-  iefS2 = iefS.iloc[endpoints(iefS)]
-  ratio9S_IEF = (iefS2/iefS2.shift(9)).rename('IEF Ratio 9M')
-  #####
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
-  #####
-  m=lambda n: applyDates(n,dw)*1
-  dw['SPY']=m(ratio100S_HYG>1)+m(ratio50S_BTC>1)
-  dw['UUP']=m(ratio150S_BTC<1)
-  dw['GLD']=m(ratio100S_GLD>1)
-  dw['IEF']=m(ratio9S_IEF>1)
-  stateDf=dw.astype(float).ffill()
-  stateDf = cleanS(stateDf, isMonthlyRebal=True)
-  dw=cleanS(dw,isMonthlyRebal=True)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['stateDf']=stateDf
-  d['btcS'] = btcS
-  d['ratio100S_HYG'] = ratio100S_HYG
-  d['ratio50S_BTC'] = ratio50S_BTC
-  d['ratio150S_BTC'] = ratio150S_BTC
-  d['ratio100S_GLD']=ratio100S_GLD
-  d['ratio9S_IEF']=ratio9S_IEF
-  return d
-
-def runTPP2(yrStart, isSkipTitle=False):
-  script = 'TPP2'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runTPP2Core(yrStart)
-  st.header('Prices')
-  dp=d['dp']
-  stWriteDf(ul.merge(dp,d['btcS'],how='inner').tail())
-  st.header('Ratios')
-  stWriteDf(ul.merge(applyDates(d['ratio100S_HYG'], dp).round(3), applyDates(d['ratio50S_BTC'], dp).round(3), applyDates(d['ratio150S_BTC'], dp).round(3), applyDates(d['ratio100S_GLD'], dp).round(3), applyDates(d['ratio9S_IEF'], dp).round(3), how='inner').tail())
-  st.header('States')
-  stWriteDf(d['stateDf'].tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runQS12Core(yrStart):
-  undG = 'GLD'
-  undB = 'TLT'
-  volTgt = .16
-  maxWgt = 2
-  tickers = [undG,undB]
-  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
-  hS = dfDict[undG]['High']
-  cS = dfDict[undG]['Close']
-  cSB = dfDict[undB]['Close']
-  #####
-  cond1S = cS > hS.shift(1).rolling(3).max()
-  cond2S = cSB > cSB.shift()
-  cond3S = (cS * 0).astype(int)
-  cond3S.loc[cond3S.index.weekday != 3] = 1
-  isEntryS = (cond1S & cond2S & cond3S)*1
-  isExitS = (cS>hS.shift())*1
-  isExitS.loc[isEntryS == 1] = 0
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-  #####
-  # Summary
-  dp=dp.drop(undB,axis=1)
-  dw=dw.drop(undB,axis=1)
-  hv=hv.drop(undB,axis=1)
-  dw[undG] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  #####
-  d=dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  #####
-  d['cS'] = cS
-  d['hS'] = hS
-  d['cSB'] = cSB
-  d['stateS']=stateS
-  return d
-
-def runQS12(yrStart, isSkipTitle=False):
-  script = 'QS12'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runQS12Core(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  #####
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runBEXCore(yrStart):
-  volTgt = .24
-  maxWgt = 1
-  cS_BTC=getPriceHistoryCrypto('BTC',yrStart=yrStart)['Close']
-  cS_ETH=getPriceHistoryCrypto('ETH',yrStart=yrStart)['Close']
-  cSW_BTC = cS_BTC.resample('W-WED').last().dropna()
-  cSW_ETH = cS_ETH.resample('W-WED').last().dropna()
-  rsiS_BTC = ta.rsi(cSW_BTC, length=9).rename('BTC RSI')
-  rsiS_ETH = ta.rsi(cSW_ETH, length=9).rename('ETH RSI')
-  #####
-  isBullishS=rsiS_BTC>60
-  dw2 = (isBullishS*(rsiS_BTC>=rsiS_ETH)*1).rename('BTC').to_frame()
-  dw2['ETH'] =  (isBullishS*(rsiS_BTC<rsiS_ETH)*1)
-  dp = cS_BTC.rename('BTC').to_frame()
-  dp['ETH'] = cS_ETH
-  #####
-  dw=dp.copy()
-  dw[:]=np.nan
-  idx = dw.index.intersection(dw2.index)
-  dw.loc[idx] = dw2.loc[idx]
-  #####
-  hv = getHV(dp, af=365)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['rsiS_BTC']=rsiS_BTC
-  d['rsiS_ETH']=rsiS_ETH
-  return d
-
-def runBEX(yrStart,isSkipTitle=False):
-  script = 'BEX'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runBEXCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'], d['rsiS_BTC'].round(1), d['rsiS_ETH'].round(1), how='inner')
-  stWriteDf(tableS.tail())
-
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-#    Calmar: 3.39          MAR: 1.75          Sharpe: 1.08          Cagr: 13.1%          MaxDD: 7.5%
-
 def runVCACore(yrStart):
   und='VIXM'
-  etc=ul.spl('SPY,VIX.INDX,VVIX.INDX,VIX1D.INDX')
+  etc=ul.spl('SPY,VIX.INDX,VIX1D.INDX')
   dp, dw, dfDict, hv = btSetup([und]+etc,yrStart=yrStart-1)
   #####
-  vix1DS = dfDict['VIX1D.INDX']['Close'].rename('VIX1D')
+  spyS = (dfDict['SPY']['Close']).rename('SPY')
+  spyRatioS = (spyS / spyS.rolling(200).mean()).rename('SPY Ratio')
+  ibsS = getIbsS(dfDict['SPY'])
+  #####
   vixS = dfDict['VIX.INDX']['Close'].rename('VIX')
+  vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
+  vix1DS = dfDict['VIX1D.INDX']['Close'].rename('VIX1D')
   hvS = (dfDict['SPY']['Close'].pct_change().rolling(10).std() * math.sqrt(252) * 100).rename('HV')
   eVRPS= (vixS-hvS).rename('eVRPS')
-  vixRatioS = (vixS/vixS.rolling(10).mean()).rename('VIX Ratio')
-  vvixRankS = dfDict['VVIX.INDX']['Close'].rolling(126).rank(pct=True)
+  eVRP_pctile = eVRPS.rolling(252).rank(pct=True)
+  #####
   m= lambda s: applyDates(s,dw).ffill().fillna(0)
-  w1=m(vix1DS <= 10)
-  w2=m((eVRPS<=0)&(vixRatioS>1))*applyDates(vvixRankS,dw)
-  dw[und]=cleanS((w1+w2).clip(upper=1),isMonthlyRebal=False)
+  w1 = m((spyRatioS < 1) & (ibsS > 0.75) & (vixRatioS > 1))
+  w2 = m((eVRP_pctile <= 0.25) & (vixRatioS > 1))
+  w3=m(vix1DS <= 10)
+  dw[und] = cleanS((w1 + w2 + w3).clip(upper=1), isMonthlyRebal=False)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
@@ -992,11 +1066,14 @@ def runVCACore(yrStart):
   d=dict()
   d['dp']=dp
   d['dw']=dw
-  d['VIX1D'] = vix1DS
+  d['SPY'] = spyS
+  d['spyRatioS'] = spyRatioS
+  d['ibsS'] = ibsS
   d['VIX'] = vixS
+  d['vixRatioS'] = vixRatioS
   d['hvS']=hvS
   d['eVRPS'] = eVRPS
-  d['vixRatioS'] = vixRatioS
+  d['VIX1D'] = vix1DS
   return d
 
 def runVCA(yrStart,isSkipTitle=False):
@@ -1006,7 +1083,8 @@ def runVCA(yrStart,isSkipTitle=False):
   #####
   d=runVCACore(yrStart)
   st.header('Tables')
-  tableS = ul.merge(d['dp'],d['VIX1D'],d['VIX'],d['hvS'].round(2),d['eVRPS'].round(2),d['vixRatioS'].round(3), how='inner')
+  tableS = ul.merge(d['dp'],d['SPY'],d['spyRatioS'].round(3),d['ibsS'].round(3),
+                    d['VIX'],d['vixRatioS'].round(3),d['hvS'].round(2),d['eVRPS'].round(2),d['VIX1D'], how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -1113,6 +1191,6 @@ def runCore(yrStart):
   runIBS(yrStart)
   st.divider()
   strategies = ul.spl('TPP,RSS,IBS')
-  weights = [1 / 2, 1 / 4, 1 / 4]
+  weights = [.5,.25,.25]
   script = 'Core'
   runAggregate(yrStart, strategies, weights, script, isCorrs=True)
