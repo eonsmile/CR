@@ -26,11 +26,24 @@ def checkPassword():
 
 def bt2008():
   st.divider()
-  ql.runCore(2008)
+  runCore(2008)
 
 def bt2016():
   st.divider()
-  ql.runCore(2016)
+  runCore(2016)
+
+
+def runCore(yrStart):
+  ql.runTPP(yrStart)
+  st.divider()
+  ql.runRSS(yrStart)
+  st.divider()
+  ql.runIBS(yrStart)
+  st.divider()
+  strategies = ul.spl('TPP,RSS,IBS')
+  weights = [.5,.25,.25]
+  script = 'Core'
+  ql.runAggregate(yrStart, strategies, weights, script, isCorrs=True)
 
 ######
 # Init
@@ -56,14 +69,11 @@ if ul.stCheckPW('password_CR'):
 
   # Choices
   st.header('Choices')
-  col1, col2, col3 = st.columns(3)
+  col1, col2 = st.columns(2)
   with col1:
-    if st.button('Betas'):
-      st.session_state.button_clicked = 'betas'
-  with col2:
     if st.button('Backtest (2016)'):
       st.session_state.button_clicked = '2016'
-  with col3:
+  with col2:
     if st.button('Backtest (2008)'):
       st.session_state.button_clicked = '2008'
 
@@ -72,12 +82,5 @@ if ul.stCheckPW('password_CR'):
     bt2008()
   elif st.session_state.button_clicked=='2016':
     bt2016()
-  elif st.session_state.button_clicked=='betas':
-    st.header('Betas (Return regressions of futures vs. ETFs)')
-    d = ql.getCoreBetas()
-    def m(label, beta):
-      st.markdown(f"{label}: <font color='red'>{beta:.3f}</font>  (Notional of futures to hold per 1x notional of ETF)", unsafe_allow_html=True)
-    m('ZN_IEF beta', d['ZN_IEF'])
-    m('TN_IEF beta', d['TN_IEF'])
 
 
