@@ -291,7 +291,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   #####
   if und in ul.spl('GDXJ,EUDF.XETRA,IPRE.XETRA,'
                    'COM,DBMF,INFL,PFMN.TO,'
-                   'ENCO.LSE,DFNS.LSE,GCOW,JEGA.LSE,ORR,PFIX,RARE.LSE,ROLL.LSE,TAIL,WCOA.LSE,'
+                   'COPX,ENCO.LSE,DFNS.LSE,GCOW,JEGA.LSE,NATO.LSE,ORR,PFIX,RARE.LSE,REMX,ROLL.LSE,TAIL,WCOA.LSE,'
                    'IBIT'):
     if und=='GDXJ':
       dtStart='2009-11-30'
@@ -308,6 +308,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     elif und == 'PFMN.TO':
       dtStart = '2019-7-31'
     #####
+    elif und=='COPX':
+      dtStart='2010-4-30'
     elif und=='ENCO.LSE':
       dtStart='2021-8-31'
     elif und=='DFNS.LSE':
@@ -316,12 +318,16 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart='2016-2-29'
     elif und == 'JEGA.LSE':
       dtStart = '2023-12-29'
+    elif und == 'NATO.LSE':
+      dtStart = '2023-7-31'
     elif und=='ORR':
       dtStart = '2025-1-31'
     elif und=='PFIX':
       dtStart='2021-5-28'
     elif und=='RARE.LSE':
       dtStart='2024-4-30'
+    elif und=='REMX':
+      dtStart='2010-10-29'
     elif und=='ROLL.LSE':
       dtStart = '2020-12-29'
     elif und=='TAIL':
@@ -392,6 +398,23 @@ def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
 
+def getStateS_timestop(isEntryS, isExitS, maxDays, isCleaned=False, isMonthlyRebal=True):
+  if len(isEntryS)!=len(isExitS):
+    ul.iExit('getStateS_timestop')
+  stateS=(isEntryS * np.nan).rename('State')
+  state=0
+  daysHeld=0
+  for i in range(len(stateS)):
+    if state==0 and isEntryS.iloc[i]:
+      state=1; daysHeld=0
+    if state==1:
+      if isExitS.iloc[i] or daysHeld>=maxDays: state=0
+      else: daysHeld+=1
+    stateS.iloc[i]=state
+  if isCleaned:
+    stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
+  return stateS.astype(float)
+
 def getYClose(ticker, period=2):
   with warnings.catch_warnings():
     warnings.simplefilter('ignore', category=FutureWarning)
@@ -429,15 +452,15 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 def runIBSCore(yrStart, mult=1):
   und = 'QQQ'
-  volTgt = .23
+  volTgt = .255
   maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   df = dfDict[und]
   ibsS = getIbsS(df)
   isEntryS = ibsS < .1
-  isExitS = df['Close'] > df['High'].shift(1)
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  isExitS = (ibsS > .9) | (df['Close'] > df['High'].shift(1))
+  stateS = getStateS_timestop(isEntryS, isExitS, 10, isCleaned=True, isMonthlyRebal=True)
   dw[und] = stateS*mult
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
@@ -589,12 +612,12 @@ def runTPP2Core(yrStart):
   sphbS = applyDates(dfDict['SPHB']['Close'],dp)
   splvS = applyDates(dfDict['SPLV']['Close'],dp)
   sphb_lv_ratio = sphbS / splvS
-  isCanaryS_SPHB_LV = (m(sphb_lv_ratio).rolling(2).min() > 0).rename('SPHB_LV') * 1.0
+  isCanaryS_SPHB_LV = (m(sphb_lv_ratio) > 0).rename('SPHB_LV') * 1.0
 
   # 5. TIP
   cS_TIP = applyDates(dfDict['TIP']['Close'],dp)
   momS_TIP = (cS_TIP.pct_change(21) + cS_TIP.pct_change(63) + cS_TIP.pct_change(126) + cS_TIP.pct_change(252)) / 4
-  isCanaryS_TIP = (momS_TIP.rolling(2).min() > 0).rename('TIP') * 1.0
+  isCanaryS_TIP = (momS_TIP > 0).rename('TIP') * 1.0
 
   # Voting
   voteDf = pd.DataFrame({
@@ -664,47 +687,102 @@ def runTPP2(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runBEXCore(yrStart):
-  volTgt = .16
+def runBTSCore(yrStart):
+  HALVINGS = pd.to_datetime(['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'])
+  #####
+  volTgt = 0.16
   maxWgt = 1
-  cS_BTC=getPriceHistoryCrypto('BTC',yrStart=yrStart)['Close']
-  cS_ETH=getPriceHistoryCrypto('ETH',yrStart=yrStart)['Close']
-  cSW_BTC = cS_BTC.resample('W-WED').last().dropna()
-  cSW_ETH = cS_ETH.resample('W-WED').last().dropna()
-  rsiS_BTC = ta.rsi(cSW_BTC, length=9).rename('BTC RSI')
-  rsiS_ETH = ta.rsi(cSW_ETH, length=9).rename('ETH RSI')
-  #####
-  isBullishS=rsiS_BTC>60
-  dw2 = (isBullishS*(rsiS_BTC>=rsiS_ETH)*1).rename('BTC').to_frame()
-  dw2['ETH'] =  (isBullishS*(rsiS_BTC<rsiS_ETH)*1)
-  dp = cS_BTC.rename('BTC').to_frame()
-  dp['ETH'] = cS_ETH
-  #####
-  dw=dp.copy()
-  dw[:]=np.nan
-  idx = dw.index.intersection(dw2.index)
-  dw.loc[idx] = dw2.loc[idx]
-  #####
+  cS = getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
+  ratioS = (cS/cS.rolling(50).mean()).rename('Ratio')
+  nDays_off = 450
+  nDays_on = 900
+  isSeasonS = pd.Series(1, index=cS.index).rename('Season?')
+  for hd in HALVINGS:
+    isSeasonS[(cS.index >= hd + pd.Timedelta(days=nDays_off)) &
+         (cS.index < hd + pd.Timedelta(days=nDays_on))] = 0
+  dw = ((ratioS>1) & isSeasonS).rename('BTC').to_frame()
+  dp = cS.rename('BTC').to_frame()
   hv = getHV(dp, af=365)
   dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['rsiS_BTC']=rsiS_BTC
-  d['rsiS_ETH']=rsiS_ETH
+  dw = cleanS(dw, isMonthlyRebal=True)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['isSeasonS'] = isSeasonS
+  d['ratioS'] = ratioS
   return d
 
-def runBEX(yrStart,isSkipTitle=False):
-  script = 'BEX'
+def runBTS(yrStart, isSkipTitle=False):
+  script = 'BTS'
+  if not isSkipTitle:
+    st.header(script)
+  d = runBTSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['dp'], d['isSeasonS'], d['ratioS'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+
+def runGEOCore(yrStart):
+  volTgt = .05
+  maxWgt = 1
+  etc = ul.spl('U-UN.TO,ITA,XME')
+  dp, dw, dfDict, hv = btSetup(ul.spl('CCO.TO,NATO.LSE,COPX,REMX') + etc, yrStart=yrStart-1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  # CCO signal: U-UN.TO monthly ROC
+  uunS = dfDict['U-UN.TO']['Close']
+  rocS_UUN = (uunS.iloc[endpoints(uunS)].pct_change()).rename('UUN ROC 1M')
+
+  # NATO signal: ITA 10-month SMA
+  itaS = dfDict['ITA']['Close']
+  itaMS = itaS.iloc[endpoints(itaS)]
+  ratio10S_ITA = (itaMS / itaMS.rolling(10).mean()).rename('ITA Ratio 10M')
+
+  # COPX signal: XME 6-month SMA
+  xmeS = dfDict['XME']['Close']
+  xmeMS = xmeS.iloc[endpoints(xmeS)]
+  ratio6S_XME = (xmeMS / xmeMS.rolling(6).mean()).rename('XME Ratio 6M')
+
+  # REMX signal: REMX 10-month SMA
+  remxS = dfDict['REMX']['Close']
+  remxMS = remxS.iloc[endpoints(remxS)]
+  ratio10S_REMX = (remxMS / remxMS.rolling(10).mean()).rename('REMX Ratio 10M')
+
+  #####
+  dw['CCO.TO'] = applyDates(rocS_UUN > 0, dw)
+  dw['NATO.LSE'] = applyDates(ratio10S_ITA > 1, dw)
+  dw['COPX'] = applyDates(ratio6S_XME > 1, dw)
+  dw['REMX'] = applyDates(ratio10S_REMX > 1, dw)
+  dw=cleanS(dw, isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dp2'] = dp2
+  d['dw'] = dw
+  d['rocS_UUN'] = rocS_UUN
+  d['ratio10S_ITA'] = ratio10S_ITA
+  d['ratio6S_XME'] = ratio6S_XME
+  d['ratio10S_REMX'] = ratio10S_REMX
+  return d
+
+def runGEO(yrStart, isSkipTitle=False):
+  script = 'GEO'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runBEXCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'], d['rsiS_BTC'].round(1), d['rsiS_ETH'].round(1), how='inner')
-  stWriteDf(tableS.tail())
-
+  d = runGEOCore(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dp2'].tail())
+  st.header('Ratios')
+  stWriteDf(ul.merge(d['rocS_UUN'].round(3), d['ratio10S_ITA'].round(3), d['ratio6S_XME'].round(3), d['ratio10S_REMX'].round(3), how='inner').tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
