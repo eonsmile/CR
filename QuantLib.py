@@ -251,7 +251,8 @@ def getHV(s, n=32, af=252):
   if isinstance(s, pd.DataFrame):
     hv = s.copy()
     for col in hv.columns:
-      hv[col].values[:] = getHV(hv[col], n=n, af=af)
+      #hv[col].values[:] = getHV(hv[col], n=n, af=af)
+      hv[col] = getHV(hv[col], n=n, af=af).values
     return hv
   else:
     variances= (np.log(s / s.shift(1))) ** 2
@@ -844,7 +845,7 @@ def runQS12(yrStart, isSkipTitle=False):
 
 def runVCACore(yrStart):
   und='VIXM'
-  etc=ul.spl('SPY,VIX.INDX,VIX1D.INDX')
+  etc=ul.spl('SPY,VIX.INDX,VIX1D.INDX,VIX3M.INDX')
   dp, dw, dfDict, _ = btSetup([und]+etc,yrStart=yrStart-1)
   spyS = (dfDict['SPY']['Close']).rename('SPY')
   dp=applyDates(dp,spyS)
@@ -858,16 +859,20 @@ def runVCACore(yrStart):
   #####
   vixS = applyDates(dfDict['VIX.INDX']['Close'],spyS).rename('VIX')
   vix1DS = applyDates(dfDict['VIX1D.INDX']['Close'], spyS).rename('VIX1D')
+  vix3MS = applyDates(dfDict['VIX3M.INDX']['Close'], spyS).rename('VIX3M')
   vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
   hvS = (spyS.pct_change().rolling(10).std() * math.sqrt(252) * 100).rename('HV')
   eVRPS= (vixS-hvS).rename('eVRPS')
   eVRPS_pctl = eVRPS.rolling(252).rank(pct=True).rename('eVRPS Pctl')
+  logRatioS = np.log(vixS / vix3MS)
+  zScoreS = ((logRatioS - logRatioS.rolling(252).mean()) / logRatioS.rolling(252).std()).rename('ZScore')
   #####
   m= lambda s: applyDates(s,dw).ffill().fillna(0)
   w1 = m((spyRatioS < 1) & (ibsS > 0.75) & (vixRatioS > 1))
   w2 = m((eVRPS_pctl <= 0.25) & (vixRatioS > 1))
-  w3=m(vix1DS <= 10)
-  dw[und] = cleanS((w1 + w2 + w3).clip(upper=1), isMonthlyRebal=False)
+  w3 = m((zScoreS <= -1.5) & (vixRatioS > 1))
+  w4=m(vix1DS <= 10)
+  dw[und] = cleanS((w1 + w2 + w3 + w4).clip(upper=1), isMonthlyRebal=False)
   dw=cleanS(dw,isMonthlyRebal=True)
   #####
   d=dict()
@@ -881,6 +886,7 @@ def runVCACore(yrStart):
   d['hvS']=hvS
   d['eVRPS'] = eVRPS
   d['eVRPS_pctl'] = eVRPS_pctl
+  d['zScoreS'] = zScoreS
   d['VIX1D'] = vix1DS
   return d
 
@@ -892,7 +898,7 @@ def runVCA(yrStart,isSkipTitle=False):
   d=runVCACore(yrStart)
   st.header('Tables')
   tableS = ul.merge(d['dp'],d['SPY'],d['spyRatioS'].round(3),d['ibsS'].round(3),
-                    d['VIX'],d['vixRatioS'].round(3),d['hvS'].round(2),d['eVRPS'].round(2),(d['eVRPS_pctl']*100).round(1),d['VIX1D'], how='inner')
+                    d['VIX'],d['vixRatioS'].round(3),d['hvS'].round(2),d['eVRPS'].round(2),(d['eVRPS_pctl']*100).round(1),d['zScoreS'].round(3),d['VIX1D'], how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
