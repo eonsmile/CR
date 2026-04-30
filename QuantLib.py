@@ -292,7 +292,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   #####
   if und in ul.spl('GDXJ,EUDF.XETRA,IPRE.XETRA,'
                    'COM,DBMF,INFL,PFMN.TO,'
-                   'COPX,ENCO.LSE,DFNS.LSE,GCOW,JEGA.LSE,NATO.LSE,ORR,PFIX,RARE.LSE,REMX,ROLL.LSE,TAIL,WCOA.LSE,'
+                   'COPX,ENCO.LSE,DFNS.LSE,GCOW,HFGM,JEGA.LSE,NATO.LSE,ORR,PFIX,RARE.LSE,REMX,ROLL.LSE,TAIL,WCOA.LSE,'
                    'IBIT'):
     if und=='GDXJ':
       dtStart='2009-11-30'
@@ -317,6 +317,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart='2023-4-28'
     elif und=='GCOW':
       dtStart='2016-2-29'
+    elif und=='HFGM':
+      dtStart='2025-4-30'
     elif und == 'JEGA.LSE':
       dtStart = '2023-12-29'
     elif und == 'NATO.LSE':
@@ -453,15 +455,15 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 def runIBSCore(yrStart, mult=1):
   und = 'QQQ'
-  volTgt = .255
-  maxWgt = 2
+  volTgt = .225
+  maxWgt = 1.5
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   df = dfDict[und]
   ibsS = getIbsS(df)
   isEntryS = ibsS < .1
   isExitS = (ibsS > .9) | (df['Close'] > df['High'].shift(1))
-  stateS = getStateS_timestop(isEntryS, isExitS, 10, isCleaned=True, isMonthlyRebal=True)
+  stateS = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
   dw[und] = stateS*mult
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
@@ -492,8 +494,6 @@ def runIBS(yrStart,mult=1, isSkipTitle=False):
 
 def runRSSCore(yrStart):
   und='SPY'
-  volTgt = .22
-  maxWgt = 2
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
   #####
   cS = dfDict[und]['Close']
@@ -508,11 +508,9 @@ def runRSSCore(yrStart):
   stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
   #####
   # Summary
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw[und] = stateS * 2
   dw.loc[dw.index.year < yrStart] = 0
   d=dict()
-  d['und']=und
   d['dp']=dp
   d['dw']=dw
   d['vixS']=vixS
@@ -530,12 +528,11 @@ def runRSS(yrStart,isSkipTitle=False):
   #####
   d=runRSSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(d['dp'][d['und']],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
+  tableS = ul.merge(d['dp'],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
-
 
 def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undQ = 'QQQ'
@@ -543,7 +540,7 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undG = 'GLD'
   undD = 'UUP'
   lookback = 32
-  volTgt = .125
+  volTgt = .12
   maxWgt = 1.5
   ######
   script = 'TPP'
@@ -583,8 +580,6 @@ def runTPP2Core(yrStart):
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
     hv = hv.drop(und2, axis=1)
-  #####
-
   ##############
   # SPY canaries
   ##############
@@ -688,11 +683,51 @@ def runTPP2(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runDGSCore(yrStart):
+    volTgt = .18
+    maxWgt = 1.5
+    #####
+    und = 'SPY'
+    dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+    #####
+    cS = dfDict[und]['Close']
+    df = pd.read_csv('https://squeezemetrics.com/monitor/static/DIX.csv', parse_dates=['date'], index_col='date').sort_index()
+    dixS = applyDates(df['dix'].rename('DIX'), cS)
+    gexS = applyDates(df['gex'].rename('GEX'), cS)
+    vixS = applyDates(getPriceHistory('VIX.INDX', yrStart=yrStart - 1)['Close'].rename('VIX'), cS)
+    vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
+    #####
+    dw[und] = cleanS(((dixS > 0.45)|(gexS > 0)) & (vixRatioS<1), isMonthlyRebal=True)
+    dw = (dw * volTgt / hv).clip(0, maxWgt)
+    #####
+    d = dict()
+    d['dp'] = dp
+    d['dw'] = dw
+    d['dixS'] = dixS
+    d['gexS'] = gexS
+    d['vixS'] = vixS
+    d['vixRatioS'] = vixRatioS
+    return d
+
+def runDGS(yrStart, isSkipTitle=False):
+    script = 'DGS'
+    if not isSkipTitle:
+        st.header(script)
+    #####
+    d = runDGSCore(yrStart)
+    #####
+    st.header('Table')
+    stWriteDf(ul.merge(d['dp'],d['dixS'].round(3),(d['gexS']/1e9).round(3),d['vixS'],d['vixRatioS'].round(3),how='inner').tail())
+    #####
+    st.header('Weights')
+    dwTail(d['dw'])
+    bt(script, d['dp'], d['dw'], yrStart)
+
 def runBTSCore(yrStart):
   HALVINGS = pd.to_datetime(['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'])
   #####
-  volTgt = 0.16
-  maxWgt = 1
+  volTgt = .255
+  maxWgt = 1.5
   cS = getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
   ratioS = (cS/cS.rolling(50).mean()).rename('Ratio')
   nDays_off = 450
@@ -725,10 +760,8 @@ def runBTS(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-
 def runGEOCore(yrStart):
   volTgt = .05
-  maxWgt = 1
   etc = ul.spl('U-UN.TO,ITA,XME')
   dp, dw, dfDict, hv = btSetup(ul.spl('CCO.TO,NATO.LSE,COPX,REMX') + etc, yrStart=yrStart-1)
   dp2 = dp.copy()
@@ -762,7 +795,7 @@ def runGEOCore(yrStart):
   dw['COPX'] = applyDates(ratio6S_XME > 1, dw)
   dw['REMX'] = applyDates(ratio10S_REMX > 1, dw)
   dw=cleanS(dw, isMonthlyRebal=True)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw *= volTgt / hv
   #####
   d = dict()
   d['dp'] = dp
@@ -791,8 +824,8 @@ def runGEO(yrStart, isSkipTitle=False):
 def runQS12Core(yrStart):
   undG = 'GLD'
   undB = 'TLT'
-  volTgt = .16
-  maxWgt = 1
+  volTgt = .21
+  maxWgt = 1.5
   tickers = [undG,undB]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
   hS = dfDict[undG]['High']
@@ -929,7 +962,6 @@ def runSCI2(yrStart,isSkipTitle=False):
     st.header(script)
   ######
   volTgt = .08
-  maxWgt = 1
   dp, _, dfDict, _ = btSetup(ul.spl('IWM,XLRE,KBWD,JETS,IPRE.XETRA,KRE,'
                                'XLV,XLU,MOAT,DFND.SW,EUDF.XETRA,DB1.XETRA'),yrStart=yrStart-1)
   dp = applyDates(dp,dfDict['XLRE'])
@@ -953,7 +985,7 @@ def runSCI2(yrStart,isSkipTitle=False):
   dw.loc[idx, 'EUDF.XETRA'] = 1 # WDEF in IBKR
   dw.loc[idx, 'DB1.XETRA'] = .5
   dw.loc[idx, 'S68.SI'] = .5
-  dw = (dw * volTgt / hv).clip(-maxWgt, maxWgt)
+  dw *= volTgt / hv
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
