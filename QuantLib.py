@@ -270,19 +270,24 @@ def getIbsS(df,n=1):
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
-  ticker=und
-  if '.' not in ticker:
-    ticker=f"{und}.US"
-  df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
-  df['date'] = pd.to_datetime(df['date'])
-  df['ratio'] = df['adjusted_close'] / df['close']
-  for field in ul.spl('open,high,low'):
-    df[f"adjusted_{field}"] = df[field] * df['ratio']
-  df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
-  #####
-  df = df.set_index('date')
-  df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df.sort_values(by=['date']).round(10)
+  if und.endswith('.T'):
+    period = max(2, pendulum.now().year - yrStart + 1)
+    df = getYOHLCV(und, period=period)
+    df = df.loc[df.index >= pd.Timestamp(dtStart)]
+  else:
+    ticker=und
+    if '.' not in ticker:
+      ticker=f"{und}.US"
+    df=pd.DataFrame(requests.get(f"https://eodhd.com/api/eod/{ticker}?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}").json())
+    df['date'] = pd.to_datetime(df['date'])
+    df['ratio'] = df['adjusted_close'] / df['close']
+    for field in ul.spl('open,high,low'):
+      df[f"adjusted_{field}"] = df[field] * df['ratio']
+    df = df[ul.spl('date,adjusted_open,adjusted_high,adjusted_low,adjusted_close,volume')]
+    #####
+    df = df.set_index('date')
+    df.columns = ul.spl('Open,High,Low,Close,Volume')
+    df = df.sort_values(by=['date']).round(10)
   #####
   def m(df,fn):
     df2 = pd.read_csv(f"data/{fn}", index_col=0, parse_dates=True, date_format='%m/%d/%Y')
@@ -290,16 +295,26 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
   #####
-  if und in ul.spl('GDXJ,EUDF.XETRA,IPRE.XETRA,'
+  if und in ul.spl('COPX,EUDF.XETRA,GDXJ,GRID,IPRE.XETRA,NATO.LSE,REMX,WTAI.LSE,'
                    'COM,DBMF,INFL,PFMN.TO,'
-                   'COPX,ENCO.LSE,DFNS.LSE,GCOW,HFGM,JEGA.LSE,NATO.LSE,ORR,PFIX,RARE.LSE,REMX,ROLL.LSE,TAIL,WCOA.LSE,'
+                   '9888.HK,9988.HK,513A.T,DFNS.LSE,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
                    'IBIT'):
-    if und=='GDXJ':
-      dtStart='2009-11-30'
+    if und=='COPX':
+      dtStart='2010-4-30'
     elif und == 'EUDF.XETRA':
       dtStart = '2025-3-31'
+    elif und=='GDXJ':
+      dtStart='2009-11-30'
+    elif und=='GRID':
+      dtStart='2009-11-30'
     elif und == 'IPRE.XETRA':
       dtStart = '2018-12-28'
+    elif und == 'NATO.LSE':
+      dtStart = '2023-7-31'
+    elif und=='REMX':
+      dtStart='2010-10-29'
+    elif und=='WTAI.LSE':
+      dtStart = '2018-12-31'
     #####
     # COM
     elif und=='DBMF':
@@ -309,28 +324,30 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     elif und == 'PFMN.TO':
       dtStart = '2019-7-31'
     #####
-    elif und=='COPX':
-      dtStart='2010-4-30'
-    elif und=='ENCO.LSE':
-      dtStart='2021-8-31'
+    elif und=='9888.HK':
+      dtStart = '2021-3-23'
+    elif und=='9988.HK':
+      dtStart = '2019-11-26'
+    elif und=='513A.T':
+      dtStart = '2026-2-27'
     elif und=='DFNS.LSE':
       dtStart='2023-4-28'
+    elif und=='ENCO.LSE':
+      dtStart='2021-8-31'
     elif und=='GCOW':
       dtStart='2016-2-29'
     elif und=='HFGM':
       dtStart='2025-4-30'
     elif und == 'JEGA.LSE':
       dtStart = '2023-12-29'
-    elif und == 'NATO.LSE':
-      dtStart = '2023-7-31'
     elif und=='ORR':
       dtStart = '2025-1-31'
     elif und=='PFIX':
       dtStart='2021-5-28'
     elif und=='RARE.LSE':
       dtStart='2024-4-30'
-    elif und=='REMX':
-      dtStart='2010-10-29'
+    elif und=='ROBO':
+      dtStart = '2013-10-31'
     elif und=='ROLL.LSE':
       dtStart = '2020-12-29'
     elif und=='TAIL':
@@ -426,6 +443,27 @@ def getYClose(ticker, period=2):
   df.index = df.index.droplevel('symbol')
   df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
   return df['adjclose'].rename(ticker)
+
+def getYOHLCV(ticker, period=2):
+  with warnings.catch_warnings():
+    warnings.simplefilter('ignore', category=FutureWarning)
+    session = curl_cffi.Session(impersonate="chrome")
+    df = yahooquery.Ticker(ticker, session=session).history(period=f"{period}y")
+  df.index = df.index.droplevel('symbol')
+  df.index = pd.DatetimeIndex(pd.to_datetime(
+    [pendulum.parse(str(x)).date() for x in df.index]
+  )).tz_localize(None).normalize()
+  df.index.name = 'date'
+  ratio = df['adjclose'] / df['close']
+  df['open'] = df['open'] * ratio
+  df['high'] = df['high'] * ratio
+  df['low'] = df['low'] * ratio
+  df['close'] = df['adjclose']
+  df = df[['open', 'high', 'low', 'close', 'volume']]
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_index().round(10)
+  df = df[~df.index.duplicated(keep='last')]
+  return df
 
 def stWriteDf(df,isMaxHeight=False):
   def formatter(n):
@@ -683,6 +721,124 @@ def runTPP2(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runAISCore(yrStart):
+  volTgt = .04
+  etc = ul.spl('U-UN.TO,XME,SPY,HYG')
+  dp, dw, dfDict, hv = btSetup(ul.spl('GRID,WTAI.LSE,CCO.TO,COPX,SMH') + etc, yrStart=yrStart-1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  # GRID signal: GRID 10-month SMA AND HYG 6-month SMA (credit canary)
+  gridS = dfDict['GRID']['Close']
+  gridMS = gridS.iloc[endpoints(gridS)]
+  ratio10S_GRID = (gridMS / gridMS.rolling(10).mean()).rename('GRID Ratio 10M')
+
+  hygS = dfDict['HYG']['Close']
+  hygMS = hygS.iloc[endpoints(hygS)]
+  ratio6S_HYG = (hygMS / hygMS.rolling(6).mean()).rename('HYG Ratio 6M')
+
+  # WTAI.LSE signal: SMH 12-month SMA
+  smhS = dfDict['SMH']['Close']
+  smhMS = smhS.iloc[endpoints(smhS)]
+  ratio12S_SMH = (smhMS / smhMS.rolling(12).mean()).rename('SMH Ratio 12M')
+
+  # CCO.TO signal: U-UN.TO monthly ROC (from GEO)
+  uunS = dfDict['U-UN.TO']['Close']
+  rocS_UUN = (uunS.iloc[endpoints(uunS)].pct_change()).rename('UUN ROC 1M')
+
+  # COPX signal: XME 6-month SMA (from GEO)
+  xmeS = dfDict['XME']['Close']
+  xmeMS = xmeS.iloc[endpoints(xmeS)]
+  ratio6S_XME = (xmeMS / xmeMS.rolling(6).mean()).rename('XME Ratio 6M')
+
+  # SMH signal: SMH/SPY 6-12M rel strength (from GEO)
+  df = dp2[ul.spl('SPY,SMH')]
+  mDf = df.iloc[endpoints(df)]
+  rS = (mDf.pct_change(6) + mDf.pct_change(12)) / 2 + 1
+  ratio612S_SMH = (rS['SMH'] / rS['SPY']).rename('SMH Ratio 6-12M')
+
+  #####
+  dw['GRID'] = applyDates((ratio10S_GRID > 1) & (ratio6S_HYG > 1), dw)
+  dw['WTAI.LSE'] = applyDates(ratio12S_SMH > 1, dw)
+  dw['CCO.TO'] = applyDates(rocS_UUN > 0, dw)
+  dw['COPX'] = applyDates(ratio6S_XME > 1, dw)
+  dw['SMH'] = applyDates(ratio612S_SMH > 1, dw)
+  dw = cleanS(dw, isMonthlyRebal=True)
+  dw *= volTgt / hv
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dp2'] = dp2
+  d['dw'] = dw
+  d['ratio10S_GRID'] = ratio10S_GRID
+  d['ratio6S_HYG'] = ratio6S_HYG
+  d['ratio12S_SMH'] = ratio12S_SMH
+  d['rocS_UUN'] = rocS_UUN
+  d['ratio6S_XME'] = ratio6S_XME
+  d['ratio612S_SMH'] = ratio612S_SMH
+  return d
+
+def runAIS(yrStart, isSkipTitle=False):
+  script = 'AIS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runAISCore(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dp2'].tail())
+  st.header('Ratios')
+  stWriteDf(ul.merge(
+    d['ratio10S_GRID'].round(3),
+    d['ratio6S_HYG'].round(3),
+    d['ratio12S_SMH'].round(3),
+    d['rocS_UUN'].round(3),
+    d['ratio6S_XME'].round(3),
+    d['ratio612S_SMH'].round(3),
+    how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+
+def runAIS2Core(yrStart):
+  volTgt = .07
+  longs = ul.spl('0700.HK,0981.HK,0992.HK,9888.HK,9988.HK')
+  short = '2828.HK'
+  dp, dw, dfDict, hv = btSetup(longs + [short], yrStart=yrStart - 1)
+  #####
+  dpm_longs = dp[longs].iloc[endpoints(dp[longs])]
+  dpq_longs = dpm_longs[dpm_longs.index.month.isin([3, 6, 9, 12])]
+  rQS = dpq_longs.pct_change(3)
+  keep = (rQS.rank(axis=1, ascending=False, method='first') <= 3) & (rQS > 0)
+  dw[longs] = applyDates(keep, dw) * volTgt / hv[longs]
+  dw[short] = -dw[longs].sum(axis=1)
+  mask = dw.index[endpoints(dw)]
+  mask = mask[mask.month.isin([3, 6, 9, 12])]
+  dw2 = dw.copy()
+  dw2[:] = np.nan
+  dw2.loc[mask] = dw.loc[mask]
+  dw = cleanS(dw2, isMonthlyRebal=False)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  return d
+
+def runAIS2(yrStart, isSkipTitle=False):
+  script = 'AIS2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runAIS2Core(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dp'].tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runDGSCore(yrStart):
     volTgt = .18
     maxWgt = 1.5
@@ -762,49 +918,45 @@ def runBTS(yrStart, isSkipTitle=False):
 
 def runGEOCore(yrStart):
   volTgt = .05
-  etc = ul.spl('U-UN.TO,ITA,XME')
-  dp, dw, dfDict, hv = btSetup(ul.spl('CCO.TO,NATO.LSE,COPX,REMX') + etc, yrStart=yrStart-1)
+  etc = ul.spl('ITA,BDRY')
+  dp, dw, dfDict, hv = btSetup(ul.spl('NATO.LSE,REMX,ZEO.TO,513A.T') + etc, yrStart=yrStart - 1)
   dp2 = dp.copy()
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
     hv = hv.drop(und2, axis=1)
   #####
-  # CCO signal: U-UN.TO monthly ROC
-  uunS = dfDict['U-UN.TO']['Close']
-  rocS_UUN = (uunS.iloc[endpoints(uunS)].pct_change()).rename('UUN ROC 1M')
-
-  # NATO signal: ITA 10-month SMA
   itaS = dfDict['ITA']['Close']
   itaMS = itaS.iloc[endpoints(itaS)]
   ratio10S_ITA = (itaMS / itaMS.rolling(10).mean()).rename('ITA Ratio 10M')
 
-  # COPX signal: XME 6-month SMA
-  xmeS = dfDict['XME']['Close']
-  xmeMS = xmeS.iloc[endpoints(xmeS)]
-  ratio6S_XME = (xmeMS / xmeMS.rolling(6).mean()).rename('XME Ratio 6M')
-
-  # REMX signal: REMX 10-month SMA
   remxS = dfDict['REMX']['Close']
   remxMS = remxS.iloc[endpoints(remxS)]
   ratio10S_REMX = (remxMS / remxMS.rolling(10).mean()).rename('REMX Ratio 10M')
 
+  bdryS = dfDict['BDRY']['Close']
+  bdryMS = bdryS.iloc[endpoints(bdryS)]
+  ratio10S_BDRY = (bdryMS / bdryMS.rolling(10).mean()).rename('BDRY Ratio 10M')
+
+  jpS = dfDict['513A.T']['Close']
+  jpMS = jpS.iloc[endpoints(jpS)]
+  ratio10S_513A = (jpMS / jpMS.rolling(10).mean()).rename('513A.T Ratio 10M')
   #####
-  dw['CCO.TO'] = applyDates(rocS_UUN > 0, dw)
   dw['NATO.LSE'] = applyDates(ratio10S_ITA > 1, dw)
-  dw['COPX'] = applyDates(ratio6S_XME > 1, dw)
   dw['REMX'] = applyDates(ratio10S_REMX > 1, dw)
-  dw=cleanS(dw, isMonthlyRebal=True)
+  dw['ZEO.TO'] = applyDates(ratio10S_BDRY > 1, dw)
+  dw['513A.T'] = applyDates(ratio10S_513A > 1, dw) / 2
+  dw = cleanS(dw, isMonthlyRebal=True)
   dw *= volTgt / hv
   #####
   d = dict()
   d['dp'] = dp
   d['dp2'] = dp2
   d['dw'] = dw
-  d['rocS_UUN'] = rocS_UUN
   d['ratio10S_ITA'] = ratio10S_ITA
-  d['ratio6S_XME'] = ratio6S_XME
   d['ratio10S_REMX'] = ratio10S_REMX
+  d['ratio10S_BDRY'] = ratio10S_BDRY
+  d['ratio10S_513A'] = ratio10S_513A
   return d
 
 def runGEO(yrStart, isSkipTitle=False):
@@ -816,7 +968,12 @@ def runGEO(yrStart, isSkipTitle=False):
   st.header('Prices')
   stWriteDf(d['dp2'].tail())
   st.header('Ratios')
-  stWriteDf(ul.merge(d['rocS_UUN'].round(3), d['ratio10S_ITA'].round(3), d['ratio6S_XME'].round(3), d['ratio10S_REMX'].round(3), how='inner').tail())
+  stWriteDf(ul.merge(
+    d['ratio10S_ITA'].round(3),
+    d['ratio10S_REMX'].round(3),
+    d['ratio10S_BDRY'].round(3),
+    d['ratio10S_513A'].round(3),
+    how='inner').tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
