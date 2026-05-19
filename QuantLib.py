@@ -840,7 +840,7 @@ def runAIS2(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runDGSCore(yrStart):
-    volTgt = .18
+    volTgt = .28
     maxWgt = 1.5
     #####
     und = 'SPY'
@@ -853,7 +853,11 @@ def runDGSCore(yrStart):
     vixS = applyDates(getPriceHistory('VIX.INDX', yrStart=yrStart - 1)['Close'].rename('VIX'), cS)
     vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
     #####
-    dw[und] = cleanS(((dixS > 0.45)|(gexS > 0)) & (vixRatioS<1), isMonthlyRebal=True)
+    isDarkPoolOk = (dixS > 0.45) | (gexS > 0)
+    isVixOk = vixRatioS < 1
+    preStateS = ((isDarkPoolOk & isVixOk)*1).rename('Pre State')
+    stateS = ((preStateS.rolling(3).sum() >= 2)*1).rename('State')
+    dw[und] = cleanS(stateS, isMonthlyRebal=True)
     dw = (dw * volTgt / hv).clip(0, maxWgt)
     #####
     d = dict()
@@ -863,6 +867,8 @@ def runDGSCore(yrStart):
     d['gexS'] = gexS
     d['vixS'] = vixS
     d['vixRatioS'] = vixRatioS
+    d['preStateS'] = preStateS
+    d['stateS'] = stateS
     return d
 
 def runDGS(yrStart, isSkipTitle=False):
@@ -873,7 +879,7 @@ def runDGS(yrStart, isSkipTitle=False):
     d = runDGSCore(yrStart)
     #####
     st.header('Table')
-    stWriteDf(ul.merge(d['dp'],d['dixS'].round(3),(d['gexS']/1e9).round(3),d['vixS'],d['vixRatioS'].round(3),how='inner').tail())
+    stWriteDf(ul.merge(d['dp'],d['dixS'].round(3),(d['gexS']/1e9).round(3),d['vixS'],d['vixRatioS'].round(3),d['preStateS'],d['stateS'],how='inner').tail())
     #####
     st.header('Weights')
     dwTail(d['dw'])
