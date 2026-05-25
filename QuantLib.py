@@ -13,7 +13,6 @@ import yahooquery
 import curl_cffi
 import warnings
 import pandas_ta_classic as ta
-from sklearn.linear_model import LinearRegression
 
 ###########
 # Constants
@@ -270,7 +269,7 @@ def getIbsS(df,n=1):
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
-  if und.endswith('.T'):
+  if und.endswith('.T') or und.endswith('.KS'):
     period = max(2, pendulum.now().year - yrStart + 1)
     df = getYOHLCV(und, period=period)
     df = df.loc[df.index >= pd.Timestamp(dtStart)]
@@ -465,6 +464,27 @@ def getYOHLCV(ticker, period=2):
   df = df[~df.index.duplicated(keep='last')]
   return df
 
+def pushoverSend(msg):
+  import http.client, urllib.parse, time, os
+  from dotenv import load_dotenv
+  #####
+  load_dotenv()
+  PUSHOVER_USER = os.getenv('PUSHOVER_USER', '')
+  PUSHOVER_TOKEN = os.getenv('PUSHOVER_TOKEN', '')
+  data = urllib.parse.urlencode({
+    'token': PUSHOVER_TOKEN, 'user': PUSHOVER_USER,
+    'message': msg, 'priority': 0, 'sound': 'updown'})
+  hdr = {'Content-type': 'application/x-www-form-urlencoded'}
+  for i in range(30):
+    try:
+      c = http.client.HTTPSConnection('api.pushover.net:443')
+      c.request('POST', '/1/messages.json', data, hdr)
+      c.getresponse()
+      return
+    except Exception as e:
+      print('Pushover error:', e)
+      time.sleep(i+1)
+
 def stWriteDf(df,isMaxHeight=False):
   def formatter(n):
     if isinstance(n,float):
@@ -491,7 +511,7 @@ def stWriteDf(df,isMaxHeight=False):
 #########
 # Scripts
 #########
-def runIBSCore(yrStart, mult=1):
+def runIBSCore(yrStart):
   und = 'QQQ'
   volTgt = .225
   maxWgt = 1.5
@@ -502,11 +522,11 @@ def runIBSCore(yrStart, mult=1):
   isEntryS = ibsS < .1
   isExitS = (ibsS > .9) | (df['Close'] > df['High'].shift(1))
   stateS = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS*mult
+  dw[und] = stateS
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   d=dict()
-  d['und']=und
+  #d['und']=und
   d['dp']=dp
   d['dw']=dw
   d['dfDict']=dfDict
@@ -514,15 +534,14 @@ def runIBSCore(yrStart, mult=1):
   d['stateS']=stateS
   return d
 
-def runIBS(yrStart,mult=1, isSkipTitle=False):
+def runIBS(yrStart,isSkipTitle=False):
   script = 'IBS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runIBSCore(yrStart,mult=mult)
+  d=runIBSCore(yrStart)
   st.header('Table')
-  st.subheader(d['und'])
-  df = d['dfDict'][d['und']]
+  df = d['dfDict']['QQQ']
   df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
   df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
   stWriteDf(df2.tail())
@@ -980,6 +999,47 @@ def runGEO(yrStart, isSkipTitle=False):
     d['ratio10S_BDRY'].round(3),
     d['ratio10S_513A'].round(3),
     how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runHNXCore(yrStart):
+  und = '000660.KS'
+  volTgt = .245
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
+  #####
+  ibsS = getIbsS(dfDict[und])
+  cS = dfDict[und]['Close']
+  ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
+  isEntryS = (ibsS < .2) & (ratioS>1)
+  isExitS  = ibsS > .7
+  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=False)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ibsS'] = ibsS
+  d['ratioS'] = ratioS
+  d['stateS'] = stateS
+  return d
+
+def runHNX(yrStart, isSkipTitle=False):
+  script = 'HNX'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runHNXCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['000660.KS']
+  df2 = ul.merge(df['Close'].round().round(0).map('{:,.0f}'.format),
+                 df['High'].round().round(0).map('{:,.0f}'.format),
+                 df['Low'].round().round(0).map('{:,.0f}'.format),
+                 d['ibsS'].round(3), d['ratioS'].round(3),how='inner')
+  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
+  stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
