@@ -179,99 +179,16 @@ def getNYSEMonthEnd(offset=0):
 
 #############################################################################################
 
-#####
-# Etc
-#####
-def cleanS(s, isMonthlyRebal=True):
-  s=s.astype('float64').ffill()
-  tmp=s.shift(1)
-  if isinstance(s, pd.DataFrame):
-    for i in range(1, len(s)):
-      if s.iloc[i].equals(tmp.iloc[i]):
-        s.iloc[i]=np.nan
-  else:
-    for i in range(1, len(s)):
-      if s.iloc[i]==tmp.iloc[i]:
-        s.iloc[i]=np.nan
-  if isMonthlyRebal:
-    pe=endpoints(s)
-    s.iloc[pe]=s.ffill().iloc[pe]
-  return s
-
-def EMA(s, n):
-  return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
-
-def extend(df, df2):
-  dtAnchor=df['Close'].first_valid_index()
-  if df2.index[-1] >= dtAnchor:
-    ratio= df.loc[dtAnchor]['Close'] / df2.loc[dtAnchor]['Close']
-    df2= df2[:dtAnchor][:-1]
-    df2[ul.spl('Open,High,Low,Close')] *= ratio
-    df2['Volume'] /= ratio
-    return pd.concat([df2, df.loc[dtAnchor:]])
-  else:
-    return df
-
-def getCoreWeightsDf():
-  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
-  fmt='DDMMMYY'
-  dts = [pendulum.from_format(dt, fmt) for dt in lastUpdateDict.values()]
-  lastUpdate = max(dts).format(fmt)
-  l = list()
-  ep = 1e-9
-  #####
-  emptyDict = {'SPY':0,'QQQ':0,'IEI':0,'GLD':0,'UUP':0}
-  #####
-  d = ul.cachePersist('r', 'CR')['TPPDict']
-  tppDict=emptyDict.copy()
-  for und in ul.spl('QQQ,IEI,GLD,UUP'):
-    tppDict[und] = d[und] + ep
-  ####
-  d = ul.cachePersist('r', 'CR')['RSSDict']
-  rssDict = emptyDict.copy()
-  rssDict['SPY'] = d['SPY'] + ep
-  ####
-  d = ul.cachePersist('r', 'CR')['IBSDict']
-  ibsDict = emptyDict.copy()
-  ibsDict['QQQ'] = d['QQQ'] + ep
-  #####
-  dts=list(lastUpdateDict.values())
-  i = 0
-  for und in ul.spl('SPY,QQQ,IEI,GLD,UUP'):
-    totalWeight = tppDict[und]*.5+rssDict[und]*.25+ibsDict[und]*.25
-    l.append([dts[i], und, totalWeight, tppDict[und], rssDict[und], ibsDict[und]])
-    i += 1
-  df = pd.DataFrame(l)
-  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/2),RSS (1/4),IBS (1/4)')
-  df.set_index(['ETF'], inplace=True)
-  return df,lastUpdate
-
-def getHV(s, n=32, af=252):
-  if isinstance(s, pd.DataFrame):
-    hv = s.copy()
-    for col in hv.columns:
-      #hv[col].values[:] = getHV(hv[col], n=n, af=af)
-      hv[col] = getHV(hv[col], n=n, af=af).values
-    return hv
-  else:
-    variances= (np.log(s / s.shift(1))) ** 2
-    return (EMA(variances,n)**.5*(af**.5)).rename(s.name)
-
-def getIbsS(df,n=1):
-  if n==1:
-    ibsS = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
-  else:
-    lS=df['Low'].rolling(n).min()
-    hS=df['High'].rolling(n).max()
-    ibsS = (df['Close'] - lS) / (hS - lS)
-  ibsS.name = 'IBS'
-  return ibsS
+########
+# Prices
+########
+#df2 = getPriceHistory('ITA', yrStart=yrStart)
+#df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
-  if und.endswith('.T') or und.endswith('.KS'):
-    period = max(2, pendulum.now().year - yrStart + 1)
-    df = getYOHLCV(und, period=period)
+  if und.endswith('.T'):
+    df = getPriceHistoryYahoo(und, yrStart=yrStart)
     df = df.loc[df.index >= pd.Timestamp(dtStart)]
   else:
     ticker=und
@@ -360,6 +277,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
     df = m(df, f"{und}.csv")
+  elif und == '000660.KO':
+    df = extend(getPriceHistoryIBKR('000660'), df.loc[df.index <= '2026-2-23'])
   elif und == 'DFND.SW':
     df = m(df, 'ITA.csv')
   elif und == 'BDRY':
@@ -368,9 +287,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     dtStart = '2023-4-24'
     df = df.loc[df.index>=dtStart]
   return df
-
-  #df2 = getPriceHistory('ITA', yrStart=yrStart)
-  #df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
 
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   def m(toTs=None):
@@ -401,6 +317,177 @@ def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   df = df.replace('.', np.nan).astype(float).dropna()
   df.index.name = None
   return df[id]
+
+def getPriceHistoryIBKR(und):
+  from ib_async import IB, Stock
+  import logging
+  import pandas as pd
+
+  if isinstance(und, str) and und.isdigit() and len(und) == 6:
+    contract = Stock(und, 'KRX', 'KRW')
+  else:
+    contract = Stock(und, 'SMART', 'USD')
+
+  ib_logger = logging.getLogger('ib_async')
+  prev_level = ib_logger.level
+  ib_logger.setLevel(logging.CRITICAL)
+
+  ib = IB()
+  try:
+    for port in (4001, 7496):
+      try:
+        ib.connect('127.0.0.1', port, clientId=1, readonly=True, timeout=5)
+        if ib.isConnected():
+          break
+      except Exception:
+        continue
+    else:
+      raise ConnectionError('Could not connect to IB Gateway (4001) or TWS (7496)')
+  finally:
+    ib_logger.setLevel(prev_level)
+
+  ib.reqMarketDataType(3)
+
+  bars = ib.reqHistoricalData(
+    contract,
+    endDateTime='',
+    durationStr='2 Y',
+    barSizeSetting='1 day',
+    whatToShow='ADJUSTED_LAST',
+    useRTH=True,
+    formatDate=1,
+  )
+
+  ib.disconnect()
+
+  df = pd.DataFrame([{
+    'Date':   b.date,
+    'Open':   b.open,
+    'High':   b.high,
+    'Low':    b.low,
+    'Close':  b.close,
+    'Volume': b.volume,
+  } for b in bars])
+
+  if df.empty:
+    return df
+
+  df['Date'] = pd.to_datetime(df['Date'])
+  df = df.set_index('Date').sort_index()
+  return df.loc['2026-01-01':]
+
+def getPriceHistoryYahoo(und, yrStart=SHARED_DICT['yrStart']):
+  dtStart = str(yrStart) + '-1-1'
+  period = max(2, pendulum.now().year - yrStart + 1)
+  with warnings.catch_warnings():
+    warnings.simplefilter('ignore', category=FutureWarning)
+    session = curl_cffi.Session(impersonate="chrome")
+    df = yahooquery.Ticker(und, session=session).history(period=f"{period}y")
+  df.index = df.index.droplevel('symbol')
+  df.index = pd.DatetimeIndex(pd.to_datetime(
+    [pendulum.parse(str(x)).date() for x in df.index]
+  )).tz_localize(None).normalize()
+  df.index.name = 'date'
+  ratio = df['adjclose'] / df['close']
+  df['open'] = df['open'] * ratio
+  df['high'] = df['high'] * ratio
+  df['low'] = df['low'] * ratio
+  df['close'] = df['adjclose']
+  df = df[['open', 'high', 'low', 'close', 'volume']]
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_index().round(10)
+  df = df[~df.index.duplicated(keep='last')]
+  df = df.loc[df.index >= pd.Timestamp(dtStart)]
+  return df
+
+#############################################################################################
+
+#####
+# Etc
+#####
+def cleanS(s, isMonthlyRebal=True):
+  s=s.astype('float64').ffill()
+  tmp=s.shift(1)
+  if isinstance(s, pd.DataFrame):
+    for i in range(1, len(s)):
+      if s.iloc[i].equals(tmp.iloc[i]):
+        s.iloc[i]=np.nan
+  else:
+    for i in range(1, len(s)):
+      if s.iloc[i]==tmp.iloc[i]:
+        s.iloc[i]=np.nan
+  if isMonthlyRebal:
+    pe=endpoints(s)
+    s.iloc[pe]=s.ffill().iloc[pe]
+  return s
+
+def EMA(s, n):
+  return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
+
+def extend(df, df2):
+  dtAnchor=df['Close'].first_valid_index()
+  if df2.index[-1] >= dtAnchor:
+    ratio= df.loc[dtAnchor]['Close'] / df2.loc[dtAnchor]['Close']
+    df2= df2[:dtAnchor][:-1]
+    df2[ul.spl('Open,High,Low,Close')] *= ratio
+    df2['Volume'] /= ratio
+    return pd.concat([df2, df.loc[dtAnchor:]])
+  else:
+    return df
+
+def getCoreWeightsDf():
+  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
+  fmt='DDMMMYY'
+  dts = [pendulum.from_format(dt, fmt) for dt in lastUpdateDict.values()]
+  lastUpdate = max(dts).format(fmt)
+  l = list()
+  ep = 1e-9
+  #####
+  emptyDict = {'SPY':0,'QQQ':0,'IEI':0,'GLD':0,'UUP':0}
+  #####
+  d = ul.cachePersist('r', 'CR')['TPPDict']
+  tppDict=emptyDict.copy()
+  for und in ul.spl('QQQ,IEI,GLD,UUP'):
+    tppDict[und] = d[und] + ep
+  ####
+  d = ul.cachePersist('r', 'CR')['RSSDict']
+  rssDict = emptyDict.copy()
+  rssDict['SPY'] = d['SPY'] + ep
+  ####
+  d = ul.cachePersist('r', 'CR')['IBSDict']
+  ibsDict = emptyDict.copy()
+  ibsDict['QQQ'] = d['QQQ'] + ep
+  #####
+  dts=list(lastUpdateDict.values())
+  i = 0
+  for und in ul.spl('SPY,QQQ,IEI,GLD,UUP'):
+    totalWeight = tppDict[und]/3+rssDict[und]/3+ibsDict[und]/3
+    l.append([dts[i], und, totalWeight, tppDict[und], rssDict[und], ibsDict[und]])
+    i += 1
+  df = pd.DataFrame(l)
+  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/3),RSS (1/3),IBS (1/3)')
+  df.set_index(['ETF'], inplace=True)
+  return df,lastUpdate
+
+def getHV(s, n=32, af=252):
+  if isinstance(s, pd.DataFrame):
+    hv = s.copy()
+    for col in hv.columns:
+      hv[col] = getHV(hv[col], n=n, af=af).values
+    return hv
+  else:
+    variances= (np.log(s / s.shift(1))) ** 2
+    return (EMA(variances,n)**.5*(af**.5)).rename(s.name)
+
+def getIbsS(df,n=1):
+  if n==1:
+    ibsS = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+  else:
+    lS=df['Low'].rolling(n).min()
+    hS=df['High'].rolling(n).max()
+    ibsS = (df['Close'] - lS) / (hS - lS)
+  ibsS.name = 'IBS'
+  return ibsS
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if len(isEntryS)!=len(isExitS):
@@ -433,57 +520,6 @@ def getStateS_timestop(isEntryS, isExitS, maxDays, isCleaned=False, isMonthlyReb
   if isCleaned:
     stateS=cleanS(stateS, isMonthlyRebal=isMonthlyRebal)
   return stateS.astype(float)
-
-def getYClose(ticker, period=2):
-  with warnings.catch_warnings():
-    warnings.simplefilter('ignore', category=FutureWarning)
-    session = curl_cffi.Session(impersonate="chrome")
-    df = yahooquery.Ticker(ticker,session=session).history(period=f"{period}y")
-  df.index = df.index.droplevel('symbol')
-  df.index = pd.to_datetime(df.index.map(lambda x: pendulum.parse(str(x)).date()))
-  return df['adjclose'].rename(ticker)
-
-def getYOHLCV(ticker, period=2):
-  with warnings.catch_warnings():
-    warnings.simplefilter('ignore', category=FutureWarning)
-    session = curl_cffi.Session(impersonate="chrome")
-    df = yahooquery.Ticker(ticker, session=session).history(period=f"{period}y")
-  df.index = df.index.droplevel('symbol')
-  df.index = pd.DatetimeIndex(pd.to_datetime(
-    [pendulum.parse(str(x)).date() for x in df.index]
-  )).tz_localize(None).normalize()
-  df.index.name = 'date'
-  ratio = df['adjclose'] / df['close']
-  df['open'] = df['open'] * ratio
-  df['high'] = df['high'] * ratio
-  df['low'] = df['low'] * ratio
-  df['close'] = df['adjclose']
-  df = df[['open', 'high', 'low', 'close', 'volume']]
-  df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df.sort_index().round(10)
-  df = df[~df.index.duplicated(keep='last')]
-  return df
-
-def pushoverSend(msg):
-  import http.client, urllib.parse, time, os
-  from dotenv import load_dotenv
-  #####
-  load_dotenv()
-  PUSHOVER_USER = os.getenv('PUSHOVER_USER', '')
-  PUSHOVER_TOKEN = os.getenv('PUSHOVER_TOKEN', '')
-  data = urllib.parse.urlencode({
-    'token': PUSHOVER_TOKEN, 'user': PUSHOVER_USER,
-    'message': msg, 'priority': 0, 'sound': 'updown'})
-  hdr = {'Content-type': 'application/x-www-form-urlencoded'}
-  for i in range(30):
-    try:
-      c = http.client.HTTPSConnection('api.pushover.net:443')
-      c.request('POST', '/1/messages.json', data, hdr)
-      c.getresponse()
-      return
-    except Exception as e:
-      print('Pushover error:', e)
-      time.sleep(i+1)
 
 def stWriteDf(df,isMaxHeight=False):
   def formatter(n):
@@ -526,7 +562,6 @@ def runIBSCore(yrStart):
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   dwAllOrNone(dw)
   d=dict()
-  #d['und']=und
   d['dp']=dp
   d['dw']=dw
   d['dfDict']=dfDict
@@ -597,7 +632,7 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undG = 'GLD'
   undD = 'UUP'
   lookback = 32
-  volTgt = .12
+  volTgt = .155 # 12 ->15.5
   maxWgt = 1.5
   ######
   script = 'TPP'
@@ -942,7 +977,7 @@ def runBTS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runGEOCore(yrStart):
-  volTgt = .05
+  volTgt = .06
   etc = ul.spl('ITA,BDRY')
   dp, dw, dfDict, hv = btSetup(ul.spl('NATO.LSE,REMX,ZEO.TO,513A.T') + etc, yrStart=yrStart - 1)
   dp2 = dp.copy()
@@ -1004,8 +1039,8 @@ def runGEO(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runHNXCore(yrStart):
-  und = '000660.KS'
-  volTgt = .245
+  und = '000660.KO'
+  volTgt = .265
   maxWgt = 1.5
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
   #####
@@ -1014,7 +1049,7 @@ def runHNXCore(yrStart):
   ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
   isEntryS = (ibsS < .2) & (ratioS>1)
   isExitS  = ibsS > .7
-  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=False)
+  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
   dw[und] = stateS
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   d = dict()
@@ -1033,7 +1068,7 @@ def runHNX(yrStart, isSkipTitle=False):
   #####
   d = runHNXCore(yrStart)
   st.header('Table')
-  df = d['dfDict']['000660.KS']
+  df = d['dfDict']['000660.KO']
   df2 = ul.merge(df['Close'].round().round(0).map('{:,.0f}'.format),
                  df['High'].round().round(0).map('{:,.0f}'.format),
                  df['Low'].round().round(0).map('{:,.0f}'.format),
@@ -1047,7 +1082,7 @@ def runHNX(yrStart, isSkipTitle=False):
 def runQS12Core(yrStart):
   undG = 'GLD'
   undB = 'TLT'
-  volTgt = .21
+  volTgt = .27
   maxWgt = 1.5
   tickers = [undG,undB]
   dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
@@ -1188,7 +1223,7 @@ def runSCI2(yrStart,isSkipTitle=False):
   dp, _, dfDict, _ = btSetup(ul.spl('IWM,XLRE,KBWD,JETS,IPRE.XETRA,KRE,'
                                'XLV,XLU,MOAT,DFND.SW,EUDF.XETRA,DB1.XETRA'),yrStart=yrStart-1)
   dp = applyDates(dp,dfDict['XLRE'])
-  dp['S68.SI'] = applyDates(getYClose('S68.SI', period=20), dp)
+  dp['S68.SI'] = applyDates(getPriceHistoryYahoo('S68.SI', yrStart=yrStart-1)['Close'], dp)
   dw=dp.copy()
   dw[:]=np.nan
   hv=getHV(dp)

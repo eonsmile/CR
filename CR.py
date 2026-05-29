@@ -32,7 +32,6 @@ def bt2016():
   st.divider()
   runCore(2016)
 
-
 def runCore(yrStart):
   ql.runTPP(yrStart)
   st.divider()
@@ -41,7 +40,7 @@ def runCore(yrStart):
   ql.runIBS(yrStart)
   st.divider()
   strategies = ul.spl('TPP,RSS,IBS')
-  weights = [.5,.25,.25]
+  weights = [1/3,1/3,1/3]
   script = 'Core'
   ql.runAggregate(yrStart, strategies, weights, script, isCorrs=True)
 
