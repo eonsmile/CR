@@ -1040,18 +1040,18 @@ def runGEO(yrStart, isSkipTitle=False):
 
 def runHNXCore(yrStart):
   und = '000660.KO'
-  volTgt = .265
+  volTgt = .39
   maxWgt = 1.5
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
   #####
   ibsS = getIbsS(dfDict[und])
   cS = dfDict[und]['Close']
   ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
-  isEntryS = (ibsS < .2) & (ratioS>1)
-  isExitS  = ibsS > .7
+  isEntryS = (ibsS < .2) & (cS<cS.shift()) & (ratioS>1)
+  isExitS  = ibsS > .5
   stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  multS = applyDates((1 / ratioS).clip(upper=1), dw)
+  dw[und] = (stateS * volTgt / hv[und] * multS).clip(0, maxWgt)
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
@@ -1069,9 +1069,9 @@ def runHNX(yrStart, isSkipTitle=False):
   d = runHNXCore(yrStart)
   st.header('Table')
   df = d['dfDict']['000660.KO']
-  df2 = ul.merge(df['Close'].round().round(0).map('{:,.0f}'.format),
-                 df['High'].round().round(0).map('{:,.0f}'.format),
-                 df['Low'].round().round(0).map('{:,.0f}'.format),
+  df2 = ul.merge(df['Close'].round().map('{:,.0f}'.format),
+                 df['High'].round().map('{:,.0f}'.format),
+                 df['Low'].round().map('{:,.0f}'.format),
                  d['ibsS'].round(3), d['ratioS'].round(3),how='inner')
   df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
   stWriteDf(df2.tail())
@@ -1162,7 +1162,7 @@ def runVCACore(yrStart):
   w1 = m((spyRatioS < 1) & (ibsS > 0.75) & (vixRatioS > 1))
   w2 = m((eVRPS_pctl <= 0.25) & (vixRatioS > 1))
   w3 = m((zScoreS <= -1.5) & (vixRatioS > 1))
-  w4=m(vix1DS <= 10)
+  w4 = (m(vix1DS <= 10).rolling(3).sum() >= 2).astype(float)
   dw[und] = cleanS((w1 + w2 + w3 + w4).clip(upper=1), isMonthlyRebal=False)
   dw=cleanS(dw,isMonthlyRebal=True)
   #####
