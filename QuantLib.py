@@ -893,6 +893,43 @@ def runAIS2(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runAIS3Core(yrStart):
+  volTgt = .24
+  maxWgt = 1.5
+  etc=['SMH']
+  dp, dw, dfDict, hv = btSetup(ul.spl('EWT,EEM')+etc, yrStart=yrStart - 1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  smhS = dfDict['SMH']['Close']
+  smhMS = smhS.iloc[endpoints(smhS)]
+  ratioS = (smhMS / smhMS.rolling(12).mean()).rename('SMH Ratio 12M')
+  dw['EWT'] = applyDates(ratioS > 1, dw)
+  dw = cleanS(dw, isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw['EEM']=dw['EWT']*(-2/3)
+  d = dict()
+  d['dp'] = dp
+  d['dp2'] = dp2
+  d['dw'] = dw
+  d['ratioS']=ratioS
+  return d
+
+def runAIS3(yrStart, isSkipTitle=False):
+  script = 'AIS3'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runAIS3Core(yrStart)
+  st.header('Table')
+  stWriteDf(ul.merge(d['dp2'].tail(),d['ratioS'].round(3).tail(),how='inner'))
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runDGSCore(yrStart):
     volTgt = .28
     maxWgt = 1.5
