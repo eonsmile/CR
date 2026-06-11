@@ -664,9 +664,9 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   bt(script, dp, dw, yrStart)
 
 def runTPP2Core(yrStart):
-  volTgt = .165
+  volTgt = .155
   maxWgt = 1.5
-  etc=ul.spl('HYG,SPHB,SPLV,WOOD,IGIB,VV,TIP')
+  etc=ul.spl('HYG,SPHB,SPLV,TIP')
   dp, dw, dfDict, hv = btSetup(ul.spl('SPY,GLD,UUP')+etc,yrStart=yrStart-1)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
@@ -685,12 +685,7 @@ def runTPP2Core(yrStart):
   ratio100S_HYG = (hygS / EMA(hygS, 100)).rename('HYG Ratio 100D')
   isCanaryS_HYG = (ratio100S_HYG > 1).rename('HYG') * 1.0
 
-  # 3. IGIB
-  rsiS_IGIB = ta.rsi(applyDates(dfDict['IGIB']['Close'],dp), length=10)
-  rsiS_VV = ta.rsi(applyDates(dfDict['VV']['Close'],dp), length=10)
-  isCanaryS_IGIB = ((rsiS_IGIB > rsiS_VV).rename('IGIB')) * 1.0
-
-  # 4. SPHB/LV momentum
+  # 3. SPHB/LV momentum
   def m(s):
     sum = 0
     for i in range(13):
@@ -702,7 +697,7 @@ def runTPP2Core(yrStart):
   sphb_lv_ratio = sphbS / splvS
   isCanaryS_SPHB_LV = (m(sphb_lv_ratio) > 0).rename('SPHB_LV') * 1.0
 
-  # 5. TIP
+  # 4. TIP
   cS_TIP = applyDates(dfDict['TIP']['Close'],dp)
   momS_TIP = (cS_TIP.pct_change(21) + cS_TIP.pct_change(63) + cS_TIP.pct_change(126) + cS_TIP.pct_change(252)) / 4
   isCanaryS_TIP = (momS_TIP > 0).rename('TIP') * 1.0
@@ -711,25 +706,23 @@ def runTPP2Core(yrStart):
   voteDf = pd.DataFrame({
     'BTC': isCanaryS_BTC,
     'HYG': isCanaryS_HYG,
-    'IGIB': isCanaryS_IGIB,
     'SPHB_LV': isCanaryS_SPHB_LV,
     'TIP': isCanaryS_TIP,
   })
   voteCountS = voteDf.sum(axis=1).rename('Votes')
 
-  ##################
-  # UUP/GLD canaries
-  ##################
-  gldS = applyDates(dfDict['GLD']['Close'],dp)
-  woodS = applyDates(dfDict['WOOD']['Close'],dp)
-  ratio150S_BTC = (btcS / btcS.rolling(150).mean()).rename('BTC Ratio 150D')
-  ratio200S_SPHB_LV = (sphb_lv_ratio / sphb_lv_ratio.rolling(252).mean()).rename('SPHB_LV 252D')
-  mom200S_GLD_WOOD = (gldS.pct_change(200)-woodS.pct_change(200)).rename('GLD_WOOD 200D')
+  #########
+  # UUP/GLD
+  #########
+  gldS = applyDates(dfDict['GLD']['Close'], dp)
+  uupS = applyDates(dfDict['UUP']['Close'], dp)
+  ratio150S_GLD = (gldS / gldS.rolling(150).mean()).rename('GLD Ratio 150D')
+  ratio50S_UUP = (uupS / uupS.rolling(50).mean()).rename('UUP Ratio 50D')
   #####
   m = lambda n: applyDates(n, dw) * 1
-  dw['SPY'] = (voteCountS >= 2) * (voteCountS / 5)
-  dw['GLD']=(m(ratio200S_SPHB_LV<1)+m(mom200S_GLD_WOOD>0))/2
-  dw['UUP'] = m(ratio150S_BTC < 1)
+  dw['SPY'] = (voteCountS >= 2) * (voteCountS / 4)
+  dw['GLD'] = m(ratio150S_GLD>1)
+  dw['UUP'] = m(ratio50S_UUP>1)
   #####
   stateDf=dw.astype(float).ffill()
   dw=cleanS(dw,isMonthlyRebal=True)
@@ -744,13 +737,11 @@ def runTPP2Core(yrStart):
   d['voteCountS'] = voteCountS
   d['isCanaryS_BTC'] = isCanaryS_BTC
   d['isCanaryS_HYG'] = isCanaryS_HYG
-  d['isCanaryS_IGIB'] = isCanaryS_IGIB
   d['isCanaryS_SPHB_LV'] = isCanaryS_SPHB_LV
   d['isCanaryS_TIP'] = isCanaryS_TIP
   #####
-  d['ratio200S_SPHB_LV']=ratio200S_SPHB_LV
-  d['mom200S_GLD_WOOD']=mom200S_GLD_WOOD
-  d['ratio150S_BTC'] = ratio150S_BTC
+  d['ratio150S_GLD']=ratio150S_GLD
+  d['ratio50S_UUP']=ratio50S_UUP
   return d
 
 def runTPP2(yrStart, isSkipTitle=False):
@@ -765,10 +756,10 @@ def runTPP2(yrStart, isSkipTitle=False):
   st.header('SPY Canaries')
   stWriteDf(ul.merge(
     d['isCanaryS_BTC'], d['isCanaryS_HYG'],
-    d['isCanaryS_IGIB'], d['isCanaryS_SPHB_LV'], d['isCanaryS_TIP'],
+    d['isCanaryS_SPHB_LV'], d['isCanaryS_TIP'],
     d['voteCountS'], how='inner').tail())
   st.header('GLD/UUP Ratios')
-  stWriteDf(ul.merge(applyDates(d['ratio200S_SPHB_LV'],dp).round(3), applyDates(d['mom200S_GLD_WOOD'], dp).round(3), applyDates(d['ratio150S_BTC'], dp).round(3), how='inner').tail())
+  stWriteDf(ul.merge(applyDates(d['ratio150S_GLD'], dp).round(3), applyDates(d['ratio50S_UUP'], dp).round(3), how='inner').tail())
   st.header('States')
   stWriteDf(d['stateDf'].tail())
   st.header('Weights')
@@ -856,7 +847,6 @@ def runAIS(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-
 def runAIS2Core(yrStart):
   volTgt = .07
   longs = ul.spl('0700.HK,0981.HK,0992.HK,9888.HK,9988.HK')
@@ -889,43 +879,6 @@ def runAIS2(yrStart, isSkipTitle=False):
   d = runAIS2Core(yrStart)
   st.header('Prices')
   stWriteDf(d['dp'].tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runAIS3Core(yrStart):
-  volTgt = .24
-  maxWgt = 1.5
-  etc=['SMH']
-  dp, dw, dfDict, hv = btSetup(ul.spl('EWT,EEM')+etc, yrStart=yrStart - 1)
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
-  #####
-  smhS = dfDict['SMH']['Close']
-  smhMS = smhS.iloc[endpoints(smhS)]
-  ratioS = (smhMS / smhMS.rolling(12).mean()).rename('SMH Ratio 12M')
-  dw['EWT'] = applyDates(ratioS > 1, dw)
-  dw = cleanS(dw, isMonthlyRebal=True)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw['EEM']=dw['EWT']*(-2/3)
-  d = dict()
-  d['dp'] = dp
-  d['dp2'] = dp2
-  d['dw'] = dw
-  d['ratioS']=ratioS
-  return d
-
-def runAIS3(yrStart, isSkipTitle=False):
-  script = 'AIS3'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runAIS3Core(yrStart)
-  st.header('Table')
-  stWriteDf(ul.merge(d['dp2'].tail(),d['ratioS'].round(3).tail(),how='inner'))
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -1071,100 +1024,6 @@ def runGEO(yrStart, isSkipTitle=False):
     d['ratio10S_BDRY'].round(3),
     d['ratio10S_513A'].round(3),
     how='inner').tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runHNXCore(yrStart):
-  und = '000660.KO'
-  volTgt = .39
-  maxWgt = 1.5
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
-  #####
-  ibsS = getIbsS(dfDict[und])
-  cS = dfDict[und]['Close']
-  ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
-  isEntryS = (ibsS < .2) & (cS<cS.shift()) & (ratioS>1)
-  isExitS  = ibsS > .5
-  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
-  multS = applyDates((1 / ratioS).clip(upper=1), dw)
-  dw[und] = (stateS * volTgt / hv[und] * multS).clip(0, maxWgt)
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ratioS'] = ratioS
-  d['stateS'] = stateS
-  return d
-
-def runHNX(yrStart, isSkipTitle=False):
-  script = 'HNX'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runHNXCore(yrStart)
-  st.header('Table')
-  df = d['dfDict']['000660.KO']
-  df2 = ul.merge(df['Close'].round().map('{:,.0f}'.format),
-                 df['High'].round().map('{:,.0f}'.format),
-                 df['Low'].round().map('{:,.0f}'.format),
-                 d['ibsS'].round(3), d['ratioS'].round(3),how='inner')
-  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runQS12Core(yrStart):
-  undG = 'GLD'
-  undB = 'TLT'
-  volTgt = .27
-  maxWgt = 1.5
-  tickers = [undG,undB]
-  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
-  hS = dfDict[undG]['High']
-  cS = dfDict[undG]['Close']
-  cSB = dfDict[undB]['Close']
-  #####
-  cond1S = cS > hS.shift(1).rolling(3).max()
-  cond2S = cSB > cSB.shift()
-  cond3S = (cS * 0).astype(int)
-  cond3S.loc[cond3S.index.weekday != 3] = 1
-  isEntryS = (cond1S & cond2S & cond3S)*1
-  isExitS = (cS>hS.shift())*1
-  isExitS.loc[isEntryS == 1] = 0
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-  #####
-  # Summary
-  dp=dp.drop(undB,axis=1)
-  dw=dw.drop(undB,axis=1)
-  hv=hv.drop(undB,axis=1)
-  dw[undG] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dw.loc[dw.index.year < yrStart] = 0
-  #####
-  d=dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  #####
-  d['cS'] = cS
-  d['hS'] = hS
-  d['cSB'] = cSB
-  d['stateS']=stateS
-  return d
-
-def runQS12(yrStart, isSkipTitle=False):
-  script = 'QS12'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runQS12Core(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  #####
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)

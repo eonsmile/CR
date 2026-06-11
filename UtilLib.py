@@ -10,7 +10,6 @@ import time
 import colorama
 from filelock import FileLock
 from joblib import Parallel, delayed
-import pickle
 import dill
 import threading
 import pretty_errors # keep here
@@ -25,7 +24,6 @@ colorama.init()
 ###############
 CACHE_DIR = "c:/cache" if os.getenv('OS', '').startswith('Win') else pathlib.Path(os.path.dirname(__file__))
 CACHE_PATH = pathlib.Path(CACHE_DIR)
-pickle.DEFAULT_PROTOCOL = 5
 tLocks = dict()
 _tLocksGuard = threading.Lock()
 
@@ -119,36 +117,6 @@ def stCheckPW(key):
 
 def stRed(label, z):
   st.markdown(f"{label}: <font color='red'>{z}</font>", unsafe_allow_html=True)
-
-'''
-#######
-# Cache
-#######
-def cacheMemory(mode, key, value=None):
-  if not hasattr(cacheMemory, 'd'):
-    cacheMemory.d=dict()
-  if mode=='w':
-    cacheMemory.d[key]=value
-  elif mode=='r':
-    try:
-      return cacheMemory.d[key]
-    except:
-      return None
-
-def cachePersist(mode, key, value=None, expireMins=1e9):
-  if mode=='r' and expireMins is None: iExit(f"cachePersist (mode=='{mode}'; key=='{key}'; expireMins=='{expireMins}')")
-  path = pathlib.Path(CACHE_DIR)
-  if not path.exists(): iExit(f"cachePersist (path=='{path}')")
-  ffn = path / f"{key}.pickle"
-  with FileLock(f"{ffn}.lock"):
-    if mode=='w':
-      pd.to_pickle(value, ffn, compression='infer')
-    elif mode=='r':
-      if (not ffn.exists()) or (time.time() - ffn.lstat().st_mtime >= 60*expireMins): return None
-      return pd.read_pickle(ffn)
-    else:
-      iExit(f"cachePersist (mode=='{mode}')")
-'''
 
 #####
 # Etc
