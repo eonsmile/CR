@@ -288,6 +288,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = df.loc[df.index>=dtStart]
   return df
 
+'''
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   def m(toTs=None):
     z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={st.secrets['cc_api_key']}"
@@ -304,6 +305,19 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df = df[df['date'] > '2010-7-16']
   df['open'] = df['close'].shift()
   df = df[['date', 'open', 'high', 'low', 'close', 'volumefrom']]
+  df = df.set_index('date')
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_values(by=['date']).round(10)
+  return df
+'''
+
+def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
+  dtStart = f"{max(yrStart, 2010)}-1-1"
+  url = f"https://eodhd.com/api/eod/{und}-USD.CC?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}"
+  df = pd.DataFrame(requests.get(url).json())
+  df['date'] = pd.to_datetime(df['date'])
+  df = df[df['date'] > '2010-7-16']
+  df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
@@ -932,7 +946,7 @@ def runDGS(yrStart, isSkipTitle=False):
 def runBTSCore(yrStart):
   HALVINGS = pd.to_datetime(['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'])
   #####
-  volTgt = .255
+  volTgt = .25
   maxWgt = 1.5
   cS = getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
   ratioS = (cS/cS.rolling(50).mean()).rename('Ratio')
