@@ -213,7 +213,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   #####
   if und in ul.spl('COPX,EUDF.XETRA,GDXJ,GRID,IPRE.XETRA,NATO.LSE,REMX,WTAI.LSE,'
                    'COM,DBMF,INFL,PFMN.TO,'
-                   '9888.HK,9988.HK,513A.T,DFNS.LSE,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
+                   '9888.HK,9988.HK,513A.T,DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
                    'IBIT'):
     if und=='COPX':
       dtStart='2010-4-30'
@@ -248,6 +248,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart = '2026-2-27'
     elif und=='DFNS.LSE':
       dtStart='2023-4-28'
+    elif und=='DRAM':
+      dtStart='2026-4-30'
     elif und=='ENCO.LSE':
       dtStart='2021-8-31'
     elif und=='GCOW':
