@@ -1046,6 +1046,161 @@ def runGEO(yrStart, isSkipTitle=False):
 
 #####
 
+def runMBSCore(yrStart):
+  # --------------------------------------------------------------------------
+  # MBS - Month Boundary Strategy
+  #
+  # Signal       : sign of (VTI - TLT) cumulative return over the first 15 NYSE
+  #                sessions of each month. Locked at close of session 15.
+  #                Regime SB (stocks led) or BS (bonds led).
+  # Execution    : SPY (equity leg) + TLT (bond leg).
+  # Sleeves x SCL: S1 long  TLT 0.20 last  5 sessions, capped 0.10 in BS months
+  #                S2 short TLT 0.20 first 5 sessions of MONTH M+1, fires only if
+  #                                                                  month M was SB
+  #                S3 long  SPY 0.10 last  5 sessions, fires only if month is  BS
+  # Calendar     : real NYSE sessions via pandas_market_calendars. The dw frame
+  #                runs through TODAY only - never beyond. If today is itself a
+  #                trade-entry session, its weight change is staged on today's
+  #                row even if its price has not printed yet.
+  # --------------------------------------------------------------------------
+  SCALE = 5.0
+  # ---- prices ---------------------------------------------------------------
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,TLT'), yrStart=yrStart-1)
+  vtiS = getPriceHistory('VTI', yrStart=yrStart-1)['Close']
+  tltS = dfDict['TLT']['Close']
+  common = vtiS.index.intersection(dfDict['SPY']['Close'].index).intersection(tltS.index)
+  vtiS, tltS = vtiS.loc[common], tltS.loc[common]
+
+  # ---- NYSE calendar from price start through current month's true EOM ------
+  #      bom/eom ranks need the full month, but dw is later truncated at today.
+  today  = pd.Timestamp(pendulum.now('America/New_York').to_date_string())
+  curEom = pd.Timestamp(getNYSEMonthEnd(offset=0)).normalize()
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  spanStart = pendulum.instance(dp.index[0]).subtract(days=10).to_date_string()
+  spanEnd   = max(dp.index[-1], curEom).strftime('%Y-%m-%d')
+  sessions = pd.DatetimeIndex(pd.to_datetime(
+    cal.schedule(start_date=spanStart, end_date=spanEnd).index)).normalize()
+
+  # ---- bom/eom rank per real NYSE month, truncating curYm at curEom ---------
+  s = pd.DataFrame({'ym': sessions.to_period('M')}, index=sessions)
+  curYm = curEom.to_period('M')
+  s = s.loc[(s['ym'] < curYm) | ((s['ym'] == curYm) & (s.index <= curEom))]
+  s['bom'] = s.groupby('ym').cumcount() + 1
+  s['eom'] = s.groupby('ym').cumcount(ascending=False) + 1
+
+  # ---- regime: SB if VTI led TLT over first 15 sessions of a month ----------
+  #      S2 (BOM in month M+1) reads PRIOR month's regime  -> lookahead-free.
+  rdf = pd.DataFrame({'VTI': vtiS, 'TLT': tltS})
+  rdf['ym'] = rdf.index.to_period('M')
+  regime = {}
+  for ym, g in rdf.groupby('ym'):
+    if len(g) < 15: continue
+    d1, d15 = g.iloc[0], g.iloc[14]
+    spread = (d15['VTI']/d1['VTI'] - 1) - (d15['TLT']/d1['TLT'] - 1)
+    regime[ym] = 'SB' if spread > 0 else 'BS'
+
+  # Use explicit ym-1 lookup (NOT positional zip) so a gap from a sub-15-session
+  # month cannot silently map M+1 to M-2's regime.
+  regimePrev = {ym: regime[ym - 1] for ym in regime if (ym - 1) in regime}
+
+  # ---- weights on the extended NYSE calendar --------------------------------
+  wSpy = pd.Series(0.0, index=s.index); wTlt = pd.Series(0.0, index=s.index)
+  for dt, row in s.iterrows():
+    ym, bom, eom = row['ym'], int(row['bom']), int(row['eom'])
+    reg, regP = regime.get(ym), regimePrev.get(ym)
+    if eom <= 5:                  wTlt[dt] += (0.10 if reg=='BS' else 0.20) * SCALE  # S1
+    if bom <= 5 and regP == 'SB': wTlt[dt] += -0.20 * SCALE                          # S2
+    if eom <= 5 and reg  == 'BS': wSpy[dt] +=  0.10 * SCALE                          # S3
+
+  # ---- splice into dw on dp's index, plus today if today is a trade entry ---
+  # `bt` iterates dp positionally against dw, so dw[dp.index] must align 1:1.
+  # We only stage TODAY itself if its price has not yet printed - never beyond.
+  stage = s.index[(s.index > dp.index[-1]) & (s.index <= today)]
+  dw = pd.DataFrame(0.0, index=dp.index.append(stage), columns=['SPY','TLT'])
+  dw['SPY'] = wSpy.reindex(dw.index)
+  dw['TLT'] = wTlt.reindex(dw.index)
+  dw = dw.fillna(0.0)
+
+  # ---- chop the warm-up year off so backtest/calendar start at yrStart -----
+  dp = dp.loc[dp.index.year >= yrStart]
+  dw = dw.loc[dw.index.year >= yrStart]
+  dw = cleanS(dw, isMonthlyRebal=False)  # collapse consecutive duplicate rows
+
+  d = dict()
+  d['dp']     = dp
+  d['dw']     = dw
+  d['dfDict'] = dfDict
+  d['regime'] = pd.Series(regime).rename('Regime')
+  return d
+
+def runMBS(yrStart, isSkipTitle=False):
+  script = 'MBS'
+  if not isSkipTitle:
+    st.header(script)
+  d = runMBSCore(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dp'].tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def runQS12Core(yrStart):
+  undG = 'GLD'
+  undB = 'TLT'
+  volTgt = .27
+  maxWgt = 1.5
+  tickers = [undG,undB]
+  dp, dw, dfDict, hv = btSetup(tickers, yrStart=yrStart-1)
+  hS = dfDict[undG]['High']
+  cS = dfDict[undG]['Close']
+  cSB = dfDict[undB]['Close']
+  #####
+  cond1S = cS > hS.shift(1).rolling(3).max()
+  cond2S = cSB > cSB.shift()
+  cond3S = (cS * 0).astype(int)
+  cond3S.loc[cond3S.index.weekday != 3] = 1
+  isEntryS = (cond1S & cond2S & cond3S)*1
+  isExitS = (cS>hS.shift())*1
+  isExitS.loc[isEntryS == 1] = 0
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dp=dp.drop(undB,axis=1)
+  dw=dw.drop(undB,axis=1)
+  hv=hv.drop(undB,axis=1)
+  dw[undG] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dw.loc[dw.index.year < yrStart] = 0
+  #####
+  d=dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  #####
+  d['cS'] = cS
+  d['hS'] = hS
+  d['cSB'] = cSB
+  d['stateS']=stateS
+  return d
+
+def runQS12(yrStart, isSkipTitle=False):
+  script = 'QS12'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runQS12Core(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['cS'].round(2), d['hS'].round(2), d['cSB'].rename('Close (TLT)').round(2),d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  #####
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+  
+#####
+
 def runVCACore(yrStart):
   und='VIXM'
   etc=ul.spl('SPY,VIX.INDX,VIX1D.INDX,VIX3M.INDX')
