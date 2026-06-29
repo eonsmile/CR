@@ -642,13 +642,55 @@ def runRSS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runJMRCore(yrStart):
+  etc=['DXJ']
+  dp, dw, dfDict, hv = btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  ibs_DXJ = getIbsS(dfDict['DXJ']).rename('IBS DXJ')
+  ibs_EWJ   = getIbsS(dfDict['EWJ']).rename('IBS EWJ')
+  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
+  isExitS  = ibs_DXJ > .7
+  stateS   = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  #####
+  dw['EWJ'] = stateS * 1.65
+  dw['FXY'] = -dw['EWJ']
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dp2']=dp2
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibs_DXJ']=ibs_DXJ
+  d['ibs_EWJ']=ibs_EWJ
+  d['stateS']=stateS
+  return d
+
+def runJMR(yrStart,isSkipTitle=False):
+  script = 'JMR'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJMRCore(yrStart)
+  st.header('Table')
+  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
+  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
+  stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undQ = 'QQQ'
   undB = 'IEI'
   undG = 'GLD'
   undD = 'UUP'
   lookback = 32
-  volTgt = .155 # 12 ->15.5
+  volTgt = .155
   maxWgt = 1.5
   ######
   script = 'TPP'
@@ -1198,7 +1240,7 @@ def runQS12(yrStart, isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
-  
+
 #####
 
 def runVCACore(yrStart):
