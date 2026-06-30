@@ -205,47 +205,27 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df.columns = ul.spl('Open,High,Low,Close,Volume')
     df = df.sort_values(by=['date']).round(10)
   #####
-  def m(df,fn):
-    df2 = pd.read_csv(f"data/{fn}", index_col=0, parse_dates=True, date_format='%m/%d/%Y')
+  def m(df,fn,sub=''):
+    df2 = pd.read_csv(f"data/{sub}{fn}", index_col=0, parse_dates=True, date_format='%m/%d/%Y')
     for col in ['Open', 'High', 'Low', 'Volume']:
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return extend(df, df2)
-  #####
-  if und in ul.spl('COPX,EUDF.XETRA,GDXJ,GRID,IPRE.XETRA,NATO.LSE,REMX,WTAI.LSE,'
-                   'COM,DBMF,INFL,PFMN.TO,'
-                   '9888.HK,9988.HK,513A.T,DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
-                   'IBIT'):
-    if und=='COPX':
-      dtStart='2010-4-30'
-    elif und == 'EUDF.XETRA':
+
+  ###########################################################################
+  # DECOMMISSIONED underlyings: no longer used by alpha. CSVs live in
+  # data/Archive/. Logic is identical to original except the CSV path.
+  ###########################################################################
+  if und in ul.spl('EUDF.XETRA,IPRE.XETRA,COM,INFL,IBIT,'
+                   'DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,'
+                   'RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
+                   'COPX,GRID,WTAI.LSE,NATO.LSE,REMX,513A.T'):   # AIS/GEO legs
+    if und == 'EUDF.XETRA':
       dtStart = '2025-3-31'
-    elif und=='GDXJ':
-      dtStart='2009-11-30'
-    elif und=='GRID':
-      dtStart='2009-11-30'
     elif und == 'IPRE.XETRA':
       dtStart = '2018-12-28'
-    elif und == 'NATO.LSE':
-      dtStart = '2023-7-31'
-    elif und=='REMX':
-      dtStart='2010-10-29'
-    elif und=='WTAI.LSE':
-      dtStart = '2018-12-31'
-    #####
     # COM
-    elif und=='DBMF':
-      dtStart = '2019-5-31'
     elif und=='INFL':
       dtStart = '2021-1-29'
-    elif und == 'PFMN.TO':
-      dtStart = '2019-7-31'
-    #####
-    elif und=='9888.HK':
-      dtStart = '2021-3-23'
-    elif und=='9988.HK':
-      dtStart = '2019-11-26'
-    elif und=='513A.T':
-      dtStart = '2026-2-27'
     elif und=='DFNS.LSE':
       dtStart='2023-4-28'
     elif und=='DRAM':
@@ -272,19 +252,51 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart = '2017-4-28'
     elif und=='WCOA.LSE':
       dtStart = '2025-9-30'
-    #####
     elif und=='IBIT':
       dtStart = '2024-1-11'
+    # ----- AIS / GEO legs (decommissioned), original dtStarts preserved -----
+    elif und=='COPX':
+      dtStart='2010-4-30'
+    elif und=='GRID':
+      dtStart='2009-11-30'
+    elif und=='WTAI.LSE':
+      dtStart = '2018-12-31'
+    elif und == 'NATO.LSE':
+      dtStart = '2023-7-31'
+    elif und=='REMX':
+      dtStart='2010-10-29'
+    elif und=='513A.T':
+      dtStart = '2026-2-27'
+    else:
+      dtStart = None
+    if dtStart is not None: df = df.loc[df.index >= dtStart]
+    df = m(df, f"{und}.csv", sub='Archive/')
+    return df
+  elif und == '000660.KO':
+    return extend(getPriceHistoryIBKR('000660'), df.loc[df.index <= '2026-2-23'])
+  elif und == 'DFND.SW':
+    return m(df, 'ITA.csv')                    # LIVE file, stays in data/ (no sub)
+  elif und == 'BDRY':
+    return m(df, 'BDI.csv', sub='Archive/')    # GEO-only signal, now archived
+  ###########################################################################
+  # END decommissioned
+  ###########################################################################
+
+  if und in ul.spl('GDXJ,DBMF,PFMN.TO,9888.HK,9988.HK'):
+    if und=='GDXJ':
+      dtStart='2009-11-30'
+    elif und=='DBMF':
+      dtStart = '2019-5-31'
+    elif und == 'PFMN.TO':
+      dtStart = '2019-7-31'
+    elif und=='9888.HK':
+      dtStart = '2021-3-23'
+    elif und=='9988.HK':
+      dtStart = '2019-11-26'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
     df = m(df, f"{und}.csv")
-  elif und == '000660.KO':
-    df = extend(getPriceHistoryIBKR('000660'), df.loc[df.index <= '2026-2-23'])
-  elif und == 'DFND.SW':
-    df = m(df, 'ITA.csv')
-  elif und == 'BDRY':
-    df = m(df, 'BDI.csv')
   elif und=='VIX1D.INDX':
     dtStart = '2023-4-24'
     df = df.loc[df.index>=dtStart]
@@ -824,169 +836,6 @@ def runTPP2(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runAISCore(yrStart):
-  volTgt = .04
-  etc = ul.spl('U-UN.TO,XME,SPY,HYG')
-  dp, dw, dfDict, hv = btSetup(ul.spl('GRID,WTAI.LSE,CCO.TO,COPX,SMH') + etc, yrStart=yrStart-1)
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
-  #####
-  # GRID signal: GRID 10-month SMA AND HYG 6-month SMA (credit canary)
-  gridS = dfDict['GRID']['Close']
-  gridMS = gridS.iloc[endpoints(gridS)]
-  ratio10S_GRID = (gridMS / gridMS.rolling(10).mean()).rename('GRID Ratio 10M')
-
-  hygS = dfDict['HYG']['Close']
-  hygMS = hygS.iloc[endpoints(hygS)]
-  ratio6S_HYG = (hygMS / hygMS.rolling(6).mean()).rename('HYG Ratio 6M')
-
-  # WTAI.LSE signal: SMH 12-month SMA
-  smhS = dfDict['SMH']['Close']
-  smhMS = smhS.iloc[endpoints(smhS)]
-  ratio12S_SMH = (smhMS / smhMS.rolling(12).mean()).rename('SMH Ratio 12M')
-
-  # CCO.TO signal: U-UN.TO monthly ROC (from GEO)
-  uunS = dfDict['U-UN.TO']['Close']
-  rocS_UUN = (uunS.iloc[endpoints(uunS)].pct_change()).rename('UUN ROC 1M')
-
-  # COPX signal: XME 6-month SMA (from GEO)
-  xmeS = dfDict['XME']['Close']
-  xmeMS = xmeS.iloc[endpoints(xmeS)]
-  ratio6S_XME = (xmeMS / xmeMS.rolling(6).mean()).rename('XME Ratio 6M')
-
-  # SMH signal: SMH/SPY 6-12M rel strength (from GEO)
-  df = dp2[ul.spl('SPY,SMH')]
-  mDf = df.iloc[endpoints(df)]
-  rS = (mDf.pct_change(6) + mDf.pct_change(12)) / 2 + 1
-  ratio612S_SMH = (rS['SMH'] / rS['SPY']).rename('SMH Ratio 6-12M')
-
-  #####
-  dw['GRID'] = applyDates((ratio10S_GRID > 1) & (ratio6S_HYG > 1), dw)
-  dw['WTAI.LSE'] = applyDates(ratio12S_SMH > 1, dw)
-  dw['CCO.TO'] = applyDates(rocS_UUN > 0, dw)
-  dw['COPX'] = applyDates(ratio6S_XME > 1, dw)
-  dw['SMH'] = applyDates(ratio612S_SMH > 1, dw)
-  dw = cleanS(dw, isMonthlyRebal=True)
-  dw *= volTgt / hv
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dp2'] = dp2
-  d['dw'] = dw
-  d['ratio10S_GRID'] = ratio10S_GRID
-  d['ratio6S_HYG'] = ratio6S_HYG
-  d['ratio12S_SMH'] = ratio12S_SMH
-  d['rocS_UUN'] = rocS_UUN
-  d['ratio6S_XME'] = ratio6S_XME
-  d['ratio612S_SMH'] = ratio612S_SMH
-  return d
-
-def runAIS(yrStart, isSkipTitle=False):
-  script = 'AIS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runAISCore(yrStart)
-  st.header('Prices')
-  stWriteDf(d['dp2'].tail())
-  st.header('Ratios')
-  stWriteDf(ul.merge(
-    d['ratio10S_GRID'].round(3),
-    d['ratio6S_HYG'].round(3),
-    d['ratio12S_SMH'].round(3),
-    d['rocS_UUN'].round(3),
-    d['ratio6S_XME'].round(3),
-    d['ratio612S_SMH'].round(3),
-    how='inner').tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runAIS2Core(yrStart):
-  volTgt = .07
-  longs = ul.spl('0700.HK,0981.HK,0992.HK,9888.HK,9988.HK')
-  short = '2828.HK'
-  dp, dw, dfDict, hv = btSetup(longs + [short], yrStart=yrStart - 1)
-  #####
-  dpm_longs = dp[longs].iloc[endpoints(dp[longs])]
-  dpq_longs = dpm_longs[dpm_longs.index.month.isin([3, 6, 9, 12])]
-  rQS = dpq_longs.pct_change(3)
-  keep = (rQS.rank(axis=1, ascending=False, method='first') <= 3) & (rQS > 0)
-  dw[longs] = applyDates(keep, dw) * volTgt / hv[longs]
-  dw[short] = -dw[longs].sum(axis=1)
-  mask = dw.index[endpoints(dw)]
-  mask = mask[mask.month.isin([3, 6, 9, 12])]
-  dw2 = dw.copy()
-  dw2[:] = np.nan
-  dw2.loc[mask] = dw.loc[mask]
-  dw = cleanS(dw2, isMonthlyRebal=False)
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  return d
-
-def runAIS2(yrStart, isSkipTitle=False):
-  script = 'AIS2'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runAIS2Core(yrStart)
-  st.header('Prices')
-  stWriteDf(d['dp'].tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runDGSCore(yrStart):
-    volTgt = .28
-    maxWgt = 1.5
-    #####
-    und = 'SPY'
-    dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
-    #####
-    cS = dfDict[und]['Close']
-    df = pd.read_csv('https://squeezemetrics.com/monitor/static/DIX.csv', parse_dates=['date'], index_col='date').sort_index()
-    dixS = applyDates(df['dix'].rename('DIX'), cS)
-    gexS = applyDates(df['gex'].rename('GEX'), cS)
-    vixS = applyDates(getPriceHistory('VIX.INDX', yrStart=yrStart - 1)['Close'].rename('VIX'), cS)
-    vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
-    #####
-    isDarkPoolOk = (dixS > 0.45) | (gexS > 0)
-    isVixOk = vixRatioS < 1
-    preStateS = ((isDarkPoolOk & isVixOk)*1).rename('Pre State')
-    stateS = ((preStateS.rolling(3).sum() >= 2)*1).rename('State')
-    dw[und] = cleanS(stateS, isMonthlyRebal=True)
-    dw = (dw * volTgt / hv).clip(0, maxWgt)
-    #####
-    d = dict()
-    d['dp'] = dp
-    d['dw'] = dw
-    d['dixS'] = dixS
-    d['gexS'] = gexS
-    d['vixS'] = vixS
-    d['vixRatioS'] = vixRatioS
-    d['preStateS'] = preStateS
-    d['stateS'] = stateS
-    return d
-
-def runDGS(yrStart, isSkipTitle=False):
-    script = 'DGS'
-    if not isSkipTitle:
-        st.header(script)
-    #####
-    d = runDGSCore(yrStart)
-    #####
-    st.header('Table')
-    stWriteDf(ul.merge(d['dp'],d['dixS'].round(3),(d['gexS']/1e9).round(3),d['vixS'],d['vixRatioS'].round(3),d['preStateS'],d['stateS'],how='inner').tail())
-    #####
-    st.header('Weights')
-    dwTail(d['dw'])
-    bt(script, d['dp'], d['dw'], yrStart)
-
 def runBTSCore(yrStart):
   HALVINGS = pd.to_datetime(['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'])
   #####
@@ -1024,69 +873,87 @@ def runBTS(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runGEOCore(yrStart):
-  volTgt = .06
-  etc = ul.spl('ITA,BDRY')
-  dp, dw, dfDict, hv = btSetup(ul.spl('NATO.LSE,REMX,ZEO.TO,513A.T') + etc, yrStart=yrStart - 1)
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
+def runCTMCore(yrStart):
+  volTgt = .07
+  longs = ul.spl('0700.HK,0981.HK,0992.HK,9888.HK,9988.HK')
+  short = '2828.HK'
+  dp, dw, dfDict, hv = btSetup(longs + [short], yrStart=yrStart - 1)
   #####
-  itaS = dfDict['ITA']['Close']
-  itaMS = itaS.iloc[endpoints(itaS)]
-  ratio10S_ITA = (itaMS / itaMS.rolling(10).mean()).rename('ITA Ratio 10M')
-
-  remxS = dfDict['REMX']['Close']
-  remxMS = remxS.iloc[endpoints(remxS)]
-  ratio10S_REMX = (remxMS / remxMS.rolling(10).mean()).rename('REMX Ratio 10M')
-
-  bdryS = dfDict['BDRY']['Close']
-  bdryMS = bdryS.iloc[endpoints(bdryS)]
-  ratio10S_BDRY = (bdryMS / bdryMS.rolling(10).mean()).rename('BDRY Ratio 10M')
-
-  jpS = dfDict['513A.T']['Close']
-  jpMS = jpS.iloc[endpoints(jpS)]
-  ratio10S_513A = (jpMS / jpMS.rolling(10).mean()).rename('513A.T Ratio 10M')
-  #####
-  dw['NATO.LSE'] = applyDates(ratio10S_ITA > 1, dw)
-  dw['REMX'] = applyDates(ratio10S_REMX > 1, dw)
-  dw['ZEO.TO'] = applyDates(ratio10S_BDRY > 1, dw)
-  dw['513A.T'] = applyDates(ratio10S_513A > 1, dw) / 2
-  dw = cleanS(dw, isMonthlyRebal=True)
-  dw *= volTgt / hv
+  dpm_longs = dp[longs].iloc[endpoints(dp[longs])]
+  dpq_longs = dpm_longs[dpm_longs.index.month.isin([3, 6, 9, 12])]
+  rQS = dpq_longs.pct_change(3)
+  keep = (rQS.rank(axis=1, ascending=False, method='first') <= 3) & (rQS > 0)
+  dw[longs] = applyDates(keep, dw) * volTgt / hv[longs]
+  dw[short] = -dw[longs].sum(axis=1)
+  mask = dw.index[endpoints(dw)]
+  mask = mask[mask.month.isin([3, 6, 9, 12])]
+  dw2 = dw.copy()
+  dw2[:] = np.nan
+  dw2.loc[mask] = dw.loc[mask]
+  dw = cleanS(dw2, isMonthlyRebal=False)
   #####
   d = dict()
   d['dp'] = dp
-  d['dp2'] = dp2
   d['dw'] = dw
-  d['ratio10S_ITA'] = ratio10S_ITA
-  d['ratio10S_REMX'] = ratio10S_REMX
-  d['ratio10S_BDRY'] = ratio10S_BDRY
-  d['ratio10S_513A'] = ratio10S_513A
   return d
 
-def runGEO(yrStart, isSkipTitle=False):
-  script = 'GEO'
+def runCTM(yrStart, isSkipTitle=False):
+  script = 'CTM'
   if not isSkipTitle:
     st.header(script)
   #####
-  d = runGEOCore(yrStart)
+  d = runCTMCore(yrStart)
   st.header('Prices')
-  stWriteDf(d['dp2'].tail())
-  st.header('Ratios')
-  stWriteDf(ul.merge(
-    d['ratio10S_ITA'].round(3),
-    d['ratio10S_REMX'].round(3),
-    d['ratio10S_BDRY'].round(3),
-    d['ratio10S_513A'].round(3),
-    how='inner').tail())
+  stWriteDf(d['dp'].tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-#####
+def runDGSCore(yrStart):
+  volTgt = .28
+  maxWgt = 1.5
+  #####
+  und = 'SPY'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  #####
+  cS = dfDict[und]['Close']
+  df = pd.read_csv('https://squeezemetrics.com/monitor/static/DIX.csv', parse_dates=['date'], index_col='date').sort_index()
+  dixS = applyDates(df['dix'].rename('DIX'), cS)
+  gexS = applyDates(df['gex'].rename('GEX'), cS)
+  vixS = applyDates(getPriceHistory('VIX.INDX', yrStart=yrStart - 1)['Close'].rename('VIX'), cS)
+  vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
+  #####
+  isDarkPoolOk = (dixS > 0.45) | (gexS > 0)
+  isVixOk = vixRatioS < 1
+  preStateS = ((isDarkPoolOk & isVixOk) * 1).rename('Pre State')
+  stateS = ((preStateS.rolling(3).sum() >= 2) * 1).rename('State')
+  dw[und] = cleanS(stateS, isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dixS'] = dixS
+  d['gexS'] = gexS
+  d['vixS'] = vixS
+  d['vixRatioS'] = vixRatioS
+  d['preStateS'] = preStateS
+  d['stateS'] = stateS
+  return d
+
+def runDGS(yrStart, isSkipTitle=False):
+  script = 'DGS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runDGSCore(yrStart)
+  #####
+  st.header('Table')
+  stWriteDf(ul.merge(d['dp'], d['dixS'].round(3), (d['gexS'] / 1e9).round(3), d['vixS'], d['vixRatioS'].round(3), d['preStateS'], d['stateS'], how='inner').tail())
+  #####
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 def runMBSCore(yrStart):
   # --------------------------------------------------------------------------
@@ -1185,8 +1052,6 @@ def runMBS(yrStart, isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
-
-#####
 
 def runQS12Core(yrStart):
   undG = 'GLD'
@@ -1317,42 +1182,6 @@ def runSCI(yrStart,isSkipTitle=False):
   dw.loc[idx, 'GDXJ'] = -0.2
   dw.loc[idx, 'XLE'] = 0.6
   dw.loc[idx, 'OIH'] = -0.4
-  st.header('Prices')
-  stWriteDf(dp.tail())
-  st.header('Weights')
-  dwTail(dw)
-  bt(script, dp, dw, yrStart)
-
-def runSCI2(yrStart,isSkipTitle=False):
-  script = 'SCI2'
-  if not isSkipTitle:
-    st.header(script)
-  ######
-  volTgt = .08
-  dp, _, dfDict, _ = btSetup(ul.spl('IWM,XLRE,KBWD,JETS,IPRE.XETRA,KRE,'
-                               'XLV,XLU,MOAT,DFND.SW,EUDF.XETRA,DB1.XETRA'),yrStart=yrStart-1)
-  dp = applyDates(dp,dfDict['XLRE'])
-  dp['S68.SI'] = applyDates(getPriceHistoryYahoo('S68.SI', yrStart=yrStart-1)['Close'], dp)
-  dw=dp.copy()
-  dw[:]=np.nan
-  hv=getHV(dp)
-  #####
-  idx = dw.index[endpoints(dw)]
-  dw.loc[idx, 'IWM'] = -1
-  dw.loc[idx, 'XLRE'] = -1
-  dw.loc[idx, 'KBWD'] = -1
-  dw.loc[idx, 'JETS'] = -1
-  dw.loc[idx, 'IPRE.XETRA'] = -1
-  dw.loc[idx, 'KRE'] = -1
-  #####
-  dw.loc[idx, 'XLV'] = 1
-  dw.loc[idx, 'XLU'] = 1
-  dw.loc[idx, 'MOAT'] = 1
-  dw.loc[idx, 'DFND.SW'] = 1
-  dw.loc[idx, 'EUDF.XETRA'] = 1 # WDEF in IBKR
-  dw.loc[idx, 'DB1.XETRA'] = .5
-  dw.loc[idx, 'S68.SI'] = .5
-  dw *= volTgt / hv
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
