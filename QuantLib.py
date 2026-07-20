@@ -194,7 +194,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   if und in ul.spl('EUDF.XETRA,IPRE.XETRA,COM,INFL,IBIT,'
                    'DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,'
                    'RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
-                   'COPX,GRID,WTAI.LSE,NATO.LSE,REMX,513A.T'):   # AIS/GEO legs
+                   'COPX,GRID,WTAI.LSE,NATO.LSE,REMX,513A.T,9888.HK,9988.HK'):
     if und == 'EUDF.XETRA':
       dtStart = '2025-3-31'
     elif und == 'IPRE.XETRA':
@@ -243,6 +243,10 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart='2010-10-29'
     elif und=='513A.T':
       dtStart = '2026-2-27'
+    elif und=='9888.HK':
+      dtStart = '2021-3-23'
+    elif und=='9988.HK':
+      dtStart = '2019-11-26'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
@@ -251,24 +255,20 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   elif und == '000660.KO':
     return extend(getPriceHistoryIBKR('000660'), df.loc[df.index <= '2026-2-23'])
   elif und == 'DFND.SW':
-    return m(df, 'ITA.csv')                    # LIVE file, stays in data/ (no sub)
+    return m(df, 'ITA.csv', sub='Archive/')
   elif und == 'BDRY':
     return m(df, 'BDI.csv', sub='Archive/')    # GEO-only signal, now archived
   ###########################################################################
   # END decommissioned
   ###########################################################################
 
-  if und in ul.spl('GDXJ,DBMF,PFMN.TO,9888.HK,9988.HK'):
+  if und in ul.spl('GDXJ,DBMF,PFMN.TO'):
     if und=='GDXJ':
       dtStart='2009-11-30'
     elif und=='DBMF':
       dtStart = '2019-5-31'
     elif und == 'PFMN.TO':
       dtStart = '2019-7-31'
-    elif und=='9888.HK':
-      dtStart = '2021-3-23'
-    elif und=='9988.HK':
-      dtStart = '2019-11-26'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
@@ -849,7 +849,7 @@ def runBTS(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runDGSCore(yrStart):
+def runVTSCore(yrStart):
   volTgt = .28
   maxWgt = 1.5
   #####
@@ -857,15 +857,11 @@ def runDGSCore(yrStart):
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   #####
   cS = dfDict[und]['Close']
-  df = pd.read_csv('https://squeezemetrics.com/monitor/static/DIX.csv', parse_dates=['date'], index_col='date').sort_index()
-  dixS = applyDates(df['dix'].rename('DIX'), cS)
-  gexS = applyDates(df['gex'].rename('GEX'), cS)
   vixS = applyDates(getPriceHistory('VIX.INDX', yrStart=yrStart - 1)['Close'].rename('VIX'), cS)
   vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
   #####
-  isDarkPoolOk = (dixS > 0.45) | (gexS > 0)
   isVixOk = vixRatioS < 1
-  preStateS = ((isDarkPoolOk & isVixOk) * 1).rename('Pre State')
+  preStateS = (isVixOk * 1).rename('Pre State')
   stateS = ((preStateS.rolling(3).sum() >= 2) * 1).rename('State')
   dw[und] = cleanS(stateS, isMonthlyRebal=True)
   dw = (dw * volTgt / hv).clip(0, maxWgt)
@@ -873,23 +869,21 @@ def runDGSCore(yrStart):
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
-  d['dixS'] = dixS
-  d['gexS'] = gexS
   d['vixS'] = vixS
   d['vixRatioS'] = vixRatioS
   d['preStateS'] = preStateS
   d['stateS'] = stateS
   return d
 
-def runDGS(yrStart, isSkipTitle=False):
-  script = 'DGS'
+def runVTS(yrStart, isSkipTitle=False):
+  script = 'VTS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d = runDGSCore(yrStart)
+  d = runVTSCore(yrStart)
   #####
   st.header('Table')
-  stWriteDf(ul.merge(d['dp'], d['dixS'].round(3), (d['gexS'] / 1e9).round(3), d['vixS'], d['vixRatioS'].round(3), d['preStateS'], d['stateS'], how='inner').tail())
+  stWriteDf(ul.merge(d['dp'], d['vixS'], d['vixRatioS'].round(3), d['preStateS'], d['stateS'], how='inner').tail())
   #####
   st.header('Weights')
   dwTail(d['dw'])
