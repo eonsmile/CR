@@ -11,6 +11,8 @@ import pendulum
 import yahooquery
 import curl_cffi
 import warnings
+import json
+import urllib.request
 import pandas_ta_classic as ta
 
 ###########
@@ -813,19 +815,12 @@ def runTPP2(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runBTSCore(yrStart):
-  HALVINGS = pd.to_datetime(['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'])
-  #####
-  volTgt = .25
+  volTgt = .255
   maxWgt = 1.5
   cS = getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
   ratioS = (cS/cS.rolling(50).mean()).rename('Ratio')
-  nDays_off = 450
-  nDays_on = 900
-  isSeasonS = pd.Series(1, index=cS.index).rename('Season?')
-  for hd in HALVINGS:
-    isSeasonS[(cS.index >= hd + pd.Timedelta(days=nDays_off)) &
-         (cS.index < hd + pd.Timedelta(days=nDays_on))] = 0
-  dw = ((ratioS>1) & isSeasonS).rename('BTC').to_frame()
+  ratio2S = (cS / cS.rolling(240).max()).rename('Ratio2')
+  dw = ((ratioS>1) & (ratio2S>0.8)).rename('BTC').to_frame()
   dp = cS.rename('BTC').to_frame()
   hv = getHV(dp, af=365)
   dw = (dw * volTgt / hv).clip(0, maxWgt)
@@ -833,8 +828,8 @@ def runBTSCore(yrStart):
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
-  d['isSeasonS'] = isSeasonS
   d['ratioS'] = ratioS
+  d['ratio2S'] = ratio2S
   return d
 
 def runBTS(yrStart, isSkipTitle=False):
@@ -843,7 +838,7 @@ def runBTS(yrStart, isSkipTitle=False):
     st.header(script)
   d = runBTSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(d['dp'], d['isSeasonS'], d['ratioS'].round(3), how='inner')
+  tableS = ul.merge(d['dp'], d['ratioS'].round(3), d['ratio2S'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
