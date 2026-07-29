@@ -12,8 +12,6 @@ import yahooquery
 import curl_cffi
 import warnings
 import pandas_ta_classic as ta
-import stock_indicators
-import stock_indicators.indicators.common
 
 ###########
 # Constants
@@ -417,6 +415,31 @@ def getCoreWeightsDf():
   df.set_index(['ETF'], inplace=True)
   return df,lastUpdate
 
+def getCrsiS(closeS, rsiPeriods=3, streakPeriods=2, rankPeriods=100):
+  def wilderRsi(s, n):
+    d = s.diff()
+    up = d.clip(lower=0)
+    dn = (-d).clip(lower=0)
+    au = up.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
+    ad = dn.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
+    return 100 - (100 / (1 + au / ad))
+  #####
+  signs = np.sign(closeS.diff().fillna(0).to_numpy())
+  streak = np.zeros(len(signs))
+  for i in range(1, len(signs)):
+    if signs[i] > 0:
+      streak[i] = streak[i - 1] + 1 if streak[i - 1] > 0 else 1
+    elif signs[i] < 0:
+      streak[i] = streak[i - 1] - 1 if streak[i - 1] < 0 else -1
+  streakS = pd.Series(streak, index=closeS.index)
+  #####
+  rocS = closeS.pct_change() * 100
+  def percentRank(x):
+    return 100.0 * np.sum(x[:-1] < x[-1]) / (len(x) - 1)
+  rankS = rocS.rolling(rankPeriods + 1).apply(percentRank, raw=True)
+  #####
+  return ((wilderRsi(closeS, rsiPeriods) + wilderRsi(streakS, streakPeriods) + rankS) / 3).rename('CRSI')
+
 def getHV(s, n=32, af=252):
   if isinstance(s, pd.DataFrame):
     hv = s.copy()
@@ -771,8 +794,7 @@ def runTPP2Core(yrStart):
   lS = df['Low']
   cS = df['Close']
   atrPctS = ta.atr(hS, lS, cS, length=1).rename('ATR') / cS * 100
-  q = [stock_indicators.indicators.common.quote.Quote(date=dt.to_pydatetime(), open=float(row.Open), high=float(row.High), low=float(row.Low), close=float(row.Close), volume=float(row.Volume)) for dt, row in df.iterrows()]
-  crsiS = pd.Series([r.connors_rsi for r in stock_indicators.indicators.get_connors_rsi(q)], index=df.index, name='CRSI', dtype=float)
+  crsiS = getCrsiS(cS)
   #####
   isCondS = oS < oS.shift(1)
   isCond2S = dxyS.rolling(120).mean() / dxyS.rolling(200).mean() < 1
