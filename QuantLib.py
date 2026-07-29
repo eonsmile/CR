@@ -12,6 +12,8 @@ import yahooquery
 import curl_cffi
 import warnings
 import pandas_ta_classic as ta
+import stock_indicators
+import stock_indicators.indicators.common
 
 ###########
 # Constants
@@ -672,7 +674,7 @@ def runTPP2Core(yrStart):
   volTgt = .135
   maxWgt = 1.5
   etc=ul.spl('HYG,SPHB,SPLV,TIP,NDX.INDX')
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,GLD,UUP')+etc,yrStart=yrStart-1)
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,GLD,UUP,USO')+etc,yrStart=yrStart-1)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
@@ -735,15 +737,12 @@ def runTPP2Core(yrStart):
   isEntryS_IWM = applyDates((isNDXOkS_IWM==1) & (isIBSOkS_IWM==1) & (ratio200S_IWM>1), dp)
   dw['IWM'] = getStateS_timestop(isEntryS_IWM, isEntryS_IWM*0, 8, isCleaned=True, isMonthlyRebal=True)
 
-  #########
-  # UUP/GLD
-  #########
-  gldS = applyDates(dfDict['GLD']['Close'], dp)
-  uupS = applyDates(dfDict['UUP']['Close'], dp)
-  ratio150S_GLD = (gldS / gldS.rolling(150).mean()).rename('GLD Ratio 150D')
-  ratio50S_UUP = (uupS / uupS.rolling(50).mean()).rename('UUP Ratio 50D')
   #####
-  df=dfDict['GLD']
+  # GLD
+  #####
+  gldS = applyDates(dfDict['GLD']['Close'], dp)
+  ratio150S_GLD = (gldS / gldS.rolling(150).mean()).rename('GLD Ratio 150D')
+  df = dfDict['GLD']
   hS = df['High']
   lS = df['Low']
   cS = df['Close']
@@ -752,10 +751,36 @@ def runTPP2Core(yrStart):
   isEntryS = (cS > hS.rolling(3).max().shift()) | ((ibsS < .15) & (adxS > 30))
   isExitS = (cS > hS.shift()) | ((cS > cS.shift()) & (cS.shift() > cS.shift(2)))
   gtsSignalS = getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('GTS Signal')
-  #####
   m = lambda n: applyDates(n, dw) * 1
-  dw['GLD'] = m(ratio150S_GLD>1)/2 + m(gtsSignalS)/2
-  dw['UUP'] = m(ratio50S_UUP>1)
+  dw['GLD'] = m(ratio150S_GLD > 1) / 2 + m(gtsSignalS) / 2
+
+  #####
+  # UUP
+  #####
+  uupS = applyDates(dfDict['UUP']['Close'], dp)
+  ratio50S_UUP = (uupS / uupS.rolling(50).mean()).rename('UUP Ratio 50D')
+  dw['UUP'] = m(ratio50S_UUP > 1)
+
+  #####
+  # USO
+  #####
+  dxyS = getPriceHistory('DXY.INDX', yrStart=yrStart - 1)['Close']
+  df = dfDict['USO']
+  oS = df['Open']
+  hS = df['High']
+  lS = df['Low']
+  cS = df['Close']
+  atrPctS = ta.atr(hS, lS, cS, length=1).rename('ATR') / cS * 100
+  q = [stock_indicators.indicators.common.quote.Quote(date=dt.to_pydatetime(), open=float(row.Open), high=float(row.High), low=float(row.Low), close=float(row.Close), volume=float(row.Volume)) for dt, row in df.iterrows()]
+  crsiS = pd.Series([r.connors_rsi for r in stock_indicators.indicators.get_connors_rsi(q)], index=df.index, name='CRSI', dtype=float)
+  #####
+  isCondS = oS < oS.shift(1)
+  isCond2S = dxyS.rolling(120).mean() / dxyS.rolling(200).mean() < 1
+  isCond3S = atrPctS > (atrPctS.rolling(100).mean() + atrPctS.rolling(100).std())
+  isEntryS = applyDates(isCondS & isCond2S & isCond3S, dw)
+  isExitS = applyDates(crsiS > 65, dw)
+  otsSignalS = getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('OTS Signal')
+  dw['USO'] = m(otsSignalS)
   #####
   stateDf=dw.astype(float).ffill()
   dw=cleanS(dw,isMonthlyRebal=True)
@@ -780,8 +805,11 @@ def runTPP2Core(yrStart):
   d['ratio200S_IWM'] = ratio200S_IWM
   #####
   d['ratio150S_GLD']=ratio150S_GLD
+  d['gtsSignal'] = gtsSignalS
+  #####
   d['ratio50S_UUP']=ratio50S_UUP
-  d['gtsSignal']=gtsSignalS
+  #####
+  d['otsSignal'] = otsSignalS
   return d
 
 def runTPP2(yrStart, isSkipTitle=False):
@@ -800,8 +828,8 @@ def runTPP2(yrStart, isSkipTitle=False):
     d['voteCountS'], how='inner').tail())
   st.header('IWM Filters')
   stWriteDf(ul.merge(d['isNDXOkS_IWM'],d['isIBSOkS_IWM'],d['ratio200S_IWM'].round(3),how='inner').tail())
-  st.header('GLD/UUP Table')
-  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['ratio50S_UUP'].round(3), how='inner').tail())
+  st.header('GLD/UUP/USO Table')
+  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['ratio50S_UUP'].round(3), d['otsSignal'], how='inner').tail())
   st.header('States')
   stWriteDf(d['stateDf'].tail())
   st.header('Weights')

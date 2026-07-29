@@ -44,7 +44,8 @@ def runAlpha(yrStart, isSkipTitle=False):
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  Calmar: 8.91          MAR: 7.25          Sharpe: 3.81          Cagr: 32.7%          MaxDD: 4.5%
+#  Calmar: 8.91          MAR: 7.25          Sharpe: 3.81          Cagr: 32.7%          MaxDD: 4.5% before OTS
+#    Calmar: 9.11          MAR: 7.43          Sharpe: 3.89          Cagr: 33.4%          MaxDD: 4.5% after OTS
 #####
   tickers = d.keys() - l
   dp, dw, _, _ = btSetup(tickers,yrStart=yrStart-1)
