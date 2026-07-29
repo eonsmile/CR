@@ -7,4 +7,5 @@ numpy
 curl_cffi
 pandas-ta-classic
 pandas_market_calendars
+stock_indicators
 dill
