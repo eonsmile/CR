@@ -249,9 +249,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     if dtStart is not None: df = df.loc[df.index >= dtStart]
     df = m(df, f"{und}.csv", sub='Archive/')
     return df
-  elif und == '000660.KO':
-    from IBKRLib import getPriceHistoryIBKR
-    return extend(getPriceHistoryIBKR('000660'), df.loc[df.index <= '2026-2-23'])
   elif und == 'DFND.SW':
     return m(df, 'ITA.csv', sub='Archive/')
   elif und == 'BDRY':
@@ -1017,50 +1014,6 @@ def runSCI(yrStart,isSkipTitle=False):
   st.header('Weights')
   dwTail(dw)
   bt(script, dp, dw, yrStart)
-
-#####
-
-def runHNXCore(yrStart):
-  und = '000660.KO'
-  und2 = '138230.KO'
-  dp, dw, dfDict, hv = btSetup([und,und2], yrStart=yrStart-1)
-  #####
-  ibsS = getIbsS(dfDict[und])
-  ibs2S = getIbsS(dfDict[und],n=2).rename('IBS2')
-  cS = dfDict[und]['Close']
-  ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
-  rsiS = ta.rsi(cS, length=2).rename('RSI')
-  isEntryS = (ibsS < .2) & (ibs2S < .4) & (ratioS>1)
-  isExitS  = (ibsS > .5) | (rsiS > 70)
-  dw[und] = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=False)
-  dw[und2] = -dw[und]
-  dw.loc[dw.index.year < yrStart] = 0
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ibs2S'] = ibs2S
-  d['ratioS'] = ratioS
-  d['rsiS'] = rsiS
-  return d
-
-def runHNX(yrStart, isSkipTitle=False):
-  script = 'HNX'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runHNXCore(yrStart)
-  st.header('Table')
-  df = d['dfDict']['000660.KO']
-  df2 = ul.merge(df['Close'].round().map('{:,.0f}'.format),
-                 df['High'].round().map('{:,.0f}'.format),
-                 df['Low'].round().map('{:,.0f}'.format),
-                 d['ibsS'].round(3), d['ibs2S'].round(3), d['ratioS'].round(3), d['rsiS'].round(1), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 
