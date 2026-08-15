@@ -23,7 +23,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.15
   b=.1
-  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,GEO')
+  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,COS,GEO')
   d = {
     # Systems
     'TPP': a,  # *** review monthly ***
@@ -36,6 +36,7 @@ def runAlpha(yrStart, isSkipTitle=False):
     'VCA': a, # _ETC
     #####
     'BTS': a,  # _ETC
+    'COS': a,  # _COS
     'GEO': a,  # *** review monthly ***
     #####
     # SAA
@@ -44,8 +45,11 @@ def runAlpha(yrStart, isSkipTitle=False):
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  Calmar: 8.91          MAR: 7.25          Sharpe: 3.81          Cagr: 32.7%          MaxDD: 4.5% before OTS
-#    Calmar: 9.11          MAR: 7.43          Sharpe: 3.89          Cagr: 33.4%          MaxDD: 4.5% after OTS
+#    Calmar: 9.66          MAR: 7.52          Sharpe: 3.92          Cagr: 33.8%          MaxDD: 4.5%
+#  Calmar: 9.89          MAR: 7.80          Sharpe: 4.03          Cagr: 35.1%          MaxDD: 4.5% (COS)
+#    Calmar: 9.92          MAR: 7.80          Sharpe: 4.03          Cagr: 35.1%          MaxDD: 4.5% (14Aug, before SCI reduction; ytd16.8; mtd3.3)
+#    Calmar: 9.90          MAR: 7.88          Sharpe: 4.00          Cagr: 34.5%          MaxDD: 4.4% (after SCI reduction; ytd16.6; mtd3.4)
+#    Calmar: 9.80          MAR: 7.85          Sharpe: 3.98          Cagr: 34.4%          MaxDD: 4.4% (after VCA rule change; ytd 16.6; mtd 3.4)
 #####
   tickers = d.keys() - l
   dp, dw, _, _ = btSetup(tickers,yrStart=yrStart-1)
@@ -93,6 +97,8 @@ if isRunSystems:
   st.divider()
   #####
   runBTS(y)
+  st.divider()
+  runCOS(y)
   st.divider()
   runGEO(y)
   st.divider()

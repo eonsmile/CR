@@ -18,6 +18,9 @@ import pretty_errors # keep here
 # Globals
 #########
 colorama.init()
+SHARED_DICT={
+  'yrStart':2016-1,
+}
 
 ###############
 # Caching/Locks
@@ -137,6 +140,17 @@ def colored(text, color=None, isReverse=False, isUnderline=False):
 
 def cPrint(z, color, isReverse=False, isUnderline=False, end='\n'):
   print(colored(z, color, isReverse=isReverse, isUnderline=isUnderline),end=end)
+
+def extend(df, df2):
+  dtAnchor=df['Close'].first_valid_index()
+  if df2.index[-1] >= dtAnchor:
+    ratio= df.loc[dtAnchor]['Close'] / df2.loc[dtAnchor]['Close']
+    df2= df2[:dtAnchor][:-1]
+    df2[spl('Open,High,Low,Close')] *= ratio
+    df2['Volume'] /= ratio
+    return pd.concat([df2, df.loc[dtAnchor:]])
+  else:
+    return df
 
 def getCurrentTime(isCondensed=False):
   return pendulum.now().format(f"{'' if isCondensed else 'YYYY-MM-DD'} HH:mm:ss")
