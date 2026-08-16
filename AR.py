@@ -5,13 +5,12 @@ import ctypes
 ########
 # Params
 ########
-IS_CORRS=True
 if ctypes.WinDLL('User32.dll').GetKeyState(0x14) & 1:
   print('')
   ul.cPrint('[CAPS]', 'yellow',isReverse=True)
-  isRunSystems=True
+  isRunSystems=False
 else:
-  isRunSystems = False
+  isRunSystems = True
 
 ###########
 # Functions
@@ -64,10 +63,9 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   dp = dp.bfill() # can try to see whether works or not
   bt(script, dp, dw, yrStart)
-
-  if IS_CORRS:
-    st.header('Corrs')
-    stWriteDf(dp.pct_change().corr().round(3))
+  #####
+  st.header('Corrs')
+  stWriteDf(dp.pct_change().corr().round(3))
 
 ######
 # Main

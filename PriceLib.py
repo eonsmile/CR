@@ -13,9 +13,6 @@ import yahooquery
 import curl_cffi
 import warnings
 
-########
-# Prices
-########
 #df2 = getPriceHistory('ITA', yrStart=yrStart)
 #df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
 

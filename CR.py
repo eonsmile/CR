@@ -1,6 +1,8 @@
 import streamlit as st
 import QuantLib as ql
 import UtilLib as ul
+import pandas as pd
+import pendulum
 
 ###########
 # Functions
@@ -32,6 +34,41 @@ def bt2016():
   st.divider()
   runCore(2016)
 
+
+def getCoreWeightsDf():
+  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
+  fmt='DDMMMYY'
+  dts = [pendulum.from_format(dt, fmt) for dt in lastUpdateDict.values()]
+  lastUpdate = max(dts).format(fmt)
+  l = list()
+  ep = 1e-9
+  #####
+  emptyDict = {'SPY':0,'QQQ':0,'IEI':0,'GLD':0,'UUP':0}
+  #####
+  d = ul.cachePersist('r', 'CR')['TPPDict']
+  tppDict=emptyDict.copy()
+  for und in ul.spl('QQQ,IEI,GLD,UUP'):
+    tppDict[und] = d[und] + ep
+  ####
+  d = ul.cachePersist('r', 'CR')['RSSDict']
+  rssDict = emptyDict.copy()
+  rssDict['SPY'] = d['SPY'] + ep
+  ####
+  d = ul.cachePersist('r', 'CR')['IBSDict']
+  ibsDict = emptyDict.copy()
+  ibsDict['QQQ'] = d['QQQ'] + ep
+  #####
+  dts=list(lastUpdateDict.values())
+  i = 0
+  for und in ul.spl('SPY,QQQ,IEI,GLD,UUP'):
+    totalWeight = tppDict[und]/3+rssDict[und]/3+ibsDict[und]/3
+    l.append([dts[i], und, totalWeight, tppDict[und], rssDict[und], ibsDict[und]])
+    i += 1
+  df = pd.DataFrame(l)
+  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/3),RSS (1/3),IBS (1/3)')
+  df.set_index(['ETF'], inplace=True)
+  return df,lastUpdate
+
 def runCore(yrStart):
   ql.runTPP(yrStart)
   st.divider()
@@ -60,7 +97,7 @@ st.title(z)
 if ul.stCheckPW('password_CR'):
   # Weights
   st.header('Weights')
-  df,lastUpdate=ql.getCoreWeightsDf()
+  df,lastUpdate=getCoreWeightsDf()
   st.markdown(f"Last Update: <font color='red'>{lastUpdate}</font>", unsafe_allow_html=True)
   cols=['Total Weight','TPP (1/3)','RSS (1/3)','IBS (1/3)']
   df[cols] = df[cols].map(lambda n: '' if n == 0 else f"{n:.1%}")

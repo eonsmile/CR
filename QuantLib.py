@@ -166,41 +166,6 @@ def cleanS(s, isMonthlyRebal=True):
 def EMA(s, n):
   return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
 
-
-def getCoreWeightsDf():
-  lastUpdateDict = ul.cachePersist('r','CR')['lastUpdateDict']
-  fmt='DDMMMYY'
-  dts = [pendulum.from_format(dt, fmt) for dt in lastUpdateDict.values()]
-  lastUpdate = max(dts).format(fmt)
-  l = list()
-  ep = 1e-9
-  #####
-  emptyDict = {'SPY':0,'QQQ':0,'IEI':0,'GLD':0,'UUP':0}
-  #####
-  d = ul.cachePersist('r', 'CR')['TPPDict']
-  tppDict=emptyDict.copy()
-  for und in ul.spl('QQQ,IEI,GLD,UUP'):
-    tppDict[und] = d[und] + ep
-  ####
-  d = ul.cachePersist('r', 'CR')['RSSDict']
-  rssDict = emptyDict.copy()
-  rssDict['SPY'] = d['SPY'] + ep
-  ####
-  d = ul.cachePersist('r', 'CR')['IBSDict']
-  ibsDict = emptyDict.copy()
-  ibsDict['QQQ'] = d['QQQ'] + ep
-  #####
-  dts=list(lastUpdateDict.values())
-  i = 0
-  for und in ul.spl('SPY,QQQ,IEI,GLD,UUP'):
-    totalWeight = tppDict[und]/3+rssDict[und]/3+ibsDict[und]/3
-    l.append([dts[i], und, totalWeight, tppDict[und], rssDict[und], ibsDict[und]])
-    i += 1
-  df = pd.DataFrame(l)
-  df.columns = ul.spl('Last Update,ETF,Total Weight,TPP (1/3),RSS (1/3),IBS (1/3)')
-  df.set_index(['ETF'], inplace=True)
-  return df,lastUpdate
-
 def getCrsiS(closeS, rsiPeriods=3, streakPeriods=2, rankPeriods=100):
   def wilderRsi(s, n):
     d = s.diff()
