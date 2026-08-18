@@ -22,7 +22,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.15
   b=.1
-  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,COS,GEO')
+  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,COS,GEO,SSS,HNX')
   d = {
     # Systems
     'TPP': a,  # *** review monthly ***
@@ -37,6 +37,9 @@ def runAlpha(yrStart, isSkipTitle=False):
     'BTS': a,  # _ETC
     'COS': a,  # _COS
     'GEO': a,  # *** review monthly ***
+    'SSS': a,  # _ETC
+    #####
+    'HNX': 0.03, # _HNX
     #####
     # SAA
     'PFMN.TO': b,
@@ -49,6 +52,11 @@ def runAlpha(yrStart, isSkipTitle=False):
 #    Calmar: 9.92          MAR: 7.80          Sharpe: 4.03          Cagr: 35.1%          MaxDD: 4.5% (14Aug, before SCI reduction; ytd16.8; mtd3.3)
 #    Calmar: 9.90          MAR: 7.88          Sharpe: 4.00          Cagr: 34.5%          MaxDD: 4.4% (after SCI reduction; ytd16.6; mtd3.4)
 #    Calmar: 9.80          MAR: 7.85          Sharpe: 3.98          Cagr: 34.4%          MaxDD: 4.4% (after VCA rule change; ytd 16.6; mtd 3.4)
+#    Calmar: 9.93          MAR: 7.93          Sharpe: 4.01          Cagr: 34.4%          MaxDD: 4.3% (upgrading TPP2 to have IEI; ytd 16.2; mtd 3.3)
+#    Calmar: 10.39          MAR: 8.16          Sharpe: 4.09          Cagr: 35.3%          MaxDD: 4.3% (with HNX; ytd19, mtd 3.2)
+#    Calmar: 10.52          MAR: 8.19          Sharpe: 4.13          Cagr: 35.7%          MaxDD: 4.4% (with HNX3; ytd20.5, mtd 3.2)
+# Calmar: 10.73          MAR: 8.50          Sharpe: 4.29          Cagr: 37.5%          MaxDD: 4.4% (with SSS; ytd 21.3, mtd 3.1
+
 #####
   tickers = d.keys() - l
   dp, dw, _, _ = btSetup(tickers,yrStart=yrStart-1)
@@ -99,6 +107,11 @@ if isRunSystems:
   runCOS(y)
   st.divider()
   runGEO(y)
+  st.divider()
+  runSSS(y)
+  st.divider()
+  #####
+  runHNX(y)
   st.divider()
 
 runAlpha(y, isSkipTitle=True)

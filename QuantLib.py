@@ -10,6 +10,7 @@ import pandas as pd
 import math
 import pendulum
 import pandas_ta_classic as ta
+import pandas_market_calendars
 
 ###########
 # Functions
@@ -210,6 +211,60 @@ def getIbsS(df,n=1):
     ibsS = (df['Close'] - lS) / (hS - lS)
   ibsS.name = 'IBS'
   return ibsS
+
+def getNYSEEomS(idx):
+  """Sessions-to-month-end on the real NYSE calendar (1 = last session).
+
+  Current month is ranked through getNYSEMonthEnd, not through last printed
+  price, so mid-month bars are not treated as EOM.
+  """
+  idx = pd.DatetimeIndex(idx)
+  if idx.tz is not None:
+    idx = idx.tz_localize(None)
+  idx = idx.normalize()
+  today = pd.Timestamp(pendulum.now('America/New_York').to_date_string())
+  curEom = pd.Timestamp(getNYSEMonthEnd(offset=0)).normalize()
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  spanStart = (pd.Timestamp(idx[0]) - pd.Timedelta(days=10)).strftime('%Y-%m-%d')
+  spanEnd = max(idx[-1], curEom, today).strftime('%Y-%m-%d')
+  sessions = pd.DatetimeIndex([
+    pd.Timestamp(x).date() for x in cal.schedule(start_date=spanStart, end_date=spanEnd).index
+  ])
+  s = pd.DataFrame({'ym': sessions.to_period('M')}, index=sessions)
+  curYm = curEom.to_period('M')
+  s = s.loc[(s['ym'] < curYm) | ((s['ym'] == curYm) & (s.index <= curEom))]
+  eom = s.groupby('ym').cumcount(ascending=False) + 1
+  return eom.reindex(idx).rename('EOM')
+
+def getNYSEHolidayDates(start, end, prefixes):
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  start, end = pd.Timestamp(start), pd.Timestamp(end)
+  out = []
+  for rule in cal.regular_holidays.rules:
+    name = rule.name.lower()
+    if any(name.startswith(p) for p in prefixes):
+      out.extend(rule.dates(start, end))
+  if len(out) == 0:
+    return pd.DatetimeIndex([])
+  return pd.DatetimeIndex(pd.to_datetime(out)).normalize().unique().sort_values()
+
+def getNYSEMonthEnd(offset=0):
+  tz = 'America/New_York'
+  now = pendulum.now(tz)
+  monthStart = now.start_of('month').to_date_string()
+  monthEnd = now.end_of('month').to_date_string()
+  nyseCalendar = pandas_market_calendars.get_calendar('NYSE')
+  schedule = nyseCalendar.schedule(start_date=monthStart, end_date=monthEnd)
+  sessions = schedule.index
+  if len(sessions) == 0:
+    raise ValueError(f'No NYSE sessions found for {now.format("YYYY-MM")}')
+  targetIdx = (len(sessions) - 1) + offset
+  if targetIdx < 0 or targetIdx >= len(sessions):
+    raise ValueError(
+      f'offset {offset} is out of range for {now.format("YYYY-MM")} '
+      f'(valid offsets: {-len(sessions) + 1}..0)'
+    )
+  return pd.Timestamp(pd.Timestamp(sessions[targetIdx]).date())
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if len(isEntryS)!=len(isExitS):
@@ -746,7 +801,6 @@ def runBTS(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-
 def runCOSCore(yrStart):
   und, size = 'SPY', 2
   df = pl.getPriceHistory(und, yrStart=yrStart - 1)
@@ -845,11 +899,62 @@ def runGEO(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runSSSCore(yrStart):
+  dp, dw, _, _ = btSetup(ul.spl('GLD,IEI,UGA'), yrStart=yrStart - 1)
+  idx = dw.index
+  dw[:]=0
+  #####
+  # IEI
+  #####
+  eomS = getNYSEEomS(idx)
+  dw['IEI'] = ((eomS >= 2) & (eomS <= 4))*2
+  #####
+  # GLD
+  #####
+  for H in getNYSEHolidayDates(idx[0], idx[-1], ('christmas', 'new years')):
+    before = idx[idx < H]
+    if len(before) == 0:
+      continue
+    i0 = idx.get_loc(before[-1])
+    dw.loc[idx[max(i0 - 2, 0): i0 + 1], 'GLD'] = 1
+  #####
+  # UGA
+  #####
+  for H in getNYSEHolidayDates(idx[0], idx[-1], ('memorial day', 'july 4', 'labor day', 'thanksgiving')):
+    after = idx[idx > H]
+    if len(after) == 0:
+      continue
+    d1 = after[0]
+    before = idx[idx < d1]
+    if len(before) == 0:
+      continue
+    dw.loc[before[-1], 'UGA'] = -0.5
+    dw.loc[d1, 'UGA'] = 0.0
+  #####
+  dw = cleanS(dw, isMonthlyRebal=True)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  return d
+
+def runSSS(yrStart, isSkipTitle=False):
+  script = 'SSS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runSSSCore(yrStart)
+  st.header('Prices')
+  dwTail(d['dp'])
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 #####
 
 def runHNXCore(yrStart):
   und = '000660.KO'
-  und2 = '702747.MSCI'
+  und2 = '138230.KO'
   dp, dw, dfDict, hv = btSetup([und, und2], yrStart=yrStart - 1)
   dp2 = dp.copy()
   #####
@@ -881,12 +986,14 @@ def runHNX(yrStart, isSkipTitle=False):
   #####
   d = runHNXCore(yrStart)
   st.header('Table')
-  df = d['dfDict']['000660.KO']
+  und='000660.KO'
+  df = d['dfDict'][und]
   dp2=d['dp2']
-  dp2['000660.KO']=dp2['000660.KO'].round().map('{:,.0f}'.format)
+  zfmt='{:,.0f}'.format
+  dp2[und]=dp2[und].round().map(zfmt)
   df2 = ul.merge(dp2,
-                 df['High'].round().map('{:,.0f}'.format),
-                 df['Low'].round().map('{:,.0f}'.format),
+                 df['High'].round().map(zfmt),
+                 df['Low'].round().map(zfmt),
                  d['ibsS'].round(3), d['ibs2S'].round(3), d['ratioS'].round(3), d['rsiS'].round(1), how='inner')
   stWriteDf(df2.tail())
   st.header('Weights')

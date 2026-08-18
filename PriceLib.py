@@ -18,9 +18,7 @@ import warnings
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
-  if und=='702747.MSCI':
-    return getPriceHistoryMSCIKR2550(yrStart=yrStart)
-  elif und.endswith('.T') or und.endswith('.TO'):
+  if und.endswith('.T') or und.endswith('.TO'):
     df = getPriceHistoryYahoo(und, yrStart=yrStart)
     df = df.loc[df.index >= pd.Timestamp(dtStart)]
   else:
@@ -177,32 +175,6 @@ def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   df = df.replace('.', np.nan).astype(float).dropna()
   df.index.name = None
   return df[id]
-
-def getPriceHistoryMSCIKR2550(yrStart=SHARED_DICT['yrStart']):
-  r = requests.get(
-    'https://app2.msci.com/products/service/index/indexmaster/getLevelDataForGraph',
-    params={
-      'index_codes': '702747',
-      'index_variant': 'NETR',
-      'currency_symbol': 'KRW',
-      'data_frequency': 'DAILY',
-      'start_date': f"{yrStart}0101",
-      'end_date': pendulum.now('Asia/Seoul').format('YYYYMMDD'),
-    },
-    headers={
-      'User-Agent': 'Mozilla/5.0',
-      'Accept': 'application/json',
-      'Referer': 'https://www.msci.com/',
-    },
-    timeout=60,
-  )
-  r.raise_for_status()
-  levels = (r.json().get('indexes') or {}).get('INDEX_LEVELS') or []
-  s = pd.Series({pd.Timestamp(str(x['calc_date'])): float(x['level_eod']) for x in levels}).sort_index()
-  df = pd.DataFrame({'Close': s})
-  df['Open'] = df['High'] = df['Low'] = df['Close']
-  df['Volume'] = 0
-  return df
 
 def getPriceHistoryNaver(und):
   code = re.match(r'^(\d{6})', str(und).strip()).group(1)
