@@ -56,6 +56,7 @@ def runAlpha(yrStart, isSkipTitle=False):
 #    Calmar: 10.39          MAR: 8.16          Sharpe: 4.09          Cagr: 35.3%          MaxDD: 4.3% (with HNX; ytd19, mtd 3.2)
 #    Calmar: 10.52          MAR: 8.19          Sharpe: 4.13          Cagr: 35.7%          MaxDD: 4.4% (with HNX3; ytd20.5, mtd 3.2)
 # Calmar: 10.73          MAR: 8.50          Sharpe: 4.29          Cagr: 37.5%          MaxDD: 4.4% (with SSS; ytd 21.3, mtd 3.1
+#    Calmar: 10.73          MAR: 8.58          Sharpe: 4.29          Cagr: 37.6%          MaxDD: 4.4% # crypto feed fix
 
 #####
   tickers = d.keys() - l

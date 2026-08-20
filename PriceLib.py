@@ -12,6 +12,8 @@ import re
 import yahooquery
 import curl_cffi
 import warnings
+import os
+import random
 
 #df2 = getPriceHistory('ITA', yrStart=yrStart)
 #df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
@@ -132,19 +134,16 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = naverPatchHynix(df)
   return df
 
-'''
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  def m(toTs=None):
-    z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&limit=2000&api_key={st.secrets['cc_api_key']}"
-    if toTs is not None:
-      z = f"{z}&toTs={toTs}"
-    data = requests.get(z).json()['Data']
-    return pd.DataFrame(data['Data']), data['TimeFrom']
-  #####
-  df, toTs = m()
-  for i in range(2 if yrStart<2015 else 1):
-    df2, toTs = m(toTs)
-    df = pd.concat([df2.drop(df2.index[-1]), df])
+  from dotenv import load_dotenv
+  load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+  key = random.choice(ul.spl(os.getenv('CC_API_KEYS', '')))
+  z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&allData=true&api_key={key}"
+  j = requests.get(z).json()
+  data = j.get('Data')
+  if not isinstance(data, dict) or 'Data' not in data:
+    raise RuntimeError(f"cryptocompare histoday: {j.get('Message') or j}")
+  df = pd.DataFrame(data['Data'])
   df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
   df = df[df['date'] > '2010-7-16']
   df['open'] = df['close'].shift()
@@ -153,8 +152,8 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
   return df
-'''
 
+'''
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   dtStart = f"{max(yrStart, 2010)}-1-1"
   url = f"https://eodhd.com/api/eod/{und}-USD.CC?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}"
@@ -166,6 +165,7 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
   return df
+'''
 
 def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   dtStart = f"{yrStart}-01-01"
