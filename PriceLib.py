@@ -16,7 +16,6 @@ import os
 import random
 import time
 import databento as db
-from dotenv import load_dotenv
 
 #df2 = getPriceHistory('ITA', yrStart=yrStart)
 #df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
@@ -138,7 +137,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   return df
 
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
   key = random.choice(ul.spl(os.getenv('CC_API_KEYS', '')))
   z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&allData=true&api_key={key}"
   j = requests.get(z).json()
@@ -186,7 +184,6 @@ def getPriceHistoryDB(nd, yrStart=SHARED_DICT['yrStart']):
   last_year_deadline_md = (1, 15)  # re-pull prior year unless mtime on/after Jan 15
 
   def _api_key():
-    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
     key = os.getenv('DB_API_KEY', '').strip()
     if not key:
       raise RuntimeError('DB_API_KEY missing from .env')

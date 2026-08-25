@@ -23,6 +23,9 @@ SHARED_DICT={
   'yrStart':2016-1,
 }
 
+# Project .env once (does not override existing env vars). Safe if file missing.
+load_dotenv(pathlib.Path(__file__).resolve().parent / '.env')
+
 ###############
 # Caching/Locks
 ###############
@@ -202,7 +205,6 @@ def printHeader(header='',isCondensed=False,isAddTime=False):
 def pushoverSend(msg):
   import http.client, urllib.parse, time, os
   #####
-  load_dotenv()
   PUSHOVER_USER = os.getenv('PUSHOVER_USER', '')
   PUSHOVER_TOKEN = os.getenv('PUSHOVER_TOKEN', '')
   data = urllib.parse.urlencode({
