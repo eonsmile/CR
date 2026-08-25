@@ -14,6 +14,9 @@ import curl_cffi
 import warnings
 import os
 import random
+import time
+import databento as db
+from dotenv import load_dotenv
 
 #df2 = getPriceHistory('ITA', yrStart=yrStart)
 #df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
@@ -135,7 +138,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   return df
 
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  from dotenv import load_dotenv
   load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
   key = random.choice(ul.spl(os.getenv('CC_API_KEYS', '')))
   z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&allData=true&api_key={key}"
@@ -166,6 +168,189 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df = df.sort_values(by=['date']).round(10)
   return df
 '''
+
+
+def getPriceHistoryDB(nd, yrStart=SHARED_DICT['yrStart']):
+  """Databento continuous futures OHLCV — same shape as getPriceHistory (EODHD).
+
+  Root 'HG' → HG.v.0. Yearly parquet under data/databento/:
+    - prior years: reuse cache if present, else pull once
+    - current year: always live-pull (overwrite cache)
+    - last year: re-pull unless file mtime is on/after Jan 15 of the current year
+  Then ratio-adjust roll gaps. Auth: DB_API_KEY in .env.
+  """
+
+  # --- constants / helpers (local to this function) ---
+  cache_dir = os.path.join(os.path.dirname(__file__), 'data', 'databento')
+  dataset = 'GLBX.MDP3'
+  last_year_deadline_md = (1, 15)  # re-pull prior year unless mtime on/after Jan 15
+
+  def _api_key():
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+    key = os.getenv('DB_API_KEY', '').strip()
+    if not key:
+      raise RuntimeError('DB_API_KEY missing from .env')
+    return key
+
+  def _normalize_symbol(nd_):
+    s = str(nd_).strip()
+    if re.fullmatch(r'[A-Za-z0-9]+\.[cnv]\.\d+', s):
+      return s
+    if re.fullmatch(r'[A-Za-z0-9]+', s):
+      return f'{s}.v.0'
+    return s
+
+  def _year_path(safe_, year):
+    return os.path.join(cache_dir, f'{safe_}_{year}.parquet')
+
+  def _normalize_raw(df):
+    if df is None or len(df) == 0:
+      return None
+    part = df.reset_index() if 'ts_event' not in getattr(df, 'columns', []) else df.copy()
+    if 'ts_event' not in part.columns:
+      part = part.reset_index()
+    part['date'] = pd.to_datetime(part['ts_event']).dt.tz_convert(None).dt.normalize()
+    part = part.sort_values('date').drop_duplicates('date', keep='last').set_index('date')
+    return pd.DataFrame({
+      'Open': part['open'].astype(float),
+      'High': part['high'].astype(float),
+      'Low': part['low'].astype(float),
+      'Close': part['close'].astype(float),
+      'Volume': part['volume'].astype(float),
+      'instrument_id': part['instrument_id'].astype(int),
+    })
+
+  def _load_year(safe_, year):
+    path = _year_path(safe_, year)
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+      return None
+    try:
+      df = pd.read_parquet(path)
+      if df is None or len(df) == 0:
+        return None
+      df.index = pd.DatetimeIndex(pd.to_datetime(df.index)).tz_localize(None).normalize()
+      return df.sort_index()
+    except Exception:
+      return None
+
+  def _save_year(safe_, year, df):
+    if df is None or len(df) == 0:
+      return
+    os.makedirs(cache_dir, exist_ok=True)
+    df.to_parquet(_year_path(safe_, year))
+
+  def _pull_year(client_, symbol_, year, y_now_, avail_end_, retries=4):
+    start_y = f'{year}-01-01'
+    end_y = f'{year + 1}-01-01' if year < y_now_ else avail_end_.strftime('%Y-%m-%dT%H:%M:%S')
+    last_err = None
+    for attempt in range(retries):
+      try:
+        data = client_.timeseries.get_range(
+          dataset=dataset,
+          schema='ohlcv-1d',
+          symbols=symbol_,
+          stype_in='continuous',
+          start=start_y,
+          end=end_y,
+        )
+        return _normalize_raw(data.to_df())
+      except Exception as e:
+        last_err = e
+        msg = str(e)
+        if 'data_start_before_available' in msg or 'dataset_unavailable_range' in msg:
+          return None
+        m_end = re.search(r"available_end['\":\s]+['\"]?([0-9T:\.\-\+Z]+)", msg)
+        if m_end and attempt == 0:
+          end_y = m_end.group(1).rstrip('Z').split('+')[0]
+          continue
+        time.sleep(1.2 * (attempt + 1))
+    if last_err is not None:
+      raise last_err
+    return None
+
+  def _need_refresh_last_year(safe_, last_y_, y_now_):
+    path = _year_path(safe_, last_y_)
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+      return True
+    mtime = pd.Timestamp(os.path.getmtime(path), unit='s')
+    deadline = pd.Timestamp(year=y_now_, month=last_year_deadline_md[0], day=last_year_deadline_md[1])
+    return mtime < deadline
+
+  def _ratio_adjust(part):
+    close_raw = part['Close'].astype(float).values
+    ids = part['instrument_id'].astype(int).values
+    adj = {
+      'Open': part['Open'].astype(float).values.copy(),
+      'High': part['High'].astype(float).values.copy(),
+      'Low': part['Low'].astype(float).values.copy(),
+      'Close': close_raw.copy(),
+    }
+    for i in range(len(part) - 1, 0, -1):
+      if ids[i] == ids[i - 1]:
+        continue
+      prev_px, cur_px = close_raw[i - 1], close_raw[i]
+      if prev_px == 0 or np.isnan(prev_px) or np.isnan(cur_px):
+        continue
+      factor = cur_px / prev_px
+      for a in adj.values():
+        a[:i] *= factor
+    out = pd.DataFrame({
+      'Open': adj['Open'],
+      'High': adj['High'],
+      'Low': adj['Low'],
+      'Close': adj['Close'],
+      'Volume': part['Volume'].fillna(0).round(0).astype(np.int64).values,
+    }, index=part.index)
+    out.index = pd.DatetimeIndex(pd.to_datetime(out.index)).tz_localize(None).normalize()
+    out.index.name = 'date'
+    return out.sort_index().round(10)
+
+  # --- main ---
+  symbol = _normalize_symbol(nd)
+  safe = symbol.replace('.', '_')
+  y0 = int(yrStart)
+
+  client = db.Historical(_api_key())
+  try:
+    rng = client.metadata.get_dataset_range(dataset=dataset)
+    avail = rng.get('schema', {}).get('ohlcv-1d', {}).get('end') or rng.get('end')
+    avail_end = pd.Timestamp(str(avail).replace('Z', '').split('+')[0])
+  except Exception:
+    avail_end = pd.Timestamp.utcnow().normalize()
+  y_now = int(avail_end.year)
+
+  by_year = {}
+
+  for year in range(y0, y_now):
+    cached = _load_year(safe, year)
+    if cached is not None:
+      by_year[year] = cached
+      continue
+    fetched = _pull_year(client, symbol, year, y_now, avail_end)
+    if fetched is not None and len(fetched):
+      _save_year(safe, year, fetched)
+      by_year[year] = fetched
+
+  cur = _pull_year(client, symbol, y_now, y_now, avail_end)
+  if cur is not None and len(cur):
+    _save_year(safe, y_now, cur)
+    by_year[y_now] = cur
+
+  last_y = y_now - 1
+  if last_y >= y0 and _need_refresh_last_year(safe, last_y, y_now):
+    fetched = _pull_year(client, symbol, last_y, y_now, avail_end)
+    if fetched is not None and len(fetched):
+      _save_year(safe, last_y, fetched)
+      by_year[last_y] = fetched
+
+  if not by_year:
+    raise RuntimeError(f'Databento returned no rows for {symbol} from {y0}')
+
+  part = pd.concat([by_year[y] for y in sorted(by_year)], axis=0)
+  part = part.sort_index()
+  part = part[~part.index.duplicated(keep='last')]
+  out = _ratio_adjust(part)
+  return out.loc[out.index >= pd.Timestamp(f'{y0}-01-01')]
 
 def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   dtStart = f"{yrStart}-01-01"

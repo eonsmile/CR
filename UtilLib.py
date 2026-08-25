@@ -3,6 +3,7 @@
 ##############
 import streamlit as st
 import pandas as pd
+from dotenv import load_dotenv
 import pathlib
 import os
 import pendulum
@@ -200,7 +201,6 @@ def printHeader(header='',isCondensed=False,isAddTime=False):
 
 def pushoverSend(msg):
   import http.client, urllib.parse, time, os
-  from dotenv import load_dotenv
   #####
   load_dotenv()
   PUSHOVER_USER = os.getenv('PUSHOVER_USER', '')
