@@ -53,7 +53,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   if und in ul.spl('EUDF.XETRA,IPRE.XETRA,COM,INFL,IBIT,'
                    'DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,'
                    'RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
-                   'COPX,GRID,WTAI.LSE,REMX,9888.HK,9988.HK,DBMF'):
+                   'COPX,GRID,WTAI.LSE,REMX,9888.HK,9988.HK,DBMF,PFMN.TO'):
     if und == 'EUDF.XETRA':
       dtStart = '2025-3-31'
     elif und == 'IPRE.XETRA':
@@ -103,6 +103,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart = '2019-11-26'
     elif und=='DBMF':
       dtStart = '2019-5-31'
+    elif und == 'PFMN.TO':
+      dtStart = '2019-7-31'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
@@ -116,11 +118,9 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   # END decommissioned
   ###########################################################################
 
-  if und in ul.spl('GDXJ,PFMN.TO,NATO.LSE,NUCL.LSE'):
+  if und in ul.spl('GDXJ,NATO.LSE,NUCL.LSE'):
     if und=='GDXJ':
       dtStart='2009-11-30'
-    elif und == 'PFMN.TO':
-      dtStart = '2019-7-31'
     elif und == 'NATO.LSE':
       dtStart = '2023-7-31'
     elif und == 'NUCL.LSE':
@@ -168,7 +168,7 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
 '''
 
 
-def getPriceHistoryDB(nd, yrStart=SHARED_DICT['yrStart']):
+def getPriceHistoryDB(und, yrStart=SHARED_DICT['yrStart']):
   """Databento continuous futures OHLCV — same shape as getPriceHistory (EODHD).
 
   Root 'HG' → HG.v.0. Yearly parquet under data/databento/:
@@ -303,7 +303,7 @@ def getPriceHistoryDB(nd, yrStart=SHARED_DICT['yrStart']):
     return out.sort_index().round(10)
 
   # --- main ---
-  symbol = _normalize_symbol(nd)
+  symbol = _normalize_symbol(und)
   safe = symbol.replace('.', '_')
   y0 = int(yrStart)
 

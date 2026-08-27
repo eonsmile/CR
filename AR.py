@@ -21,8 +21,8 @@ def runAlpha(yrStart, isSkipTitle=False):
     st.header(script)
   #####
   a=.15
-  b=.1
-  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,COS,GEO,SSS,HNX')
+  b=.03
+  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,COM,COS,GEO,SSS,HNX')
   d = {
     # Systems
     'TPP': a,  # *** review monthly ***
@@ -35,32 +35,30 @@ def runAlpha(yrStart, isSkipTitle=False):
     'VCA': a, # _ETC
     #####
     'BTS': a,  # _ETC
+    'COM': a,  # _ETC
     'COS': a,  # _COS
     'GEO': a,  # *** review monthly ***
     'SSS': a,  # _ETC
     #####
-    'HNX': 0.03, # _HNX
-    #####
-    # SAA
-    'PFMN.TO': b,
-    'BHMG.LSE': b,
+    'HNX': b, # _HNX
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#    Calmar: 9.66          MAR: 7.52          Sharpe: 3.92          Cagr: 33.8%          MaxDD: 4.5%
-#  Calmar: 9.89          MAR: 7.80          Sharpe: 4.03          Cagr: 35.1%          MaxDD: 4.5% (COS)
-#    Calmar: 9.92          MAR: 7.80          Sharpe: 4.03          Cagr: 35.1%          MaxDD: 4.5% (14Aug, before SCI reduction; ytd16.8; mtd3.3)
-#    Calmar: 9.90          MAR: 7.88          Sharpe: 4.00          Cagr: 34.5%          MaxDD: 4.4% (after SCI reduction; ytd16.6; mtd3.4)
-#    Calmar: 9.80          MAR: 7.85          Sharpe: 3.98          Cagr: 34.4%          MaxDD: 4.4% (after VCA rule change; ytd 16.6; mtd 3.4)
-#    Calmar: 9.93          MAR: 7.93          Sharpe: 4.01          Cagr: 34.4%          MaxDD: 4.3% (upgrading TPP2 to have IEI; ytd 16.2; mtd 3.3)
-#    Calmar: 10.39          MAR: 8.16          Sharpe: 4.09          Cagr: 35.3%          MaxDD: 4.3% (with HNX; ytd19, mtd 3.2)
-#    Calmar: 10.52          MAR: 8.19          Sharpe: 4.13          Cagr: 35.7%          MaxDD: 4.4% (with HNX3; ytd20.5, mtd 3.2)
-# Calmar: 10.73          MAR: 8.50          Sharpe: 4.29          Cagr: 37.5%          MaxDD: 4.4% (with SSS; ytd 21.3, mtd 3.1
-#    Calmar: 10.73          MAR: 8.58          Sharpe: 4.29          Cagr: 37.6%          MaxDD: 4.4% # crypto feed fix
-
+#    Calmar: 10.55          MAR: 8.56          Sharpe: 4.29          Cagr: 37.6%          MaxDD: 4.4% # 26aug26
+#    Calmar: 10.89          MAR: 8.79          Sharpe: 4.36          Cagr: 38.6%          MaxDD: 4.4% # COM
+#    Calmar: 10.68          MAR: 8.60          Sharpe: 4.28          Cagr: 36.9%          MaxDD: 4.3% # removed SAA
+#    Calmar: 10.66          MAR: 8.55          Sharpe: 4.26          Cagr: 36.7%          MaxDD: 4.3% # COM fix
 #####
   tickers = d.keys() - l
-  dp, dw, _, _ = btSetup(tickers,yrStart=yrStart-1)
+  if tickers:
+    dp, dw, _, _ = btSetup(tickers, yrStart=yrStart - 1)
+  else:
+    anchor = ul.cachePersist('r', l[0])
+    if isinstance(anchor, pd.DataFrame):
+      anchor = anchor.iloc[:, 0]
+    dp = pd.DataFrame(index=anchor.index)
+    dw = dp.copy()
+    dw[:] = np.nan
   pe = endpoints(dw)
   for und in l:
     dw[und]=np.nan
@@ -104,6 +102,8 @@ if isRunSystems:
   st.divider()
   #####
   runBTS(y)
+  st.divider()
+  runCOM(y)
   st.divider()
   runCOS(y)
   st.divider()

@@ -404,7 +404,7 @@ def runTPP2Core(yrStart):
   volTgt = .135
   maxWgt = 1.5
   etc=ul.spl('HYG,SPHB,SPLV,TIP,NDX.INDX')
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,GLD,UUP,USO')+etc,yrStart=yrStart-1)
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,GLD,UUP')+etc,yrStart=yrStart-1)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
@@ -496,25 +496,6 @@ def runTPP2Core(yrStart):
   dw['UUP'] = m(ratio50S_UUP > 1)
 
   #####
-  # USO
-  #####
-  dxyS = pl.getPriceHistory('DXY.INDX', yrStart=yrStart - 1)['Close']
-  df = dfDict['USO']
-  oS = df['Open']
-  hS = df['High']
-  lS = df['Low']
-  cS = df['Close']
-  atrPctS = ta.atr(hS, lS, cS, length=1).rename('ATR') / cS * 100
-  crsiS = getCrsiS(cS)
-  #####
-  isCondS = oS < oS.shift(1)
-  isCond2S = dxyS.rolling(120).mean() / dxyS.rolling(200).mean() < 1
-  isCond3S = atrPctS > (atrPctS.rolling(100).mean() + atrPctS.rolling(100).std())
-  isEntryS = applyDates(isCondS & isCond2S & isCond3S, dw)
-  isExitS = applyDates(crsiS > 65, dw)
-  otsSignalS = getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('OTS Signal')
-  dw['USO'] = m(otsSignalS)
-  #####
   stateDf=dw.astype(float).ffill()
   dw=cleanS(dw,isMonthlyRebal=True)
   dw = (dw * volTgt / hv).clip(0, maxWgt)
@@ -542,8 +523,6 @@ def runTPP2Core(yrStart):
   d['gtsSignal'] = gtsSignalS
   #####
   d['ratio50S_UUP']=ratio50S_UUP
-  #####
-  d['otsSignal'] = otsSignalS
   return d
 
 def runTPP2(yrStart, isSkipTitle=False):
@@ -562,8 +541,8 @@ def runTPP2(yrStart, isSkipTitle=False):
     d['voteCountS'], how='inner').tail())
   st.header('IWM Filters')
   stWriteDf(ul.merge(d['isNDXOkS_IWM'],d['isIBSOkS_IWM'],d['ratio200S_IWM'].round(3),how='inner').tail())
-  st.header('GLD/UUP/USO Table')
-  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['ratio50S_UUP'].round(3), d['otsSignal'], how='inner').tail())
+  st.header('GLD/UUP Table')
+  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['ratio50S_UUP'].round(3), how='inner').tail())
   st.header('States')
   stWriteDf(d['stateDf'].tail())
   st.header('Weights')
@@ -788,6 +767,7 @@ def runBTSCore(yrStart):
   d['ratio2S'] = ratio2S
   return d
 
+#####
 
 def runBTS(yrStart, isSkipTitle=False):
   script = 'BTS'
@@ -800,6 +780,60 @@ def runBTS(yrStart, isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def _comUSOSignal(usoDf, ref, yrStart):
+  oS, hS, lS, cS = usoDf['Open'], usoDf['High'], usoDf['Low'], usoDf['Close']
+  dxyS = pl.getPriceHistory('DXY.INDX', yrStart=yrStart - 1)['Close']
+  atrPctS = ta.atr(hS, lS, cS, length=1) / cS * 100
+  crsiS = getCrsiS(cS)
+  isCondS = oS < oS.shift(1)
+  isCond2S = dxyS.rolling(120).mean() / dxyS.rolling(200).mean() < 1
+  isCond3S = atrPctS > (atrPctS.rolling(100).mean() + atrPctS.rolling(100).std())
+  isEntryS = applyDates(isCondS & isCond2S & isCond3S, ref)
+  isExitS = applyDates(crsiS > 65, ref)
+  return getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('USO Signal')
+
+def _comPLSignal(plDf, ref):
+  cS, hS, lS = plDf['Close'], plDf['High'], plDf['Low']
+  atr4S = ta.atr(hS, lS, cS, length=4) / cS * 100
+  isEntryS = applyDates(hS >= (cS.shift(1) * (1 + 1.7 * atr4S.shift(1) / 100)), ref)
+  return getStateS_timestop(isEntryS, isEntryS * 0, 3, isCleaned=False, isMonthlyRebal=False).rename('PL Signal')
+
+def runCOMCore(yrStart):
+  volTgt = .32
+  wDict = {'USO':1/2,'PL':1/2}
+  dp, _, dfDict, _ = btSetup(['USO'], yrStart=yrStart - 1)
+  plDf = pl.getPriceHistoryDB('PL', yrStart=yrStart - 1)
+  dp['PL'] = applyDates(plDf['Close'], dp)
+  hv = getHV(dp)
+  dw = dp.copy()
+  #####
+  dw['USO'] = _comUSOSignal(dfDict['USO'], dp, yrStart)
+  dw['PL'] = _comPLSignal(plDf, dp)
+  dw = cleanS(dw, isMonthlyRebal=True)
+  dw = dw * (volTgt / hv).clip(0, 1)
+  for und in wDict.keys():
+    dw[und] *= wDict[und]
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  return d
+
+def runCOM(yrStart, isSkipTitle=False):
+  script = 'COM'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runCOMCore(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dp'].tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
 
 def runCOSCore(yrStart):
   und, size = 'SPY', 2
@@ -877,7 +911,7 @@ def runGEOCore(yrStart):
   dw = cleanS(dw, isMonthlyRebal=True)
   dw = dw * (volTgt / hv).clip(0, 1)
   for und in unds:
-    dw[und] = dw[und] * wDict[und]
+    dw[und] *= wDict[und]
   #####
   d = dict()
   d['dp'] = dp
@@ -900,7 +934,7 @@ def runGEO(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runSSSCore(yrStart):
-  dp, dw, _, _ = btSetup(ul.spl('GLD,IEI,UGA'), yrStart=yrStart - 1)
+  dp, dw, _, _ = btSetup(ul.spl('GLD,IEI'), yrStart=yrStart - 1)
   idx = dw.index
   dw[:]=0
   #####
@@ -917,19 +951,26 @@ def runSSSCore(yrStart):
       continue
     i0 = idx.get_loc(before[-1])
     dw.loc[idx[max(i0 - 2, 0): i0 + 1], 'GLD'] = 1
-  #####
-  # UGA
-  #####
+  ####
+  # RB
+  ####
+  rbDf = pl.getPriceHistoryDB('RB', yrStart=yrStart - 1)
+  dw['RB'] = 0.0
+  rbx = rbDf.index
   for H in getNYSEHolidayDates(idx[0], idx[-1], ('memorial day', 'july 4', 'labor day', 'thanksgiving')):
     after = idx[idx > H]
-    if len(after) == 0:
+    if not len(after):
       continue
-    d1 = after[0]
-    before = idx[idx < d1]
-    if len(before) == 0:
+    before = idx[idx < after[0]]
+    if not len(before):
       continue
-    dw.loc[before[-1], 'UGA'] = -0.5
-    dw.loc[d1, 'UGA'] = 0.0
+    d0, d1 = before[-1], after[0]
+    ar, pad = rbx[rbx > H], rbx[rbx <= d0]
+    if len(pad) and len(ar) and rbDf.loc[ar[0], 'Open'] > 0:
+      rbDf.loc[pad[-1], 'Close'] = rbDf.loc[ar[0], 'Open']
+    dw.loc[d0, 'RB'] = -0.5
+    dw.loc[d1, 'RB'] = 0.0
+  dp['RB'] = applyDates(rbDf['Close'], dp)
   #####
   dw = cleanS(dw, isMonthlyRebal=True)
   #####
