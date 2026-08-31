@@ -4,6 +4,7 @@
 import UtilLib as ul
 from UtilLib import SHARED_DICT
 import PriceLib as pl
+import DBLib as dl
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -805,7 +806,7 @@ def runCOMCore(yrStart):
   volTgt = .32
   wDict = {'USO':1/2,'PL':1/2}
   dp, _, dfDict, _ = btSetup(['USO'], yrStart=yrStart - 1)
-  plDf = pl.getPriceHistoryDB('PL', yrStart=yrStart - 1)
+  plDf = dl.getPriceHistoryDB('PL', yrStart=yrStart - 1)
   dp['PL'] = applyDates(plDf['Close'], dp)
   hv = getHV(dp)
   dw = dp.copy()
@@ -954,7 +955,7 @@ def runSSSCore(yrStart):
   ####
   # RB
   ####
-  rbDf = pl.getPriceHistoryDB('RB', yrStart=yrStart - 1)
+  rbDf = dl.getPriceHistoryDB('RB', yrStart=yrStart - 1)
   dw['RB'] = 0.0
   rbx = rbDf.index
   for H in getNYSEHolidayDates(idx[0], idx[-1], ('memorial day', 'july 4', 'labor day', 'thanksgiving')):
@@ -1039,6 +1040,123 @@ def runHNX(yrStart, isSkipTitle=False):
   stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+
+def _mmq_simulate(df, po, atr, window_end=1000, exit_opp=61.8, fill='next_open',
+                  entry_thr=100.0, eod_et=1600, window_start=930):
+  """Modified Milk: ±100 in / ±61.8 out, 9:30–10:00 ET, next-open fill, flat 16:00 ET.
+  Skip new entries when 10m ATR14 on the signal bar is under 0.10% of close."""
+  idx_et = df.index.tz_convert('America/New_York')
+  tS = pd.Series(idx_et.hour * 100 + idx_et.minute, index=df.index)
+  dates = pd.Series(idx_et.date, index=df.index)
+  nxt_t, nxt_d = tS.shift(-1), dates.shift(-1)
+  is_last_rth = ((tS < eod_et) & (
+    nxt_d.isna() | (nxt_d != dates) | (nxt_t >= eod_et) | (nxt_t < tS - 200)
+  )).to_numpy()
+  in_win = ((tS >= window_start) & (tS < window_end)).to_numpy()
+  prev = po.shift(1)
+  long_sig = ((prev <= entry_thr) & (po > entry_thr)).to_numpy()
+  short_sig = ((prev >= -entry_thr) & (po < -entry_thr)).to_numpy()
+  long_x = ((prev >= -exit_opp) & (po < -exit_opp)).to_numpy()
+  short_x = ((prev <= exit_opp) & (po > exit_opp)).to_numpy()
+  po_ok = (~po.isna() & ~prev.isna()).to_numpy()
+  quiet = (atr / df['Close'] * 100.0 < 0.10).fillna(False).to_numpy()
+  t_et, dates_et = tS.to_numpy(), dates.to_numpy()
+  opn, close = df['Open'].to_numpy(), df['Close'].to_numpy()
+  n = len(df)
+  pos = pending = 0
+  entry_px, entry_i = np.nan, -1
+  trades, daily_r = [], {}
+
+  def close_trade(i, px, why):
+    nonlocal pos, entry_px, entry_i
+    pts = (px - entry_px) * pos
+    r = pts / entry_px if entry_px else 0.0
+    day = pd.Timestamp(dates_et[i])
+    trades.append(dict(
+      date=day, side=int(pos),
+      entry=float(entry_px), exit=float(px), pts=float(pts), r=float(r),
+      why=why, entry_t=int(t_et[entry_i]) if entry_i >= 0 else -1, exit_t=int(t_et[i]),
+    ))
+    daily_r[day] = (1.0 + daily_r.get(day, 0.0)) * (1.0 + r) - 1.0
+    pos, entry_px, entry_i = 0, np.nan, -1
+
+  def same_rth(i, j):
+    return j < n and dates_et[j] == dates_et[i] and t_et[j] < eod_et
+
+  for i in range(1, n):
+    if pending != 0 and pos == 0:
+      if t_et[i] < eod_et and dates_et[i] == dates_et[i - 1]:
+        pos, entry_px, entry_i = pending, float(opn[i]), i
+      pending = 0
+    if pos != 0 and po_ok[i] and ((pos == 1 and long_x[i]) or (pos == -1 and short_x[i])):
+      if fill == 'close' or not same_rth(i, i + 1):
+        close_trade(i, close[i], 'opp')
+      else:
+        close_trade(i + 1, opn[i + 1], 'opp')
+    if pos != 0 and is_last_rth[i]:
+      close_trade(i, close[i], 'eod')
+      pending = 0
+      continue
+    if not po_ok[i] or not in_win[i]:
+      continue
+    if long_sig[i]:
+      side = 1
+    elif short_sig[i]:
+      side = -1
+    else:
+      continue
+    if pos == side:
+      continue
+    if pos == -side:
+      close_trade(i, close[i], 'rev')
+    if pos != 0:
+      continue
+    if quiet[i]:
+      continue
+    if fill == 'close':
+      pos, entry_px, entry_i = side, float(close[i]), i
+    else:
+      pending = side
+  if pos != 0:
+    close_trade(n - 1, close[-1], 'eod_end')
+
+  days = pd.DatetimeIndex(pd.unique(pd.to_datetime(dates_et))).tz_localize(None)
+  r = pd.Series(0.0, index=days, name='r')
+  if daily_r:
+    r.update(pd.Series({pd.Timestamp(k): v for k, v in daily_r.items()}))
+  return r.clip(-0.25, 0.25), pd.DataFrame(trades)
+
+
+def runMMQCore(yrStart, live=True):
+  df = dl.getPriceHistoryDBIntraday('NQ', yrStart=yrStart, intervalMins=10, live=live)
+  cS = df['Close']
+  atr = ta.atr(df['High'], df['Low'], cS, length=14)
+  raw = (cS - EMA(cS, 21)) / (3.0 * atr.replace(0.0, np.nan)) * 100.0
+  r, trades = _mmq_simulate(df, EMA(raw, 3), atr)
+  r = r[r.index.year >= int(yrStart)]
+  dp = (1 + r).cumprod().rename('MMQ').to_frame()
+  dw = dp * np.nan
+  dw.iloc[endpoints(dw), 0] = 1
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['trades'] = trades
+  return d
+
+
+def runMMQ(yrStart, isSkipTitle=False):
+  script = 'MMQ'
+  if not isSkipTitle:
+    st.header(script)
+  d = runMMQCore(yrStart)
+  st.header('Trades')
+  tr = d['trades']
+  if tr is not None and len(tr):
+    stWriteDf(tr.tail())
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
