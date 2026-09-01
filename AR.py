@@ -41,16 +41,11 @@ def runAlpha(yrStart, isSkipTitle=False):
     'SSS': a,  # _ETC
     #####
     'HNX': b, # _HNX
-    'MMQ': b,
+    'MMQ': b, # MMQ-Trader
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#    Calmar: 10.55          MAR: 8.56          Sharpe: 4.29          Cagr: 37.6%          MaxDD: 4.4% # 26aug26
-#    Calmar: 10.89          MAR: 8.79          Sharpe: 4.36          Cagr: 38.6%          MaxDD: 4.4% # COM
-#    Calmar: 10.68          MAR: 8.60          Sharpe: 4.28          Cagr: 36.9%          MaxDD: 4.3% # removed SAA
-#    Calmar: 10.66          MAR: 8.55          Sharpe: 4.26          Cagr: 36.7%          MaxDD: 4.3% # COM fix
-#    Calmar: 10.53          MAR: 8.55          Sharpe: 4.26          Cagr: 36.7%          MaxDD: 4.3% # weekend
-#    Calmar: 10.76          MAR: 8.72          Sharpe: 4.29          Cagr: 37.0%          MaxDD: 4.2% # MMQ
+#    Calmar: 10.62          MAR: 8.55          Sharpe: 4.24          Cagr: 36.4%          MaxDD: 4.3% # monthend Aug post BTS fix
 #####
   tickers = d.keys() - l
   if tickers:

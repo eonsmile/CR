@@ -751,7 +751,7 @@ def runVCA(yrStart,isSkipTitle=False):
 #####
 
 def runBTSCore(yrStart):
-  volTgt = .255
+  volTgt = .225
   maxWgt = 1.5
   cS = pl.getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
   ratioS = (cS / cS.rolling(50).mean()).rename('Ratio')
@@ -759,8 +759,8 @@ def runBTSCore(yrStart):
   dw = ((ratioS > 1) & (ratio2S > 0.8)).rename('BTC').to_frame()
   dp = cS.rename('BTC').to_frame()
   hv = getHV(dp, af=365)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
   dw = cleanS(dw, isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
@@ -1007,7 +1007,7 @@ def runHNXCore(yrStart):
   rsiS = ta.rsi(cS, length=2).rename('RSI')
   isEntryS = (ibsS < .2) & (ibs2S < .4) & (ratioS > 1)
   isExitS = (ibsS > .5) | (rsiS > 70)
-  dw[und] = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=False)
+  dw[und] = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
   dw[und2] = -dw[und]
   dw.loc[dw.index.year < yrStart] = 0
   d = dict()
