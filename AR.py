@@ -22,21 +22,23 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.15
   b=.03
-  l = ul.spl('TPP,TPP2,IBS,RSS,JMR,SCI,VCA,BTS,COM,COS,GEO,SSS,HNX,MMQ')
+  l = ul.spl('TPP,TPP2,IBS,RSS,COS,DAX,JMR,SCI,VCA,BTS,COM,GEO,SSS,HNX,MMQ')
   d = {
     # Systems
     'TPP': a,  # *** review monthly ***
     'TPP2': a,  # _TPP2
-    'IBS': a, # _IBS
-    'RSS': a, # _RSS
-    'JMR': a,  # _JMR
+    #####
+    'IBS': a, # _MR
+    'RSS': a, # _MR
+    'COS': a,  # _MR
+    'DAX': a,  # _MR
+    'JMR': a,  # _MR
     #####
     'SCI': a,  # *** review monthly ***
     'VCA': a, # _ETC
     #####
-    'BTS': a,  # _ETC
+    'BTS': a,  # _BTS
     'COM': a,  # _ETC
-    'COS': a,  # _COS
     'GEO': a,  # *** review monthly ***
     'SSS': a,  # _ETC
     #####
@@ -46,6 +48,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
 #    Calmar: 10.62          MAR: 8.55          Sharpe: 4.24          Cagr: 36.4%          MaxDD: 4.3% # monthend Aug post BTS fix
+#    Calmar: 10.95          MAR: 8.92          Sharpe: 4.27          Cagr: 37.5%          MaxDD: 4.2% # DAX
 #####
   tickers = d.keys() - l
   if tickers:
@@ -87,9 +90,14 @@ if isRunSystems:
   st.divider()
   runTPP2(y)
   st.divider()
+  #####
   runIBS(y)
   st.divider()
   runRSS(y)
+  st.divider()
+  runCOS(y)
+  st.divider()
+  runDAX(y)
   st.divider()
   runJMR(y)
   st.divider()
@@ -102,8 +110,6 @@ if isRunSystems:
   runBTS(y)
   st.divider()
   runCOM(y)
-  st.divider()
-  runCOS(y)
   st.divider()
   runGEO(y)
   st.divider()

@@ -606,7 +606,7 @@ def runRSSCore(yrStart):
   #####
   # Summary
   dw[und] = stateS * 2
-  dw.loc[dw.index.year < yrStart] = 0
+  #dw.loc[dw.index.year < yrStart] = 0
   d=dict()
   d['dp']=dp
   d['dw']=dw
@@ -626,6 +626,97 @@ def runRSS(yrStart,isSkipTitle=False):
   d=runRSSCore(yrStart)
   st.header('Table')
   tableS = ul.merge(d['dp'],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runCOSCore(yrStart):
+  und, size = 'SPY', 2
+  df = pl.getPriceHistory(und, yrStart=yrStart - 1)
+  o, c = df['Open'], df['Close']
+  ibsS = getIbsS(df)
+  ddS = ((c < o) & (o < c.shift(2)) & (ibsS < .3) & (df.index.dayofweek <= 1)).fillna(False)
+  seasonalS = ((df.index.day == 25) & (c < c.shift(1))).fillna(False)
+  stateS = (ddS | seasonalS).rename('State')
+  #####
+  openIdx = df.index + pd.Timedelta(hours=9, minutes=30)
+  closeIdx = df.index + pd.Timedelta(hours=16)
+  px = pd.concat([
+    pd.Series(o.values, index=openIdx, name=und),
+    pd.Series(c.values, index=closeIdx, name=und),
+  ]).sort_index().to_frame()
+  dwI = pd.DataFrame(0.0, index=px.index, columns=[und])
+  dwI.loc[closeIdx[stateS.values], und] = size
+  dwI.loc[dwI.index.year < yrStart] = 0
+  #####
+  r = (stateS.astype(float).shift(1) * size * (o / c.shift(1) - 1)).fillna(0)
+  r.loc[r.index.year < yrStart] = 0
+  dp = (1 + r).cumprod().rename('COS').to_frame()
+  dw = dp * np.nan
+  dw.iloc[endpoints(dw), 0] = 1
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dpIntraday'] = px
+  d['dwIntraday'] = dwI
+  d['df'] = df
+  d['stateS'] = stateS.astype(float)
+  return d
+
+def runCOS(yrStart, isSkipTitle=False):
+  script = 'COS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runCOSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(
+    d['df']['Open'].round(2), d['df']['Close'].round(2), d['stateS'], how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dwIntraday'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runDAXCore(yrStart):
+  und = 'GDAXI.INDX'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
+  #####
+  df = applyDates(dfDict[und],dp)
+  oS = df['Open']
+  cS = df['Close']
+  ibsS = getIbsS(df)
+  ret3S = (cS / cS.shift(3) - 1).rename('Ret 3D')
+  ratio100S = (cS / cS.rolling(100).mean()).rename('Ratio 100D')
+  ratio10S = (cS / cS.rolling(10).mean()).rename('Ratio 10D')
+  #####
+  isEntryS =(ret3S < -0.01) & (ibsS < .2) & (ratio100S > 1)
+  isExitS = ratio10S > 1
+  #####
+  dp[und] = oS.shift(-1)
+  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
+  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['oS']=oS
+  d['cS']=cS
+  d['ibsS']=ibsS
+  d['ret3S']=ret3S
+  d['ratio100S']=ratio100S
+  d['ratio10S']=ratio10S
+  return d
+
+def runDAX(yrStart, isSkipTitle=False):
+  script = 'DAX'
+  if not isSkipTitle:
+    st.header(script)
+  d=runDAXCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(
+    d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -835,54 +926,6 @@ def runCOM(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
-
-def runCOSCore(yrStart):
-  und, size = 'SPY', 2
-  df = pl.getPriceHistory(und, yrStart=yrStart - 1)
-  o, c = df['Open'], df['Close']
-  ibsS = getIbsS(df)
-  ddS = ((c < o) & (o < c.shift(2)) & (ibsS < .3) & (df.index.dayofweek <= 1)).fillna(False)
-  seasonalS = ((df.index.day == 25) & (c < c.shift(1))).fillna(False)
-  stateS = (ddS | seasonalS).rename('State')
-  #####
-  openIdx = df.index + pd.Timedelta(hours=9, minutes=30)
-  closeIdx = df.index + pd.Timedelta(hours=16)
-  px = pd.concat([
-    pd.Series(o.values, index=openIdx, name=und),
-    pd.Series(c.values, index=closeIdx, name=und),
-  ]).sort_index().to_frame()
-  dwI = pd.DataFrame(0.0, index=px.index, columns=[und])
-  dwI.loc[closeIdx[stateS.values], und] = size
-  dwI.loc[dwI.index.year < yrStart] = 0
-  #####
-  r = (stateS.astype(float).shift(1) * size * (o / c.shift(1) - 1)).fillna(0)
-  r.loc[r.index.year < yrStart] = 0
-  dp = (1 + r).cumprod().rename('COS').to_frame()
-  dw = dp * np.nan
-  dw.iloc[endpoints(dw), 0] = 1
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dpIntraday'] = px
-  d['dwIntraday'] = dwI
-  d['df'] = df
-  d['stateS'] = stateS.astype(float)
-  return d
-
-def runCOS(yrStart, isSkipTitle=False):
-  script = 'COS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runCOSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(
-    d['df']['Open'].round(2), d['df']['Close'].round(2), d['stateS'], how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dwIntraday'])
-  bt(script, d['dp'], d['dw'], yrStart)
 
 def runGEOCore(yrStart):
   volTgt = .32
