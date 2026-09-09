@@ -22,7 +22,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.15
   b=.03
-  l = ul.spl('TPP,TPP2,IBS,RSS,COS,DAX,JMR,SCI,VCA,BTS,COM,GEO,SSS,HNX,MMQ')
+  l = ul.spl('TPP,TPP2,IBS,RSS,COS,CMR,GMR,JMR,SCI,VCA,BTS,GEO,HNX')
   d = {
     # Systems
     'TPP': a,  # *** review monthly ***
@@ -31,24 +31,25 @@ def runAlpha(yrStart, isSkipTitle=False):
     'IBS': a, # _MR
     'RSS': a, # _MR
     'COS': a,  # _MR
-    'DAX': a,  # _MR
+    'CMR': a,  # _CMR
+    'GMR': a,  # _MR
     'JMR': a,  # _MR
     #####
     'SCI': a,  # *** review monthly ***
     'VCA': a, # _ETC
     #####
     'BTS': a,  # _BTS
-    'COM': a,  # _ETC
     'GEO': a,  # *** review monthly ***
-    'SSS': a,  # _ETC
     #####
     'HNX': b, # _HNX
-    'MMQ': b, # MMQ-Trader
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
 #    Calmar: 10.62          MAR: 8.55          Sharpe: 4.24          Cagr: 36.4%          MaxDD: 4.3% # monthend Aug post BTS fix
-#    Calmar: 10.95          MAR: 8.92          Sharpe: 4.27          Cagr: 37.5%          MaxDD: 4.2% # DAX
+#    Calmar: 10.95          MAR: 8.92          Sharpe: 4.27          Cagr: 37.5%          MaxDD: 4.2% # GMR
+#    Calmar: 10.78          MAR: 8.75          Sharpe: 4.25          Cagr: 37.3%          MaxDD: 4.3% # removed MMQ
+#   Calmar: 11.19          MAR: 8.97          Sharpe: 4.31          Cagr: 36.9%          MaxDD: 4.1% # added AMR
+# Calmar: 10.48          MAR: 8.34          Sharpe: 4.06          Cagr: 34.0%          MaxDD: 4.1% # big revamp
 #####
   tickers = d.keys() - l
   if tickers:
@@ -97,7 +98,9 @@ if isRunSystems:
   st.divider()
   runCOS(y)
   st.divider()
-  runDAX(y)
+  runCMR(y)
+  st.divider()
+  runGMR(y)
   st.divider()
   runJMR(y)
   st.divider()
@@ -109,17 +112,11 @@ if isRunSystems:
   #####
   runBTS(y)
   st.divider()
-  runCOM(y)
-  st.divider()
   runGEO(y)
-  st.divider()
-  runSSS(y)
   st.divider()
   #####
   runHNX(y)
   st.divider()
-  #runMMQ(y)
-  #st.divider()
 
 runAlpha(y, isSkipTitle=True)
 

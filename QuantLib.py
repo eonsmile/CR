@@ -4,7 +4,6 @@
 import UtilLib as ul
 from UtilLib import SHARED_DICT
 import PriceLib as pl
-import DBLib as dl
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -12,6 +11,7 @@ import math
 import pendulum
 import pandas_ta_classic as ta
 import pandas_market_calendars
+import requests
 
 ###########
 # Functions
@@ -401,11 +401,44 @@ def _getGSBSignalS(df):
   fallQqePrevS = (((dS<=0).rolling(3).sum()==3) & ((dS<0).rolling(3).sum()>=1)).shift(1)
   return (risingPrevS & lowerNowS & fallQqePrevS).rename('GSB') * 1.0
 
+def _getGSSSignalS(idx, prefixes=('christmas', 'new years'), n=3):
+  """1 on the last n NYSE sessions before each matching holiday.
+
+  Holidays are taken through 31 Jan of next year so a live run in December
+  still sees Christmas / New Year. The window is the exchange calendar, not
+  the truncated price index, so Dec 20 of a three-day window is marked on
+  Dec 20, not rewritten after the holiday.
+  """
+  idx = pd.DatetimeIndex(idx)
+  raw = idx
+  if idx.tz is not None:
+    idx = idx.tz_localize(None)
+  norm = idx.normalize()
+  today = pd.Timestamp(pendulum.now('America/New_York').to_date_string())
+  anchor = max(pd.Timestamp(norm[-1]), today)
+  horizon = pd.Timestamp(year=anchor.year + 1, month=1, day=31)
+  holidays = getNYSEHolidayDates(norm[0], horizon, prefixes)
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  span0 = (pd.Timestamp(norm[0]) - pd.Timedelta(days=20)).strftime('%Y-%m-%d')
+  span1 = (horizon + pd.Timedelta(days=5)).strftime('%Y-%m-%d')
+  sess = pd.DatetimeIndex([
+    pd.Timestamp(x).date() for x in cal.schedule(start_date=span0, end_date=span1).index
+  ])
+  s = pd.Series(0.0, index=raw).rename('GSS Signal')
+  for H in holidays:
+    before = sess[sess < pd.Timestamp(H).normalize()]
+    if len(before) == 0:
+      continue
+    window = before[-n:]
+    s.iloc[pd.DatetimeIndex(norm).isin(window)] = 1
+  return s
+
+
 def runTPP2Core(yrStart):
-  volTgt = .135
+  volTgt = .13
   maxWgt = 1.5
   etc=ul.spl('HYG,SPHB,SPLV,TIP,NDX.INDX')
-  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,GLD,UUP')+etc,yrStart=yrStart-1)
+  dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,IEI,GLD,UUP')+etc,yrStart=yrStart-1)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
@@ -473,6 +506,13 @@ def runTPP2Core(yrStart):
   dw['IWM'] = getStateS_timestop(isEntryS_IWM, isEntryS_IWM*0, 8, isCleaned=True, isMonthlyRebal=True)
 
   #####
+  # IEI
+  #####
+  idx = dw.index
+  eomS = getNYSEEomS(idx)
+  dw['IEI'] = ((eomS >= 2) & (eomS <= 4))
+
+  #####
   # GLD
   #####
   gldS = applyDates(dfDict['GLD']['Close'], dp)
@@ -486,8 +526,11 @@ def runTPP2Core(yrStart):
   isEntryS = (cS > hS.rolling(3).max().shift()) | ((ibsS < .15) & (adxS > 30))
   isExitS = (cS > hS.shift()) | ((cS > cS.shift()) & (cS.shift() > cS.shift(2)))
   gtsSignalS = getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('GTS Signal')
+
+  gssSignalS = _getGSSSignalS(df.index)
   m = lambda n: applyDates(n, dw) * 1
-  dw['GLD'] = m(ratio150S_GLD > 1) / 2 + m(gtsSignalS) / 2
+  dw['GLD'] = m(ratio150S_GLD > 1) + m(gtsSignalS) + m(gssSignalS)
+  dw['GLD']/=2
 
   #####
   # UUP
@@ -522,6 +565,7 @@ def runTPP2Core(yrStart):
   #####
   d['ratio150S_GLD']=ratio150S_GLD
   d['gtsSignal'] = gtsSignalS
+  d['gssSignal'] = gssSignalS
   #####
   d['ratio50S_UUP']=ratio50S_UUP
   return d
@@ -543,7 +587,7 @@ def runTPP2(yrStart, isSkipTitle=False):
   st.header('IWM Filters')
   stWriteDf(ul.merge(d['isNDXOkS_IWM'],d['isIBSOkS_IWM'],d['ratio200S_IWM'].round(3),how='inner').tail())
   st.header('GLD/UUP Table')
-  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['ratio50S_UUP'].round(3), how='inner').tail())
+  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['gssSignal'], d['ratio50S_UUP'].round(3), how='inner').tail())
   st.header('States')
   stWriteDf(d['stateDf'].tail())
   st.header('Weights')
@@ -679,7 +723,7 @@ def runCOS(yrStart, isSkipTitle=False):
   dwTail(d['dwIntraday'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runDAXCore(yrStart):
+def runGMRCore(yrStart):
   und = 'GDAXI.INDX'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
   #####
@@ -709,14 +753,70 @@ def runDAXCore(yrStart):
   d['ratio10S']=ratio10S
   return d
 
-def runDAX(yrStart, isSkipTitle=False):
-  script = 'DAX'
+def runGMR(yrStart, isSkipTitle=False):
+  script = 'GMR'
   if not isSkipTitle:
     st.header(script)
-  d=runDAXCore(yrStart)
+  d=runGMRCore(yrStart)
   st.header('Table')
   tableS = ul.merge(
     d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runCMRCore(yrStart):
+  und = '2823.HK'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
+  #####
+  now = pendulum.now('Asia/Hong_Kong')
+  today = pd.Timestamp(now.to_date_string())
+  hasToday = today.normalize() in pd.DatetimeIndex(dfDict[und].index).normalize()
+  if now >= now.start_of('day').add(hours=16, minutes=29) and not hasToday:
+    q = requests.get(
+      f"https://eodhd.com/api/real-time/{und}?api_token={st.secrets['eodhd_api_key']}&fmt=json",
+      timeout=20).json()
+    qHkt = None
+    if isinstance(q, dict) and q.get('timestamp') not in (None, 'NA'):
+      qHkt = pendulum.from_timestamp(int(q['timestamp']), tz='UTC').in_timezone('Asia/Hong_Kong')
+    # skip stale quotes (e.g. 15:53 delayed) and other-day last prints
+    if qHkt is not None and qHkt.to_date_string() == now.to_date_string() and (
+            qHkt.hour > 16 or (qHkt.hour == 16 and qHkt.minute >= 8)):
+      h, l, c = (float(q[k]) for k in ul.spl('high,low,close'))
+      dfDict[und].loc[today, ul.spl('High,Low,Close')] = [h, l, c]
+      dfDict[und] = dfDict[und].sort_index()
+      dp.loc[today, und] = c
+      dw.loc[today, und] = np.nan
+      dp = dp.sort_index()
+      dw = dw.reindex(dp.index)
+  #####
+  df=applyDates(dfDict[und],dp)
+  cS = df['Close']
+  ibsS = getIbsS(df)
+  retS = (cS / cS.shift(1) - 1).rename('Ret 1D')
+  #####
+  isEntryS = (ibsS < .10) & (retS < -0.01) & (retS.shift(1) < -0.003)
+  isExitS = ibsS > .5
+  #####
+  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['cS']=cS
+  d['ibsS']=ibsS
+  d['retS']=retS
+  return d
+
+def runCMR(yrStart, isSkipTitle=False):
+  script = 'CMR'
+  if not isSkipTitle:
+    st.header(script)
+  d=runCMRCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['cS'],d['ibsS'].round(3), d['retS'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -737,7 +837,7 @@ def runJMRCore(yrStart):
   isExitS  = ibs_DXJ > .7
   stateS   = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
   #####
-  dw['EWJ'] = stateS * 1.65
+  dw['EWJ'] = stateS
   dw['FXY'] = -dw['EWJ']
   #####
   d=dict()
@@ -875,58 +975,6 @@ def runBTS(yrStart, isSkipTitle=False):
 
 #####
 
-def _comUSOSignal(usoDf, ref, yrStart):
-  oS, hS, lS, cS = usoDf['Open'], usoDf['High'], usoDf['Low'], usoDf['Close']
-  dxyS = pl.getPriceHistory('DXY.INDX', yrStart=yrStart - 1)['Close']
-  atrPctS = ta.atr(hS, lS, cS, length=1) / cS * 100
-  crsiS = getCrsiS(cS)
-  isCondS = oS < oS.shift(1)
-  isCond2S = dxyS.rolling(120).mean() / dxyS.rolling(200).mean() < 1
-  isCond3S = atrPctS > (atrPctS.rolling(100).mean() + atrPctS.rolling(100).std())
-  isEntryS = applyDates(isCondS & isCond2S & isCond3S, ref)
-  isExitS = applyDates(crsiS > 65, ref)
-  return getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('USO Signal')
-
-def _comPLSignal(plDf, ref):
-  cS, hS, lS = plDf['Close'], plDf['High'], plDf['Low']
-  atr4S = ta.atr(hS, lS, cS, length=4) / cS * 100
-  isEntryS = applyDates(hS >= (cS.shift(1) * (1 + 1.7 * atr4S.shift(1) / 100)), ref)
-  return getStateS_timestop(isEntryS, isEntryS * 0, 3, isCleaned=False, isMonthlyRebal=False).rename('PL Signal')
-
-def runCOMCore(yrStart):
-  volTgt = .32
-  wDict = {'USO':1/2,'PL':1/2}
-  dp, _, dfDict, _ = btSetup(['USO'], yrStart=yrStart - 1)
-  plDf = dl.getPriceHistoryDB('PL', yrStart=yrStart - 1)
-  dp['PL'] = applyDates(plDf['Close'], dp)
-  hv = getHV(dp)
-  dw = dp.copy()
-  #####
-  dw['USO'] = _comUSOSignal(dfDict['USO'], dp, yrStart)
-  dw['PL'] = _comPLSignal(plDf, dp)
-  dw = cleanS(dw, isMonthlyRebal=True)
-  dw = dw * (volTgt / hv).clip(0, 1)
-  for und in wDict.keys():
-    dw[und] *= wDict[und]
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  return d
-
-def runCOM(yrStart, isSkipTitle=False):
-  script = 'COM'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runCOMCore(yrStart)
-  st.header('Prices')
-  stWriteDf(d['dp'].tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-
 def runGEOCore(yrStart):
   volTgt = .32
   #####
@@ -973,64 +1021,6 @@ def runGEO(yrStart, isSkipTitle=False):
   d = runGEOCore(yrStart)
   st.header('Table')
   stWriteDf(ul.merge(d['dp2'], d['ratio12S_ITA'].round(3), d['rocS_UUN'].round(3), how='inner').tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runSSSCore(yrStart):
-  dp, dw, _, _ = btSetup(ul.spl('GLD,IEI'), yrStart=yrStart - 1)
-  idx = dw.index
-  dw[:]=0
-  #####
-  # IEI
-  #####
-  eomS = getNYSEEomS(idx)
-  dw['IEI'] = ((eomS >= 2) & (eomS <= 4))*2
-  #####
-  # GLD
-  #####
-  for H in getNYSEHolidayDates(idx[0], idx[-1], ('christmas', 'new years')):
-    before = idx[idx < H]
-    if len(before) == 0:
-      continue
-    i0 = idx.get_loc(before[-1])
-    dw.loc[idx[max(i0 - 2, 0): i0 + 1], 'GLD'] = 1
-  ####
-  # RB
-  ####
-  rbDf = dl.getPriceHistoryDB('RB', yrStart=yrStart - 1)
-  dw['RB'] = 0.0
-  rbx = rbDf.index
-  for H in getNYSEHolidayDates(idx[0], idx[-1], ('memorial day', 'july 4', 'labor day', 'thanksgiving')):
-    after = idx[idx > H]
-    if not len(after):
-      continue
-    before = idx[idx < after[0]]
-    if not len(before):
-      continue
-    d0, d1 = before[-1], after[0]
-    ar, pad = rbx[rbx > H], rbx[rbx <= d0]
-    if len(pad) and len(ar) and rbDf.loc[ar[0], 'Open'] > 0:
-      rbDf.loc[pad[-1], 'Close'] = rbDf.loc[ar[0], 'Open']
-    dw.loc[d0, 'RB'] = -0.5
-    dw.loc[d1, 'RB'] = 0.0
-  dp['RB'] = applyDates(rbDf['Close'], dp)
-  #####
-  dw = cleanS(dw, isMonthlyRebal=True)
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  return d
-
-def runSSS(yrStart, isSkipTitle=False):
-  script = 'SSS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runSSSCore(yrStart)
-  st.header('Prices')
-  dwTail(d['dp'])
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -1083,123 +1073,6 @@ def runHNX(yrStart, isSkipTitle=False):
   stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-
-
-def _mmq_simulate(df, po, atr, window_end=1000, exit_opp=61.8, fill='next_open',
-                  entry_thr=100.0, eod_et=1600, window_start=930):
-  """Modified Milk: ±100 in / ±61.8 out, 9:30–10:00 ET, next-open fill, flat 16:00 ET.
-  Skip new entries when 10m ATR14 on the signal bar is under 0.10% of close."""
-  idx_et = df.index.tz_convert('America/New_York')
-  tS = pd.Series(idx_et.hour * 100 + idx_et.minute, index=df.index)
-  dates = pd.Series(idx_et.date, index=df.index)
-  nxt_t, nxt_d = tS.shift(-1), dates.shift(-1)
-  is_last_rth = ((tS < eod_et) & (
-    nxt_d.isna() | (nxt_d != dates) | (nxt_t >= eod_et) | (nxt_t < tS - 200)
-  )).to_numpy()
-  in_win = ((tS >= window_start) & (tS < window_end)).to_numpy()
-  prev = po.shift(1)
-  long_sig = ((prev <= entry_thr) & (po > entry_thr)).to_numpy()
-  short_sig = ((prev >= -entry_thr) & (po < -entry_thr)).to_numpy()
-  long_x = ((prev >= -exit_opp) & (po < -exit_opp)).to_numpy()
-  short_x = ((prev <= exit_opp) & (po > exit_opp)).to_numpy()
-  po_ok = (~po.isna() & ~prev.isna()).to_numpy()
-  quiet = (atr / df['Close'] * 100.0 < 0.10).fillna(False).to_numpy()
-  t_et, dates_et = tS.to_numpy(), dates.to_numpy()
-  opn, close = df['Open'].to_numpy(), df['Close'].to_numpy()
-  n = len(df)
-  pos = pending = 0
-  entry_px, entry_i = np.nan, -1
-  trades, daily_r = [], {}
-
-  def close_trade(i, px, why):
-    nonlocal pos, entry_px, entry_i
-    pts = (px - entry_px) * pos
-    r = pts / entry_px if entry_px else 0.0
-    day = pd.Timestamp(dates_et[i])
-    trades.append(dict(
-      date=day, side=int(pos),
-      entry=float(entry_px), exit=float(px), pts=float(pts), r=float(r),
-      why=why, entry_t=int(t_et[entry_i]) if entry_i >= 0 else -1, exit_t=int(t_et[i]),
-    ))
-    daily_r[day] = (1.0 + daily_r.get(day, 0.0)) * (1.0 + r) - 1.0
-    pos, entry_px, entry_i = 0, np.nan, -1
-
-  def same_rth(i, j):
-    return j < n and dates_et[j] == dates_et[i] and t_et[j] < eod_et
-
-  for i in range(1, n):
-    if pending != 0 and pos == 0:
-      if t_et[i] < eod_et and dates_et[i] == dates_et[i - 1]:
-        pos, entry_px, entry_i = pending, float(opn[i]), i
-      pending = 0
-    if pos != 0 and po_ok[i] and ((pos == 1 and long_x[i]) or (pos == -1 and short_x[i])):
-      if fill == 'close' or not same_rth(i, i + 1):
-        close_trade(i, close[i], 'opp')
-      else:
-        close_trade(i + 1, opn[i + 1], 'opp')
-    if pos != 0 and is_last_rth[i]:
-      close_trade(i, close[i], 'eod')
-      pending = 0
-      continue
-    if not po_ok[i] or not in_win[i]:
-      continue
-    if long_sig[i]:
-      side = 1
-    elif short_sig[i]:
-      side = -1
-    else:
-      continue
-    if pos == side:
-      continue
-    if pos == -side:
-      close_trade(i, close[i], 'rev')
-    if pos != 0:
-      continue
-    if quiet[i]:
-      continue
-    if fill == 'close':
-      pos, entry_px, entry_i = side, float(close[i]), i
-    else:
-      pending = side
-  if pos != 0:
-    close_trade(n - 1, close[-1], 'eod_end')
-
-  days = pd.DatetimeIndex(pd.unique(pd.to_datetime(dates_et))).tz_localize(None)
-  r = pd.Series(0.0, index=days, name='r')
-  if daily_r:
-    r.update(pd.Series({pd.Timestamp(k): v for k, v in daily_r.items()}))
-  return r.clip(-0.25, 0.25), pd.DataFrame(trades)
-
-
-def runMMQCore(yrStart, live=True):
-  df = dl.getPriceHistoryDBIntraday('NQ', yrStart=yrStart, intervalMins=10, live=live)
-  cS = df['Close']
-  atr = ta.atr(df['High'], df['Low'], cS, length=14)
-  raw = (cS - EMA(cS, 21)) / (3.0 * atr.replace(0.0, np.nan)) * 100.0
-  r, trades = _mmq_simulate(df, EMA(raw, 3), atr)
-  r = r[r.index.year >= int(yrStart)]
-  dp = (1 + r).cumprod().rename('MMQ').to_frame()
-  dw = dp * np.nan
-  dw.iloc[endpoints(dw), 0] = 1
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['trades'] = trades
-  return d
-
-
-def runMMQ(yrStart, isSkipTitle=False):
-  script = 'MMQ'
-  if not isSkipTitle:
-    st.header(script)
-  d = runMMQCore(yrStart)
-  st.header('Trades')
-  tr = d['trades']
-  if tr is not None and len(tr):
-    stWriteDf(tr.tail())
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
