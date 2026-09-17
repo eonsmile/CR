@@ -11,7 +11,6 @@ import math
 import pendulum
 import pandas_ta_classic as ta
 import pandas_market_calendars
-import requests
 
 ###########
 # Functions
@@ -740,7 +739,7 @@ def runGMRCore(yrStart):
   #####
   dp[und] = oS.shift(-1)
   dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
-  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = getStateS_timestop(isEntryS, isExitS, 11, isCleaned=True, isMonthlyRebal=True)
   #####
   d=dict()
   d['dp']=dp
@@ -761,62 +760,6 @@ def runGMR(yrStart, isSkipTitle=False):
   st.header('Table')
   tableS = ul.merge(
     d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runCMRCore(yrStart):
-  und = '2823.HK'
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
-  #####
-  now = pendulum.now('Asia/Hong_Kong')
-  today = pd.Timestamp(now.to_date_string())
-  hasToday = today.normalize() in pd.DatetimeIndex(dfDict[und].index).normalize()
-  if now >= now.start_of('day').add(hours=16, minutes=29) and not hasToday:
-    q = requests.get(
-      f"https://eodhd.com/api/real-time/{und}?api_token={st.secrets['eodhd_api_key']}&fmt=json",
-      timeout=20).json()
-    qHkt = None
-    if isinstance(q, dict) and q.get('timestamp') not in (None, 'NA'):
-      qHkt = pendulum.from_timestamp(int(q['timestamp']), tz='UTC').in_timezone('Asia/Hong_Kong')
-    # skip stale quotes (e.g. 15:53 delayed) and other-day last prints
-    if qHkt is not None and qHkt.to_date_string() == now.to_date_string() and (
-            qHkt.hour > 16 or (qHkt.hour == 16 and qHkt.minute >= 8)):
-      h, l, c = (float(q[k]) for k in ul.spl('high,low,close'))
-      dfDict[und].loc[today, ul.spl('High,Low,Close')] = [h, l, c]
-      dfDict[und] = dfDict[und].sort_index()
-      dp.loc[today, und] = c
-      dw.loc[today, und] = np.nan
-      dp = dp.sort_index()
-      dw = dw.reindex(dp.index)
-  #####
-  df=applyDates(dfDict[und],dp)
-  cS = df['Close']
-  ibsS = getIbsS(df)
-  retS = (cS / cS.shift(1) - 1).rename('Ret 1D')
-  #####
-  isEntryS = (ibsS < .10) & (retS < -0.01) & (retS.shift(1) < -0.003)
-  isExitS = ibsS > .5
-  #####
-  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['cS']=cS
-  d['ibsS']=ibsS
-  d['retS']=retS
-  return d
-
-def runCMR(yrStart, isSkipTitle=False):
-  script = 'CMR'
-  if not isSkipTitle:
-    st.header(script)
-  d=runCMRCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['cS'],d['ibsS'].round(3), d['retS'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -886,13 +829,12 @@ def runSCI(yrStart,isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
+
 def runVCACore(yrStart):
   und='VIXM'
-  etc=ul.spl('SPY,VIX.INDX')
+  etc=ul.spl('SPY')
   dp, dw, dfDict, _ = btSetup([und]+etc,yrStart=yrStart-1)
   spyS = (dfDict['SPY']['Close']).rename('SPY')
-  dp=applyDates(dp,spyS)
-  dw=applyDates(dw,spyS)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
     dw = dw.drop(und2, axis=1)
@@ -900,7 +842,7 @@ def runVCACore(yrStart):
   spyRatioS = (spyS / spyS.rolling(200).mean()).rename('SPY Ratio')
   ibsS = getIbsS(dfDict['SPY'])
   #####
-  vixS = applyDates(dfDict['VIX.INDX']['Close'],spyS).rename('VIX')
+  vixS = applyDates(pl.getPriceHistory('VIX.INDX', yrStart=yrStart-1)['Close'], spyS).rename('VIX')
   vixRatioS = (vixS / vixS.rolling(10).mean()).rename('VIX Ratio')
   hvS = (spyS.pct_change().rolling(10).std() * math.sqrt(252) * 100).rename('HV')
   eVRPS= (vixS-hvS).rename('eVRPS')
@@ -934,6 +876,48 @@ def runVCA(yrStart,isSkipTitle=False):
   st.header('Tables')
   tableS = ul.merge(d['dp'], d['SPY'], d['spyRatioS'].round(3), d['ibsS'].round(3),
                     d['VIX'], d['vixRatioS'].round(3), d['hvS'].round(2), d['eVRPS'].round(2), (d['eVRPS_pctl'] * 100).round(1), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def runVCA2Core(yrStart):
+  und='VIXY'
+  etc=ul.spl('SPY')
+  dp, dw, dfDict, _ = btSetup([und]+etc,yrStart=yrStart-1)
+  spyS = (dfDict['SPY']['Close']).rename('SPY')
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+  #####
+  vix1DS = applyDates(pl.getPriceHistory('VIX1D.INDX', yrStart=yrStart-1)['Close'], spyS).rename('VIX1D')
+  sma3S = vix1DS.rolling(3).mean().rename('VIX1D SMA3')
+  isAthS = (spyS == spyS.rolling(252).max()).rename('SPY ATH?')*1
+  #####
+  isEntryS = (sma3S <= 10) & (isAthS == 1)
+  isExitS = sma3S > 12
+  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['vix1DS'] = vix1DS
+  d['spyS'] = spyS
+  d['sma3S'] = sma3S
+  d['isAthS'] = isAthS
+  return d
+
+def runVCA2(yrStart,isSkipTitle=False):
+  script = 'VCA2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runVCA2Core(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'], d['vix1DS'].round(2), d['sma3S'].round(2),
+                    d['spyS'],d['isAthS'].astype(int), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -1021,6 +1005,40 @@ def runGEO(yrStart, isSkipTitle=False):
   d = runGEOCore(yrStart)
   st.header('Table')
   stWriteDf(ul.merge(d['dp2'], d['ratio12S_ITA'].round(3), d['rocS_UUN'].round(3), how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def runZBTCore(yrStart):
+  # Carson / Detrick official ZBT dates (table 25 Apr 2025)
+  zbtDates = [
+    '2009-03-18','2011-10-14','2013-10-08','2015-10-08','2019-01-07','2023-03-31',
+    '2023-11-03','2025-04-25',
+  ]
+  und = 'QQQ'
+  dp, dw, dfDict, _ = btSetup([und],yrStart=yrStart-1)
+  #####
+  eom = getNYSEEomS(dp.index).fillna(0) == 1
+  sigM = pd.to_datetime(zbtDates).to_period('M')
+  m = dp.index.to_period('M')
+  isEntryS = eom & m.isin(sigM)
+  isExitS = eom & m.isin(sigM + 3) & ~isEntryS
+  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  return d
+
+def runZBT(yrStart,isSkipTitle=False):
+  script = 'ZBT'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runZBTCore(yrStart)
+  st.header('Prices')
+  dwTail(d['dp'])
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
