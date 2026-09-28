@@ -51,7 +51,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   if und in ul.spl('EUDF.XETRA,IPRE.XETRA,COM,INFL,IBIT,'
                    'DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,'
                    'RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
-                   'COPX,GRID,WTAI.LSE,REMX,9888.HK,9988.HK,DBMF,PFMN.TO'):
+                   'COPX,GRID,WTAI.LSE,REMX,9888.HK,9988.HK,PFMN.TO'):
     if und == 'EUDF.XETRA':
       dtStart = '2025-3-31'
     elif und == 'IPRE.XETRA':
@@ -99,8 +99,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart = '2021-3-23'
     elif und=='9988.HK':
       dtStart = '2019-11-26'
-    elif und=='DBMF':
-      dtStart = '2019-5-31'
     elif und == 'PFMN.TO':
       dtStart = '2019-7-31'
     else:
@@ -116,13 +114,15 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   # END decommissioned
   ###########################################################################
 
-  if und in ul.spl('GDXJ,NATO.LSE,NUCL.LSE'):
+  if und in ul.spl('GDXJ,NATO.LSE,NUCL.LSE,DBMF'):
     if und=='GDXJ':
       dtStart='2009-11-30'
     elif und == 'NATO.LSE':
       dtStart = '2023-7-31'
     elif und == 'NUCL.LSE':
       dtStart = '2023-2-28'
+    elif und == 'DBMF':
+      dtStart = '2019-5-31'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
