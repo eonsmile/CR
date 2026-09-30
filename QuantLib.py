@@ -52,7 +52,10 @@ def bt(script,dp,dw,yrStart):
     vol = ((np.log(s / s.shift(1)) ** 2).mean()) ** 0.5 * (252 ** 0.5)
     d['sharpe'] = d['cagr'] / vol
     d['maxdd'] = -min(dd)
-    d['mar'] = d['cagr']/d['maxdd']
+    # d['mar'] = d['cagr']/d['maxdd']  # old: MAR = CAGR/MaxDD; Calmar = same on trailing 3y
+    # Ulcer Index = RMS of daily % underwater; UPI = CAGR/Ulcer (aka Martin / Ulcer Performance Index)
+    d['ulcer'] = (dd.pow(2).mean()) ** 0.5
+    d['upi'] = d['cagr'] / d['ulcer']
     return d
   #####
   d=m(ecS)
@@ -61,8 +64,10 @@ def bt(script,dp,dw,yrStart):
   m=lambda label,z: f"{label}: <font color='red'>{z}</font>"
   sep='&nbsp;'*10
   st.markdown(sep.join([
-    m('&nbsp;' * 3 + 'Calmar', f"{d3['mar']:.2f}"),
-    m('MAR', f"{d['mar']:.2f}"),
+    # old: m('&nbsp;' * 3 + 'Calmar', f"{d3['mar']:.2f}"),
+    # old: m('MAR', f"{d['mar']:.2f}"),
+    m('&nbsp;' * 3 + 'UPI', f"{d['upi']:.2f}"),
+    m('UPI3y', f"{d3['upi']:.2f}"),
     m('Sharpe', f"{d['sharpe']:.2f}"),
     m('Cagr', f"{d['cagr']:.1%}"),
     m('MaxDD', f"{d['maxdd']:.1%}"),
