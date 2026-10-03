@@ -21,7 +21,7 @@ def runAlpha(yrStart, isSkipTitle=False):
     st.header(script)
   #####
   a=.15
-  b=.03
+  b=.05
   l = ul.spl('TPP,TPP2,IBS,RSS,COS,GMR,JMR,SCI,VCA,VCA2,BTS,GEO,ZBT,HNX')
   d = {
     # Systems
@@ -81,7 +81,7 @@ z='Alpha Reporter'
 st.set_page_config(page_title=z)
 st.title(z)
 
-chosenYear = 2016
+chosenYear = 2017
 st.write('')
 y = int(chosenYear)
 if isRunSystems:
