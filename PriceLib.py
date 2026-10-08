@@ -50,7 +50,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   ###########################################################################
   if und in ul.spl('EUDF.XETRA,IPRE.XETRA,COM,INFL,IBIT,'
                    'DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,'
-                   'RARE.LSE,ROBO,ROLL.LSE,TAIL,WCOA.LSE,'
+                   'RARE.LSE,ROBO,ROLL.LSE,TAIL,'
                    'COPX,GRID,WTAI.LSE,REMX,9888.HK,9988.HK,DBMF,PFMN.TO'):
     if und == 'EUDF.XETRA':
       dtStart = '2025-3-31'
@@ -83,8 +83,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart = '2020-12-29'
     elif und=='TAIL':
       dtStart = '2017-4-28'
-    elif und=='WCOA.LSE':
-      dtStart = '2025-9-30'
     elif und=='IBIT':
       dtStart = '2024-1-11'
     elif und=='COPX':
@@ -116,13 +114,16 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   # END decommissioned
   ###########################################################################
 
-  if und in ul.spl('GDXJ,NATO.LSE,NUCL.LSE'):
+  if und in ul.spl('GDXJ,NATO.LSE,NUCL.LSE,ICOM.LSE'):
     if und=='GDXJ':
       dtStart='2009-11-30'
     elif und == 'NATO.LSE':
       dtStart = '2023-7-31'
     elif und == 'NUCL.LSE':
       dtStart = '2023-2-28'
+    elif und == 'ICOM.LSE':
+      # Listed 2017-07-26; live tape is sparse until 2018. Switchover 2018-10-31.
+      dtStart = '2018-10-31'
     else:
       dtStart = None
     if dtStart is not None: df = df.loc[df.index >= dtStart]
@@ -132,6 +133,8 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = df.loc[df.index>=dtStart]
   elif und == '000660.KO':
     df = naverPatchHynix(df)
+  elif und == '2828.HK':
+    df = rtPatch2828(df)
   return df
 
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
@@ -217,6 +220,30 @@ def getPriceHistoryYahoo(und, yrStart=SHARED_DICT['yrStart']):
   df = df[~df.index.duplicated(keep='last')]
   df = df.loc[df.index >= pd.Timestamp(dtStart)]
   return df
+
+def rtPatch2828(df, und='2828.HK'):
+  now = pendulum.now('Asia/Hong_Kong')
+  if now.hour * 60 + now.minute < 16 * 60 + 29:
+    return df
+  today = now.date()
+  if df is None or len(df) == 0 or df.index.max().date() >= today:
+    return df
+  try:
+    q = requests.get(
+      f"https://eodhd.com/api/real-time/{und}?api_token={st.secrets['eodhd_api_key']}&fmt=json",
+      timeout=20).json()
+    qHkt = pendulum.from_timestamp(int(q['timestamp']), tz='UTC').in_timezone('Asia/Hong_Kong')
+    # skip stale quotes (e.g. 15:53 delayed) and other-day last prints
+    if qHkt.date() != today or qHkt.hour * 60 + qHkt.minute < 16 * 60 + 8:
+      return df
+    row = {k: float(q[k.lower()]) for k in ul.spl('Open,High,Low,Close')}
+    vol = q.get('volume')
+    row['Volume'] = 0 if vol in (None, 'NA') else float(vol)
+  except Exception:
+    return df
+  df = pd.concat([df, pd.DataFrame([row], index=[pd.Timestamp(today)])])
+  return df[~df.index.duplicated(keep='last')].sort_index()
+
 
 def naverPatchHynix(df):
   now = pendulum.now('Asia/Seoul')

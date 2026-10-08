@@ -25,7 +25,7 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
                    'COM,DBMF,JEGA.LSE,PFMN.TO,'
                    'AHLT,ASMF,CTA,HFMF,ISMF,KMLM,TFPN,'
                    'CAOS,GRIN,HARD,HECA,IFLO,HFGM,HGER,QALT,VFLO,'                   
-                   'ENCO.LSE,DFNS.LSE,GCOW,IALT,ICOW,ORR,PFIX,RARE.LSE,TAIL,WCOA.LSE,'
+                   'ENCO.LSE,DFNS.LSE,GCOW,IALT,ICOW,ORR,PFIX,RARE.LSE,TAIL,'
                    'IBIT'):
     if und=='GDXJ':
       dtStart='2009-11-30'
@@ -93,8 +93,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
       dtStart='2024-4-30'
     elif und=='TAIL':
       dtStart = '2017-4-28'
-    elif und=='WCOA.LSE':
-      dtStart = '2025-9-30'
     #####
     elif und=='IBIT':
       dtStart = '2024-1-11'

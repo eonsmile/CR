@@ -30,9 +30,9 @@ def bt2008():
   st.divider()
   runCore(2008)
 
-def bt2016():
+def bt2017():
   st.divider()
-  runCore(2016)
+  runCore(2017)
 
 
 def getCoreWeightsDf():
@@ -107,8 +107,8 @@ if ul.stCheckPW('password_CR'):
   st.header('Choices')
   col1, col2 = st.columns(2)
   with col1:
-    if st.button('Backtest (2016)'):
-      st.session_state.button_clicked = '2016'
+    if st.button('Backtest (2017)'):
+      st.session_state.button_clicked = '2017'
   with col2:
     if st.button('Backtest (2008)'):
       st.session_state.button_clicked = '2008'
@@ -116,7 +116,7 @@ if ul.stCheckPW('password_CR'):
   # Process
   if st.session_state.button_clicked == '2008':
     bt2008()
-  elif st.session_state.button_clicked=='2016':
-    bt2016()
+  elif st.session_state.button_clicked=='2017':
+    bt2017()
 
 

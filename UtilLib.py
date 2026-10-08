@@ -20,7 +20,7 @@ import pretty_errors # keep here
 #########
 colorama.init()
 SHARED_DICT={
-  'yrStart':2016-1,
+  'yrStart':2017-1,
 }
 
 # Project .env once (does not override existing env vars). Safe if file missing.

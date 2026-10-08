@@ -20,34 +20,34 @@ def runAlpha(yrStart, isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
-  a=.15
-  b=.05
-  l = ul.spl('TPP,TPP2,IBS,RSS,COS,GMR,JMR,SCI,VCA,VCA2,BTS,GEO,ZBT,HNX')
+  a=.2
+  b=.07
+  l = ul.spl('TAA,IBS,RSS,COS,GMR,HMR,JMR,SCI,VCA,VCA2,AHS,BTS,GEO,HNX,WTS,ZBT')
   d = {
     # Systems
-    'TPP': a,  # *** review monthly ***
-    'TPP2': a,  # _TPP2
+    'TAA': a,  # _TAA
     #####
     'IBS': a, # _MR
     'RSS': a, # _MR
     'COS': a,  # _MR
-    'GMR': a,  # _MR
+    'GMR': b,  # _MR
+    'HMR': b,  # _HMR
     'JMR': a,  # _MR
     #####
     'SCI': a,  # *** review monthly ***
     'VCA': a, # _ETC
     'VCA2': a, # _ETC
     #####
+    'AHS': b,  # *** review monthly ***
     'BTS': a,  # _BTS
-    'GEO': a,  # *** review monthly ***
-    'ZBT': a,  # *** review monthly ***
-    #####
+    'GEO': b,  # *** review monthly ***
     'HNX': b, # _HNX
+    'WTS': b,  # _ETC
+    'ZBT': a,  # *** review monthly ***
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  Calmar: 12.01          MAR: 8.44          Sharpe: 4.10          Cagr: 33.9%          MaxDD: 4.0% # before ZBT
-#    Calmar: 12.58          MAR: 8.67          Sharpe: 4.15          Cagr: 34.8%          MaxDD: 4.0% # after ZBT
+#  UPI: 47.15          UPI3y: 81.20          Sharpe: 4.66          Cagr: 42.5%          MaxDD: 4.4%
 #####
   tickers = d.keys() - l
   if tickers:
@@ -85,9 +85,7 @@ chosenYear = 2017
 st.write('')
 y = int(chosenYear)
 if isRunSystems:
-  runTPP(y)
-  st.divider()
-  runTPP2(y)
+  runTAA(y)
   st.divider()
   #####
   runIBS(y)
@@ -97,6 +95,8 @@ if isRunSystems:
   runCOS(y)
   st.divider()
   runGMR(y)
+  st.divider()
+  runHMR(y)
   st.divider()
   runJMR(y)
   st.divider()
@@ -108,14 +108,17 @@ if isRunSystems:
   runVCA2(y)
   st.divider()
   #####
+  runAHS(y)
+  st.divider()
   runBTS(y)
   st.divider()
   runGEO(y)
   st.divider()
-  runZBT(y)
-  st.divider()
-  #####
   runHNX(y)
+  st.divider()
+  runWTS(y)
+  st.divider()
+  runZBT(y)
   st.divider()
 
 runAlpha(y, isSkipTitle=True)

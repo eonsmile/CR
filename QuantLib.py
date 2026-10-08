@@ -384,6 +384,8 @@ def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   dwTail(dw)
   bt(script, dp, dw, yrStart)
 
+#####
+
 def _getGSBSignalS(df):
   hS = df['High']
   lS = df['Low']
@@ -438,7 +440,7 @@ def _getGSSSignalS(idx, prefixes=('christmas', 'new years'), n=3):
   return s
 
 
-def runTPP2Core(yrStart):
+def runTAACore(yrStart):
   volTgt = .13
   maxWgt = 1.5
   etc=ul.spl('HYG,SPHB,SPLV,TIP,NDX.INDX')
@@ -574,12 +576,12 @@ def runTPP2Core(yrStart):
   d['ratio50S_UUP']=ratio50S_UUP
   return d
 
-def runTPP2(yrStart, isSkipTitle=False):
-  script = 'TPP2'
+def runTAA(yrStart, isSkipTitle=False):
+  script = 'TAA'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runTPP2Core(yrStart)
+  d=runTAACore(yrStart)
   dp=d['dp']
   st.header('Prices')
   stWriteDf(ul.merge(dp,d['btcS'],how='inner').tail())
@@ -770,6 +772,43 @@ def runGMR(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runHMRCore(yrStart):
+  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.36 / 1.5 (2017 MDD<15).
+  und = '2828.HK'
+  volTgt = .36
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  df = dfDict[und]
+  ibsS = getIbsS(df)
+  ibs2S = getIbsS(df, n=2).rename('IBS2')
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
+  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
+  isExitS = ibsS > .50
+  stateS = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ibsS'] = ibsS
+  d['ibs2S'] = ibs2S
+  d['wprS'] = wprS
+  return d
+
+def runHMR(yrStart, isSkipTitle=False):
+  script = 'HMR'
+  if not isSkipTitle:
+    st.header(script)
+  d = runHMRCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['2828.HK']
+  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
+  stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runJMRCore(yrStart):
   etc=['DXJ']
   dp, dw, dfDict, hv = btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
@@ -886,8 +925,6 @@ def runVCA(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-#####
-
 def runVCA2Core(yrStart):
   und='VIXY'
   etc=ul.spl('SPY')
@@ -929,6 +966,63 @@ def runVCA2(yrStart,isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
+# AHS
+#####
+# Investlab https://investlab.substack.com/p/adaptive-hedge-a-cheaper-way-to-survive
+# Carlson   https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5334772
+# ICOM.LSE listed 2017-07-26; PriceLib switches from DJP splice on 2018-10-31
+def runAHSCore(yrStart):
+  volTgt, maxWgt = .15, 1.5
+  unds = ul.spl('TLT,ICOM.LSE,GLD,UUP,SH')
+  lbs = (3, 6, 12)
+  dp, dw, _, hv = btSetup(unds, yrStart=yrStart - 1)
+  #####
+  meIdx = dp.index.to_series().groupby(dp.index.to_period('M')).max()
+  me = dp.loc[meIdx]
+  scoreS = sum(me.pct_change(k) for k in lbs) / len(lbs)
+  nposS = sum((me.pct_change(k) > 0) * 1 for k in lbs)
+  ratioS = dp / dp.rolling(200).mean()
+  #####
+  held = []
+  for dt in me.index:
+    sc = scoreS.loc[dt]
+    if sc.isna().any():
+      continue
+    npos = nposS.loc[dt].where(ratioS.loc[dt] > 1, 0)
+    ranked = sc.sort_values(ascending=False).index
+    rank = pd.Series(range(1, len(ranked) + 1), index=ranked)
+    nxt = [t for t in held if rank[t] <= 3 and npos[t] >= 2]
+    for t in ranked:
+      if t in nxt:
+        continue
+      if rank[t] <= 2 and npos[t] >= 2:
+        nxt.append(t)
+      if len(nxt) >= 2:
+        break
+    nxt = nxt[:2]
+    held = nxt
+    raw = pd.Series(0.0, index=unds)
+    raw[nxt] = .5
+    dw.loc[dt] = (raw * volTgt / hv.loc[dt]).clip(0, maxWgt)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratioS'] = ratioS
+  return d
+
+def runAHS(yrStart, isSkipTitle=False):
+  script = 'AHS'
+  if not isSkipTitle:
+    st.header(script)
+  d = runAHSCore(yrStart)
+  st.header('Prices')
+  stWriteDf(d['dp'].tail())
+  st.header('Ratios')
+  stWriteDf(d['ratioS'].round(3).tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 def runBTSCore(yrStart):
   volTgt = .225
@@ -948,8 +1042,6 @@ def runBTSCore(yrStart):
   d['ratio2S'] = ratio2S
   return d
 
-#####
-
 def runBTS(yrStart, isSkipTitle=False):
   script = 'BTS'
   if not isSkipTitle:
@@ -961,8 +1053,6 @@ def runBTS(yrStart, isSkipTitle=False):
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
-
-#####
 
 def runGEOCore(yrStart):
   volTgt = .32
@@ -1014,42 +1104,6 @@ def runGEO(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-#####
-
-def runZBTCore(yrStart):
-  # Carson / Detrick official ZBT dates (table 25 Apr 2025)
-  zbtDates = [
-    '2009-03-18','2011-10-14','2013-10-08','2015-10-08','2019-01-07','2023-03-31',
-    '2023-11-03','2025-04-25',
-  ]
-  und = 'QQQ'
-  dp, dw, dfDict, _ = btSetup([und],yrStart=yrStart-1)
-  #####
-  eom = getNYSEEomS(dp.index).fillna(0) == 1
-  sigM = pd.to_datetime(zbtDates).to_period('M')
-  m = dp.index.to_period('M')
-  isEntryS = eom & m.isin(sigM)
-  isExitS = eom & m.isin(sigM + 3) & ~isEntryS
-  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  return d
-
-def runZBT(yrStart,isSkipTitle=False):
-  script = 'ZBT'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runZBTCore(yrStart)
-  st.header('Prices')
-  dwTail(d['dp'])
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-
 def runHNXCore(yrStart):
   und = '000660.KO'
   und2 = '138230.KO'
@@ -1094,6 +1148,73 @@ def runHNX(yrStart, isSkipTitle=False):
                  df['Low'].round().map(zfmt),
                  d['ibsS'].round(3), d['ibs2S'].round(3), d['ratioS'].round(3), d['rsiS'].round(1), how='inner')
   stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runWTSCore(yrStart):
+  volTgt, maxWgt, quietN = .17, 1.5, 3
+  und = 'WEAT'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  oS = dfDict[und]['Open']
+  cS = dfDict[und]['Close']
+  ratio10S = (cS / cS.shift(10)).rename('Ratio 10D')
+  ratio50S = (cS / cS.shift(50)).rename('Ratio 50D')
+  isLongS = ((ratio10S > 1) & (ratio50S < 1)).fillna(False)
+  isShortS = ((ratio10S < 1) & (ratio50S > 1)).fillna(False)
+  isQuiet3S = ((~isLongS & ~isShortS).rolling(quietN).sum() >= quietN).fillna(False)
+  #####
+  dp[und] = oS.shift(-1)
+  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
+  dw[und] = getStateS(isLongS, isShortS | isQuiet3S) - getStateS(isShortS, isLongS | isQuiet3S)
+  dw = cleanS(dw, isMonthlyRebal=True)
+  dw = dw * (volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratio10S'] = ratio10S
+  d['ratio50S'] = ratio50S
+  return d
+
+def runWTS(yrStart, isSkipTitle=False):
+  script = 'WTS'
+  if not isSkipTitle:
+    st.header(script)
+  d = runWTSCore(yrStart)
+  st.header('Table')
+  stWriteDf(ul.merge(d['dp'], d['ratio10S'].round(3), d['ratio50S'].round(3), how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runZBTCore(yrStart):
+  # Carson / Detrick official ZBT dates (table 25 Apr 2025)
+  zbtDates = [
+    '2009-03-18','2011-10-14','2013-10-08','2015-10-08','2019-01-07','2023-03-31',
+    '2023-11-03','2025-04-25',
+  ]
+  und = 'QQQ'
+  dp, dw, dfDict, _ = btSetup([und],yrStart=yrStart-1)
+  #####
+  eom = getNYSEEomS(dp.index).fillna(0) == 1
+  sigM = pd.to_datetime(zbtDates).to_period('M')
+  m = dp.index.to_period('M')
+  isEntryS = eom & m.isin(sigM)
+  isExitS = eom & m.isin(sigM + 3) & ~isEntryS
+  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  return d
+
+def runZBT(yrStart,isSkipTitle=False):
+  script = 'ZBT'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runZBTCore(yrStart)
+  st.header('Prices')
+  dwTail(d['dp'])
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
