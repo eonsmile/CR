@@ -347,6 +347,9 @@ def stWriteDf(df,isMaxHeight=False):
 # Scripts
 #########
 
+#####
+# TPP (not in AR)
+#####
 def runTPP(yrStart,multQ=1,multB=1,multG=1,multD=1,isSkipTitle=False):
   undQ = 'QQQ'
   undB = 'IEI'
@@ -440,6 +443,9 @@ def _getGSSSignalS(idx, prefixes=('christmas', 'new years'), n=3):
   return s
 
 
+#####
+# TAA (juggernaut)
+#####
 def runTAACore(yrStart):
   volTgt = .13
   maxWgt = 1.5
@@ -602,85 +608,9 @@ def runTAA(yrStart, isSkipTitle=False):
 
 #####
 
-def runIBSCore(yrStart):
-  und = 'QQQ'
-  volTgt = .225
-  maxWgt = 1.5
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  #####
-  df = dfDict[und]
-  ibsS = getIbsS(df)
-  isEntryS = ibsS < .1
-  isExitS = (ibsS > .9) | (df['Close'] > df['High'].shift(1))
-  stateS = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  dwAllOrNone(dw)
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['dfDict']=dfDict
-  d['ibsS']=ibsS
-  d['stateS']=stateS
-  return d
-
-def runIBS(yrStart,isSkipTitle=False):
-  script = 'IBS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runIBSCore(yrStart)
-  st.header('Table')
-  df = d['dfDict']['QQQ']
-  df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
-  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runRSSCore(yrStart):
-  und='SPY'
-  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
-  #####
-  cS = dfDict[und]['Close']
-  vixS = applyDates(pl.getPriceHistory('VIX.INDX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
-  rsiS = ta.rsi(cS, length=2).rename('RSI2')
-  ibsS = getIbsS(dfDict[und],4)
-  ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
-  vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
-  #####
-  isEntryS = (rsiS < 25) & (ibsS<.3) & (ratioS>1) & (vixRatioS<1)
-  isExitS = (rsiS > 75) | (ibsS>.7) | (ratioS<=1) | (vixRatioS>=1)
-  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
-  #####
-  # Summary
-  dw[und] = stateS * 2
-  #dw.loc[dw.index.year < yrStart] = 0
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['vixS']=vixS
-  d['rsiS']=rsiS
-  d['ibsS']=ibsS
-  d['ratioS']=ratioS
-  d['vixRatioS']=vixRatioS
-  d['stateS']=stateS
-  return d
-
-def runRSS(yrStart,isSkipTitle=False):
-  script = 'RSS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runRSSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
+#####
+# Tier A MRs
+#####
 def runCOSCore(yrStart):
   und, size = 'SPY', 2
   df = pl.getPriceHistory(und, yrStart=yrStart - 1)
@@ -729,6 +659,132 @@ def runCOS(yrStart, isSkipTitle=False):
   dwTail(d['dwIntraday'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runIBSCore(yrStart):
+  und = 'QQQ'
+  volTgt = .225
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  df = dfDict[und]
+  ibsS = getIbsS(df)
+  isEntryS = ibsS < .1
+  isExitS = (ibsS > .9) | (df['Close'] > df['High'].shift(1))
+  stateS = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dwAllOrNone(dw)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibsS']=ibsS
+  d['stateS']=stateS
+  return d
+
+def runIBS(yrStart,isSkipTitle=False):
+  script = 'IBS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runIBSCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['QQQ']
+  df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
+  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
+  stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runJMRCore(yrStart):
+  etc=['DXJ']
+  dp, dw, dfDict, hv = btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  ibs_DXJ = getIbsS(dfDict['DXJ']).rename('IBS DXJ')
+  ibs_EWJ   = getIbsS(dfDict['EWJ']).rename('IBS EWJ')
+  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
+  isExitS  = ibs_DXJ > .7
+  stateS   = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  #####
+  dw['EWJ'] = stateS
+  dw['FXY'] = -dw['EWJ']
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dp2']=dp2
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibs_DXJ']=ibs_DXJ
+  d['ibs_EWJ']=ibs_EWJ
+  d['stateS']=stateS
+  return d
+
+def runJMR(yrStart,isSkipTitle=False):
+  script = 'JMR'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJMRCore(yrStart)
+  st.header('Table')
+  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
+  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
+  stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+
+def runRSSCore(yrStart):
+  und='SPY'
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  cS = dfDict[und]['Close']
+  vixS = applyDates(pl.getPriceHistory('VIX.INDX',yrStart=yrStart-1)['Close'].rename('VIX'),cS)
+  rsiS = ta.rsi(cS, length=2).rename('RSI2')
+  ibsS = getIbsS(dfDict[und],4)
+  ratioS = (cS/cS.rolling(200).mean()).rename('Ratio')
+  vixRatioS = (vixS.rolling(40).mean()/vixS.rolling(65).mean()).rename('VIX Ratio')
+  #####
+  isEntryS = (rsiS < 25) & (ibsS<.3) & (ratioS>1) & (vixRatioS<1)
+  isExitS = (rsiS > 75) | (ibsS>.7) | (ratioS<=1) | (vixRatioS>=1)
+  stateS = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  # Summary
+  dw[und] = stateS * 2
+  #dw.loc[dw.index.year < yrStart] = 0
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['vixS']=vixS
+  d['rsiS']=rsiS
+  d['ibsS']=ibsS
+  d['ratioS']=ratioS
+  d['vixRatioS']=vixRatioS
+  d['stateS']=stateS
+  return d
+
+def runRSS(yrStart,isSkipTitle=False):
+  script = 'RSS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runRSSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['dp'],d['rsiS'].round(1),d['ibsS'].round(3),d['ratioS'].round(3),d['vixS'],d['vixRatioS'].round(3), d['stateS'].ffill(), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+# Tier B MRs
+#####
 def runGMRCore(yrStart):
   und = 'GDAXI.INDX'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
@@ -809,50 +865,47 @@ def runHMR(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runJMRCore(yrStart):
-  etc=['DXJ']
-  dp, dw, dfDict, hv = btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
+def runWRSCore(yrStart):
+  # QQQ: WPR10<-80 & Ratio(EMA100/EMA100.shift3)>1 & Ratio2(C/(0.99*VWAP12))<1; exit WPR>-20 | prior high | TS7; no VT.
+  und = 'QQQ'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   #####
-  ibs_DXJ = getIbsS(dfDict['DXJ']).rename('IBS DXJ')
-  ibs_EWJ   = getIbsS(dfDict['EWJ']).rename('IBS EWJ')
-  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
-  isExitS  = ibs_DXJ > .7
-  stateS   = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  df = dfDict[und]
+  cS = df['Close']
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=10)
+  emaS = EMA(cS, 100)
+  vS = df['Volume'].astype(float)
+  vwapS = (cS * vS).rolling(12, min_periods=12).sum() / vS.rolling(12, min_periods=12).sum()
+  ratioS = (emaS / emaS.shift(3)).rename('Ratio')
+  ratio2S = (cS / (0.99 * vwapS)).rename('Ratio 2')
   #####
-  dw['EWJ'] = stateS
-  dw['FXY'] = -dw['EWJ']
+  isEntryS = (wprS < -80) & (ratioS > 1) & (ratio2S < 1)
+  isExitS = (wprS > -20) | (cS > df['High'].shift(1))
+  dw[und] = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)  
   #####
-  d=dict()
-  d['dp']=dp
-  d['dp2']=dp2
-  d['dw']=dw
-  d['dfDict']=dfDict
-  d['ibs_DXJ']=ibs_DXJ
-  d['ibs_EWJ']=ibs_EWJ
-  d['stateS']=stateS
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratioS'] = ratioS
+  d['ratio2S'] = ratio2S
   return d
 
-def runJMR(yrStart,isSkipTitle=False):
-  script = 'JMR'
+def runWRS(yrStart, isSkipTitle=False):
+  script = 'WRS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d=runJMRCore(yrStart)
+  d = runWRSCore(yrStart)
   st.header('Table')
-  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
-  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
-  stWriteDf(df2.tail())
+  tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), how='inner')
+  stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
-
+# Hedges
+#####
 def runSCI(yrStart,isSkipTitle=False):
   script = 'SCI'
   if not isSkipTitle:
@@ -866,7 +919,6 @@ def runSCI(yrStart,isSkipTitle=False):
   dw.loc[idx, 'GDXJ'] = -0.2
   dw.loc[idx, 'XLE'] = 0.6
   dw.loc[idx, 'OIH'] = -0.4
-  dw*=0.5 # weight reduction
   st.header('Prices')
   stWriteDf(dp.tail())
   st.header('Weights')
@@ -971,6 +1023,10 @@ def runVCA2(yrStart,isSkipTitle=False):
 # Investlab https://investlab.substack.com/p/adaptive-hedge-a-cheaper-way-to-survive
 # Carlson   https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5334772
 # ICOM.LSE listed 2017-07-26; PriceLib switches from DJP splice on 2018-10-31
+
+#####
+# Etc
+#####
 def runAHSCore(yrStart):
   volTgt, maxWgt = .15, 1.5
   unds = ul.spl('TLT,ICOM.LSE,GLD,UUP,SH')
@@ -1104,52 +1160,105 @@ def runGEO(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runHNXCore(yrStart):
-  und = '000660.KO'
-  und2 = '138230.KO'
-  dp, dw, dfDict, hv = btSetup([und, und2], yrStart=yrStart - 1)
-  dp2 = dp.copy()
-  #####
-  ibsS = getIbsS(dfDict[und])
-  ibs2S = getIbsS(dfDict[und], n=2).rename('IBS2')
-  cS = dfDict[und]['Close']
-  ratioS = (cS / cS.rolling(200).mean()).rename('Ratio')
-  rsiS = ta.rsi(cS, length=2).rename('RSI')
-  isEntryS = (ibsS < .2) & (ibs2S < .4) & (ratioS > 1)
-  isExitS = (ibsS > .5) | (rsiS > 70)
-  dw[und] = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
-  dw[und2] = -dw[und]
-  dw.loc[dw.index.year < yrStart] = 0
-  d = dict()
-  d['dp'] = dp
-  d['dp2'] = dp2
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ibs2S'] = ibs2S
-  d['ratioS'] = ratioS
-  d['rsiS'] = rsiS
-  return d
 
-def runHNX(yrStart, isSkipTitle=False):
-  script = 'HNX'
+def runTNQCore(yrStart):
+  """TNQ D on TS NQ_10m.csv (end-label CT). Window 840-930, EOD 1500, quiet 0.10, entry+/-90.
+
+  1 contract; % = pnl$ / (20 x last Close). Warm-up 1y. Returns dp/dw/trades for runTNQ.
+  """
+  NQ_POINT_VALUE = 20.0
+  window_start, window_end, eod_ct = 840, 930, 1500
+  entry_thr, quiet_pct = 90.0, 0.10
+  y0 = int(yrStart)
+  warm = min(y0, max(2010, y0 - 1))
+  df = pl.getPriceHistoryTS('NQ_10m.csv', yrStart=warm)
+  cS = df['Close']
+  atr = ta.atr(df['High'], df['Low'], cS, length=14, mamode='sma')  # TS AvgTrueRange
+  po = EMA((cS - EMA(cS, 21)) / (3.0 * atr.replace(0.0, np.nan)) * 100.0, 3)
+
+  idx_ct = df.index.tz_convert('America/Chicago') if df.index.tz is not None else df.index.tz_localize('America/Chicago')
+  tS = pd.Series(idx_ct.hour * 100 + idx_ct.minute, index=df.index)
+  dates = pd.Series(idx_ct.date, index=df.index)
+  is_eod = (tS == eod_ct).to_numpy()
+  in_win = ((tS >= window_start) & (tS < window_end)).to_numpy()
+  prev = po.shift(1)
+  long_sig = ((prev <= entry_thr) & (po > entry_thr)).to_numpy()
+  short_sig = ((prev >= -entry_thr) & (po < -entry_thr)).to_numpy()
+  po_ok = (~po.isna() & ~prev.isna()).to_numpy()
+  quiet = (atr / df['Close'] * 100.0 < quiet_pct).fillna(False).to_numpy()
+  t_ct, dates_ct = tS.to_numpy(), dates.to_numpy()
+  opn, close = df['Open'].to_numpy(), df['Close'].to_numpy()
+  n = len(df)
+  pos = pending = 0
+  entry_px, entry_i = np.nan, -1
+  traded_day = None
+  trades, daily_pnl = [], {}
+  mult = float(NQ_POINT_VALUE)
+
+  def close_trade(i, px):
+    nonlocal pos, entry_px, entry_i
+    pts = (px - entry_px) * pos if entry_px else 0.0
+    pnl = float(pts) * mult
+    day = pd.Timestamp(dates_ct[i])
+    trades.append(dict(
+      date=day, side=int(pos),
+      entry=float(entry_px), exit=float(px), pts=float(pts),
+      **{'pnl$': round(pnl, 2)},
+      entry_t=int(t_ct[entry_i]) if entry_i >= 0 else -1,
+    ))
+    daily_pnl[day] = pnl
+    pos, entry_px, entry_i = 0, np.nan, -1
+
+  for i in range(1, n):
+    if dates_ct[i] != dates_ct[i - 1]:
+      traded_day = None
+    if pending != 0 and pos == 0:
+      if t_ct[i] <= eod_ct and dates_ct[i] == dates_ct[i - 1]:
+        pos, entry_px, entry_i = pending, float(opn[i]), i
+      pending = 0
+    if pos != 0 and is_eod[i]:
+      close_trade(i, close[i])
+      continue
+    if pos != 0 or traded_day == dates_ct[i]:
+      continue
+    if not po_ok[i] or not in_win[i] or quiet[i]:
+      continue
+    if long_sig[i]:
+      pending = 1
+      traded_day = dates_ct[i]
+    elif short_sig[i]:
+      pending = -1
+      traded_day = dates_ct[i]
+  if pos != 0:
+    close_trade(n - 1, close[-1])
+
+  days = pd.DatetimeIndex(pd.unique(pd.to_datetime(dates_ct))).tz_localize(None)
+  pnl = pd.Series(0.0, index=days, name='pnl$')
+  if daily_pnl:
+    pnl.update(pd.Series({pd.Timestamp(k): v for k, v in daily_pnl.items()}))
+  pnl = pnl[pnl.index.year >= y0]
+  trades = pd.DataFrame(trades)
+  if len(trades):
+    trades = trades[pd.to_datetime(trades['date']).dt.year >= y0].reset_index(drop=True)
+  notional = float(NQ_POINT_VALUE) * float(cS.iloc[-1])
+  r = (pnl / notional).clip(-0.25, 0.25)
+  if len(trades):
+    trades = trades.copy()
+    trades['r%'] = (trades['pnl$'] / notional * 100.0).round(1)
+  dp = (1 + r).cumprod().rename('TNQ').to_frame()
+  dw = dp * np.nan
+  dw.iloc[endpoints(dw), 0] = 1
+  return dict(dp=dp, dw=dw, trades=trades)
+
+def runTNQ(yrStart, isSkipTitle=False):
+  script = 'TNQ'
   if not isSkipTitle:
     st.header(script)
-  #####
-  d = runHNXCore(yrStart)
-  st.header('Table')
-  und='000660.KO'
-  df = d['dfDict'][und]
-  dp2=d['dp2']
-  zfmt='{:,.0f}'.format
-  dp2[und]=dp2[und].round().map(zfmt)
-  df2 = ul.merge(dp2,
-                 df['High'].round().map(zfmt),
-                 df['Low'].round().map(zfmt),
-                 d['ibsS'].round(3), d['ibs2S'].round(3), d['ratioS'].round(3), d['rsiS'].round(1), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
+  d = runTNQCore(yrStart)
+  st.header('Trades')
+  tr = d['trades']
+  if tr is not None and len(tr):
+    stWriteDf(tr.tail())
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runWTSCore(yrStart):
@@ -1221,6 +1330,7 @@ def runZBT(yrStart,isSkipTitle=False):
 
 #####
 
+
 def runAggregate(yrStart,strategies,weights,script,isBFill=False, isCorrs=False):
   st.header(script)
   #####
@@ -1257,4 +1367,3 @@ def runAggregate(yrStart,strategies,weights,script,isBFill=False, isCorrs=False)
   dp2 = (dp2 / dp2.iloc[-1]).tail(23) * 100
   dp2 = dp2.round(2)
   stWriteDf(dp2, isMaxHeight=True)
-

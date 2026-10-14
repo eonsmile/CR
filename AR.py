@@ -22,32 +22,38 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.2
   b=.07
-  l = ul.spl('TAA,IBS,RSS,COS,GMR,HMR,JMR,SCI,VCA,VCA2,AHS,BTS,GEO,HNX,WTS,ZBT')
+  l = ul.spl('TAA,COS,HMR,IBS,JMR,RSS,GMR,WRS,SCI,VCA,VCA2,AHS,BTS,GEO,TNQ,WTS,ZBT')
   d = {
-    # Systems
     'TAA': a,  # _TAA
     #####
-    'IBS': a, # _MR
-    'RSS': a, # _MR
+    # Tier A MRs
     'COS': a,  # _MR
-    'GMR': b,  # _MR
-    'HMR': b,  # _HMR
+    'HMR': a,  # _HMR
+    'IBS': a,  # _MR
     'JMR': a,  # _MR
+    'RSS': a,  # _MR
     #####
-    'SCI': a,  # *** review monthly ***
-    'VCA': a, # _ETC
+    # Tier B MRs
+    'GMR': b,  # _MR
+    'WRS': b,  # _MR
+    #####
+    # Hedges
+    'SCI': b,  # *** review monthly ***
+    'VCA': a,  # _ETC
     'VCA2': a, # _ETC
     #####
+    # Etc
     'AHS': b,  # *** review monthly ***
     'BTS': a,  # _BTS
     'GEO': b,  # *** review monthly ***
-    'HNX': b, # _HNX
+    'TNQ': b,  # TradeStation
     'WTS': b,  # _ETC
     'ZBT': a,  # *** review monthly ***
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 47.15          UPI3y: 81.20          Sharpe: 4.66          Cagr: 42.5%          MaxDD: 4.4%
+#    UPI: 50.06          UPI3y: 78.36          Sharpe: 5.49          Cagr: 42.8%          MaxDD: 4.1%
+#    UPI: 50.74          UPI3y: 76.66          Sharpe: 4.54          Cagr: 42.8%          MaxDD: 3.9%
 #####
   tickers = d.keys() - l
   if tickers:
@@ -85,22 +91,29 @@ chosenYear = 2017
 st.write('')
 y = int(chosenYear)
 if isRunSystems:
+  # TAA (juggernaut)
   runTAA(y)
   st.divider()
   #####
-  runIBS(y)
-  st.divider()
-  runRSS(y)
-  st.divider()
+  # Tier A MRs
   runCOS(y)
-  st.divider()
-  runGMR(y)
   st.divider()
   runHMR(y)
   st.divider()
+  runIBS(y)
+  st.divider()
   runJMR(y)
   st.divider()
+  runRSS(y)
+  st.divider()
   #####
+  # Tier B MRs
+  runGMR(y)
+  st.divider()
+  runWRS(y)
+  st.divider()
+  #####
+  # Hedges
   runSCI(y)
   st.divider()
   runVCA(y)
@@ -108,13 +121,14 @@ if isRunSystems:
   runVCA2(y)
   st.divider()
   #####
+  # Etc
   runAHS(y)
   st.divider()
   runBTS(y)
   st.divider()
   runGEO(y)
   st.divider()
-  runHNX(y)
+  runTNQ(y)
   st.divider()
   runWTS(y)
   st.divider()
@@ -122,4 +136,3 @@ if isRunSystems:
   st.divider()
 
 runAlpha(y, isSkipTitle=True)
-

@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import requests
 import pendulum
-import re
 import yahooquery
 import curl_cffi
 import warnings
@@ -131,8 +130,6 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   elif und=='VIX1D.INDX':
     dtStart = '2023-4-24'
     df = df.loc[df.index>=dtStart]
-  elif und == '000660.KO':
-    df = naverPatchHynix(df)
   elif und == '2828.HK':
     df = rtPatch2828(df)
   return df
@@ -178,24 +175,55 @@ def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   df.index.name = None
   return df[id]
 
-def getPriceHistoryNaver(und):
-  code = re.match(r'^(\d{6})', str(und).strip()).group(1)
-  now = pendulum.now('Asia/Seoul')
-  url = (f"https://api.finance.naver.com/siseJson.naver"
-         f"?symbol={code}&requestType=1&startTime={now.subtract(days=10).format('YYYYMMDD')}"
-         f"&endTime={now.format('YYYYMMDD')}&timeframe=day")
-  with warnings.catch_warnings():
-    warnings.simplefilter('ignore')
-    r = curl_cffi.Session(impersonate="chrome").get(
-      url, headers={'Referer': f'https://finance.naver.com/item/main.naver?code={code}'}, timeout=15)
-  rows = re.findall(r'\[\s*"(\d{8})"\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)', r.text)
-  df = pd.DataFrame(rows, columns=['date', 'Open', 'High', 'Low', 'Close'])
-  df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
-  df = df.set_index('date')
-  for c in ul.spl('Open,High,Low,Close'):
-    df[c] = df[c].astype(float)
-  df['Volume'] = 0
-  return df.sort_index()
+def getPriceHistoryTS(fileName, yrStart=SHARED_DICT['yrStart']):
+  """Load TradeStation OHLC dump from data/ts/{fileName}.
+
+  CSV columns: Date,Time,Open,High,Low,Close,Volume
+  Date = EasyLanguage YYYMMDD (YYY = years since 1900); Time = end-label HHMM (CT/exchange).
+  Index is end-labeled America/Chicago (same clock as TS chart Time).
+  """
+  path = os.path.join(os.path.dirname(__file__), 'data', 'ts', str(fileName))
+  if not os.path.isfile(path):
+    raise FileNotFoundError(path)
+  raw = pd.read_csv(path)
+  need = ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']
+  miss = [c for c in need if c not in raw.columns]
+  if miss:
+    raise ValueError(f'{fileName} missing columns: {miss}')
+  d = raw['Date'].astype(int)
+  t = raw['Time'].astype(int)
+  end = pd.to_datetime({
+    'year': 1900 + d // 10000,
+    'month': (d % 10000) // 100,
+    'day': d % 100,
+    'hour': t // 100,
+    'minute': t % 100,
+  })
+  end = end.dt.tz_localize('America/Chicago', ambiguous='NaT', nonexistent='shift_forward')
+  bad = end.isna()
+  if bad.any():
+    end2 = pd.to_datetime({
+      'year': 1900 + d // 10000,
+      'month': (d % 10000) // 100,
+      'day': d % 100,
+      'hour': t // 100,
+      'minute': t % 100,
+    }).dt.tz_localize('America/Chicago', ambiguous=True, nonexistent='shift_forward')
+    end = end.fillna(end2)
+  df = pd.DataFrame({
+    'Open': raw['Open'].astype(float).to_numpy(),
+    'High': raw['High'].astype(float).to_numpy(),
+    'Low': raw['Low'].astype(float).to_numpy(),
+    'Close': raw['Close'].astype(float).to_numpy(),
+    'Volume': raw['Volume'].astype(float).to_numpy(),
+  }, index=pd.DatetimeIndex(end, name='ts'))
+  df = df.sort_index()
+  df = df[~df.index.duplicated(keep='last')]
+  df = df[df.index.year >= int(yrStart)]
+  if len(df) == 0:
+    raise RuntimeError(f'{fileName} empty after yrStart={yrStart}')
+  return df
+
 
 def getPriceHistoryYahoo(und, yrStart=SHARED_DICT['yrStart']):
   dtStart = str(yrStart) + '-1-1'
@@ -242,21 +270,4 @@ def rtPatch2828(df, und='2828.HK'):
   except Exception:
     return df
   df = pd.concat([df, pd.DataFrame([row], index=[pd.Timestamp(today)])])
-  return df[~df.index.duplicated(keep='last')].sort_index()
-
-
-def naverPatchHynix(df):
-  now = pendulum.now('Asia/Seoul')
-  if now.hour * 60 + now.minute < 15 * 60 + 30:
-    return df
-  today = now.date()
-  if df is None or len(df) == 0 or df.index.max().date() >= today:
-    return df
-  try:
-    nv = getPriceHistoryNaver('000660')
-  except Exception:
-    return df
-  if len(nv) == 0 or nv.index.max().date() != today:
-    return df
-  df = pd.concat([df, nv.iloc[[-1]]])
   return df[~df.index.duplicated(keep='last')].sort_index()
