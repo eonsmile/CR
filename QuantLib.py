@@ -444,12 +444,12 @@ def _getGSSSignalS(idx, prefixes=('christmas', 'new years'), n=3):
 
 
 #####
-# TAA (juggernaut)
+# TAA
 #####
 def runTAACore(yrStart):
-  volTgt = .13
+  volTgt = .21
   maxWgt = 1.5
-  etc=ul.spl('HYG,SPHB,SPLV,TIP,NDX.INDX')
+  etc=ul.spl('HYG,SPHB,SPLV,TIP,TRIN.INDX,NDX.INDX')
   dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,IEI,GLD,UUP')+etc,yrStart=yrStart-1)
   for und2 in etc:
     dp = dp.drop(und2, axis=1)
@@ -493,6 +493,10 @@ def runTAACore(yrStart):
   # 6. GSB
   isCanaryS_GSB = applyDates(_getGSBSignalS(dfDict['SPY']), dp) * 1.0
 
+  # 7. TRIN (neg voter: SMA20 < 1 → -1 in the booth)
+  trinS = applyDates(dfDict['TRIN.INDX']['Close'], dp)
+  isCanaryS_TRIN = (trinS.rolling(20).mean() < 1).rename('TRIN') * -1.0
+
   # Voting
   voteDf = pd.DataFrame({
     'BTC': isCanaryS_BTC,
@@ -501,6 +505,7 @@ def runTAACore(yrStart):
     'TIP': isCanaryS_TIP,
     'VIX': isCanaryS_VIX,
     'GSB': isCanaryS_GSB,
+    'TRIN': isCanaryS_TRIN,
   })
   voteCountS = voteDf.sum(axis=1).rename('Votes')
   dw['SPY'] = (voteCountS >= 3) * (voteCountS / 3)
@@ -570,6 +575,7 @@ def runTAACore(yrStart):
   d['isCanaryS_VIX_Raw'] = isCanaryS_VIX_Raw
   d['isCanaryS_VIX'] = isCanaryS_VIX
   d['isCanaryS_GSB'] = isCanaryS_GSB
+  d['isCanaryS_TRIN'] = isCanaryS_TRIN
   #####
   d['isNDXOkS_IWM'] = isNDXOkS_IWM
   d['isIBSOkS_IWM'] = isIBSOkS_IWM
@@ -595,7 +601,7 @@ def runTAA(yrStart, isSkipTitle=False):
   stWriteDf(ul.merge(
     d['isCanaryS_BTC'], d['isCanaryS_HYG'],
     d['isCanaryS_SPHB_LV'], d['isCanaryS_TIP'], d['isCanaryS_VIX_Raw'], d['isCanaryS_VIX'], d['isCanaryS_GSB'],
-    d['voteCountS'], how='inner').tail())
+    d['isCanaryS_TRIN'], d['voteCountS'], how='inner').tail())
   st.header('IWM Filters')
   stWriteDf(ul.merge(d['isNDXOkS_IWM'],d['isIBSOkS_IWM'],d['ratio200S_IWM'].round(3),how='inner').tail())
   st.header('GLD/UUP Table')
@@ -828,11 +834,58 @@ def runGMR(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runSTKCore(yrStart):
+  # SPY Connors 2009 3-bar H/L streak: long 3↓H&↓L + Ratio250>1 + Ratio5<1;
+  # short mirror; exit Ratio5 cross; same-close; 1x long / 2x short; no VT.
+  # Dense daily dw (like RSS) — cleanS monthly rebal mis-compounds L/S in bt().
+  und = 'SPY'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 2)
+  df = dfDict[und]
+  hS, lS, cS = df['High'], df['Low'], df['Close']
+  ratio5S = (cS / cS.rolling(5).mean()).rename('Ratio 5D')
+  ratio250S = (cS / cS.rolling(250).mean()).rename('Ratio 250D')
+  isDown3S = (
+    (hS < hS.shift(1)) & (hS.shift(1) < hS.shift(2)) & (hS.shift(2) < hS.shift(3))
+    & (lS < lS.shift(1)) & (lS.shift(1) < lS.shift(2)) & (lS.shift(2) < lS.shift(3))
+  )
+  isUp3S = (
+    (hS > hS.shift(1)) & (hS.shift(1) > hS.shift(2)) & (hS.shift(2) > hS.shift(3))
+    & (lS > lS.shift(1)) & (lS.shift(1) > lS.shift(2)) & (lS.shift(2) > lS.shift(3))
+  )
+  isEntryS = isDown3S & (ratio250S > 1) & (ratio5S < 1)
+  isExitS = ratio5S > 1
+  isEntryShortS = isUp3S & (ratio250S < 1) & (ratio5S > 1)
+  isExitShortS = ratio5S < 1
+  dw[und] = getStateS(isEntryS, isExitS) - 2 * getStateS(isEntryShortS, isExitShortS)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ratio5S'] = ratio5S
+  d['ratio250S'] = ratio250S
+  return d
+
+def runSTK(yrStart, isSkipTitle=False):
+  script = 'STK'
+  if not isSkipTitle:
+    st.header(script)
+  d = runSTKCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['SPY']
+  tableS = ul.merge(
+    df['Close'].round(2), df['High'].round(2), df['Low'].round(2),
+    d['ratio5S'].round(3), d['ratio250S'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runHMRCore(yrStart):
-  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.36 / 1.5 (2017 MDD<15).
+  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
+  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
   und = '2828.HK'
-  volTgt = .36
-  maxWgt = 1.5
+  volTgt = .32
+  maxWgt = 1.0
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   df = dfDict[und]
   ibsS = getIbsS(df)
@@ -898,6 +951,48 @@ def runWRS(yrStart, isSkipTitle=False):
   d = runWRSCore(yrStart)
   st.header('Table')
   tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runBBSCore(yrStart):
+  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3σ)<0.2; exit %B>0.8; no VT (like WRS).
+  und = 'QQQ'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  #####
+  df = dfDict[und]
+  hS = df['High']
+  lS = df['Low']
+  cS = df['Close']
+  atrS = ta.atr(hS, lS, cS, length=20)
+  bbDf = ta.bbands(cS, length=10, std=3)
+  upperS = bbDf['BBU_10_3.0']
+  lowerS = bbDf['BBL_10_3.0']
+  pbS = bbDf['BBP_10_3.0']  # %B
+  ratioS = (cS / EMA(cS, 100)).rename('Ratio')
+  ratio2S = (atrS / atrS.rolling(101).median()).rename('Ratio 2')
+  #####
+  isEntryS = (ratioS > 1) & (ratio2S < 1) & (pbS < 0.2)
+  isExitS = pbS > 0.8
+  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['pbS'] = pbS
+  d['ratioS'] = ratioS
+  d['ratio2S'] = ratio2S
+  return d
+
+def runBBS(yrStart, isSkipTitle=False):
+  script = 'BBS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runBBSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), d['pbS'].round(3), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -1028,8 +1123,9 @@ def runVCA2(yrStart,isSkipTitle=False):
 # Etc
 #####
 def runAHSCore(yrStart):
-  volTgt, maxWgt = .15, 1.5
-  unds = ul.spl('TLT,ICOM.LSE,GLD,UUP,SH')
+  # 2026-10-21: drop SH only; keep GLD; VT raised to size-limits MDD edge (<15%)
+  volTgt, maxWgt = .16, 1.5
+  unds = ul.spl('TLT,ICOM.LSE,GLD,UUP')
   lbs = (3, 6, 12)
   dp, dw, _, hv = btSetup(unds, yrStart=yrStart - 1)
   #####
@@ -1081,7 +1177,8 @@ def runAHS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runBTSCore(yrStart):
-  volTgt = .225
+  # BTC trend: >50DMA & >0.8x240d high; monthly; VT 0.205 / maxWgt 1.5 (size-limits MDD)
+  volTgt = .205
   maxWgt = 1.5
   cS = pl.getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
   ratioS = (cS / cS.rolling(50).mean()).rename('Ratio')
@@ -1262,7 +1359,8 @@ def runTNQ(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runWTSCore(yrStart):
-  volTgt, maxWgt, quietN = .17, 1.5, 3
+  # WEAT L/S: ratio10/50 + quiet3; next-open; VT 0.17 / maxWgt 1 (niche rulebook)
+  volTgt, maxWgt, quietN = .17, 1.0, 3
   und = 'WEAT'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   oS = dfDict[und]['Open']

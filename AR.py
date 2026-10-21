@@ -22,7 +22,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.2
   b=.07
-  l = ul.spl('TAA,COS,HMR,IBS,JMR,RSS,GMR,WRS,SCI,VCA,VCA2,AHS,BTS,GEO,TNQ,WTS,ZBT')
+  l = ul.spl('TAA,COS,HMR,IBS,JMR,RSS,BBS,GMR,STK,WRS,SCI,VCA,VCA2,AHS,BTS,GEO,TNQ,WTS,ZBT')
   d = {
     'TAA': a,  # _TAA
     #####
@@ -34,7 +34,9 @@ def runAlpha(yrStart, isSkipTitle=False):
     'RSS': a,  # _MR
     #####
     # Tier B MRs
+    'BBS': b,  # _MR
     'GMR': b,  # _MR
+    'STK': b,  # _MR
     'WRS': b,  # _MR
     #####
     # Hedges
@@ -52,8 +54,9 @@ def runAlpha(yrStart, isSkipTitle=False):
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#    UPI: 50.06          UPI3y: 78.36          Sharpe: 5.49          Cagr: 42.8%          MaxDD: 4.1%
-#    UPI: 50.74          UPI3y: 76.66          Sharpe: 4.54          Cagr: 42.8%          MaxDD: 3.9%
+#  UPI: 50.35          UPI3y: 75.63          Sharpe: 4.56          Cagr: 45.1%          MaxDD: 4.3% (size updates)
+#  UPI: 50.50          UPI3y: 74.88          Sharpe: 4.58          Cagr: 45.3%          MaxDD: 4.3% (AHS drop SH, VT 0.16)
+#  UPI: 50.94          UPI3y: 75.57          Sharpe: 4.60          Cagr: 46.0%          MaxDD: 4.3% (BBS added)
 #####
   tickers = d.keys() - l
   if tickers:
@@ -108,7 +111,11 @@ if isRunSystems:
   st.divider()
   #####
   # Tier B MRs
+  runBBS(y)
+  st.divider()
   runGMR(y)
+  st.divider()
+  runSTK(y)
   st.divider()
   runWRS(y)
   st.divider()
