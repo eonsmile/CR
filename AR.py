@@ -54,9 +54,9 @@ def runAlpha(yrStart, isSkipTitle=False):
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 50.35          UPI3y: 75.63          Sharpe: 4.56          Cagr: 45.1%          MaxDD: 4.3% (size updates)
 #  UPI: 50.50          UPI3y: 74.88          Sharpe: 4.58          Cagr: 45.3%          MaxDD: 4.3% (AHS drop SH, VT 0.16)
 #  UPI: 50.94          UPI3y: 75.57          Sharpe: 4.60          Cagr: 46.0%          MaxDD: 4.3% (BBS added)
+#    UPI: 50.97          UPI3y: 75.69          Sharpe: 4.60          Cagr: 46.0%          MaxDD: 4.3% (BBS time exit)
 #####
   tickers = d.keys() - l
   if tickers:

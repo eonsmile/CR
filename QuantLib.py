@@ -727,7 +727,6 @@ def runJMRCore(yrStart):
   d['dfDict']=dfDict
   d['ibs_DXJ']=ibs_DXJ
   d['ibs_EWJ']=ibs_EWJ
-  d['stateS']=stateS
   return d
 
 def runJMR(yrStart,isSkipTitle=False):
@@ -738,7 +737,6 @@ def runJMR(yrStart,isSkipTitle=False):
   d=runJMRCore(yrStart)
   st.header('Table')
   df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
-  df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
   stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
@@ -957,7 +955,8 @@ def runWRS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runBBSCore(yrStart):
-  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3σ)<0.2; exit %B>0.8; no VT (like WRS).
+  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3σ)<0.2;
+  # exit %B>0.8 or TS30 fallback (shorter fuse than 40; not primary TS like WRS7); no VT.
   und = 'QQQ'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   #####
@@ -975,7 +974,7 @@ def runBBSCore(yrStart):
   #####
   isEntryS = (ratioS > 1) & (ratio2S < 1) & (pbS < 0.2)
   isExitS = pbS > 0.8
-  dw[und] = getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = getStateS_timestop(isEntryS, isExitS, 30, isCleaned=True, isMonthlyRebal=True)
   #####
   d = dict()
   d['dp'] = dp
@@ -1229,7 +1228,7 @@ def runGEOCore(yrStart):
   # NUCL.LSE signal
   uunS = dfDict['U-UN.TO']['Close']
   uunMS = uunS.iloc[endpoints(uunS)]
-  rocS_UUN = uunMS.pct_change().rename('UUN ROC 1M')
+  rocS_UUN = uunMS.ffill().pct_change(fill_method=None).rename('UUN ROC 1M')
   dw['NUCL.LSE'] = applyDates(rocS_UUN > 0, dw)
   #####
   dw = cleanS(dw, isMonthlyRebal=True)
