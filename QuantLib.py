@@ -410,6 +410,37 @@ def _getGSBSignalS(df):
   fallQqePrevS = (((dS<=0).rolling(3).sum()==3) & ((dS<0).rolling(3).sum()>=1)).shift(1)
   return (risingPrevS & lowerNowS & fallQqePrevS).rename('GSB') * 1.0
 
+def _getTOMSignalS(df):
+  """QS EOM calendar canary on SPY: +1 while in trade.
+
+  Entry: calendar day 29/30/31 and day return < 0.
+  Exit: two successive positive closes, or close >= entry * 1.01.
+  """
+  cS = df['Close']
+  rS = cS.pct_change()
+  isEntryS = (rS < 0) & cS.index.day.isin([29, 30, 31])
+  stateS = pd.Series(0.0, index=cS.index, name='TOM')
+  state = 0
+  entryPx = np.nan
+  upStreak = 0
+  for i in range(len(stateS)):
+    if state == 0 and bool(isEntryS.iloc[i]):
+      state = 1
+      entryPx = float(cS.iloc[i])
+      upStreak = 0
+    stateS.iloc[i] = state
+    if state == 1:
+      r = rS.iloc[i]
+      if pd.notna(r) and r > 0:
+        upStreak += 1
+      else:
+        upStreak = 0
+      if float(cS.iloc[i]) >= entryPx * 1.01 or upStreak >= 2:
+        state = 0
+        entryPx = np.nan
+        upStreak = 0
+  return stateS
+
 def _getGSSSignalS(idx, prefixes=('christmas', 'new years'), n=3):
   """1 on the last n NYSE sessions before each matching holiday.
 
@@ -493,7 +524,10 @@ def runTAACore(yrStart):
   # 6. GSB
   isCanaryS_GSB = applyDates(_getGSBSignalS(dfDict['SPY']), dp) * 1.0
 
-  # 7. TRIN (neg voter: SMA20 < 1 → -1 in the booth)
+  # 7. TOM (QS EOM cal: +1 while in SPY trade after neg day on cal 29/30/31)
+  isCanaryS_TOM = applyDates(_getTOMSignalS(dfDict['SPY']), dp) * 1.0
+
+  # 8. TRIN (neg voter: SMA20 < 1 → -1 in the booth)
   trinS = applyDates(dfDict['TRIN.INDX']['Close'], dp)
   isCanaryS_TRIN = (trinS.rolling(20).mean() < 1).rename('TRIN') * -1.0
 
@@ -505,6 +539,7 @@ def runTAACore(yrStart):
     'TIP': isCanaryS_TIP,
     'VIX': isCanaryS_VIX,
     'GSB': isCanaryS_GSB,
+    'TOM': isCanaryS_TOM,
     'TRIN': isCanaryS_TRIN,
   })
   voteCountS = voteDf.sum(axis=1).rename('Votes')
@@ -576,6 +611,7 @@ def runTAACore(yrStart):
   d['isCanaryS_VIX'] = isCanaryS_VIX
   d['isCanaryS_GSB'] = isCanaryS_GSB
   d['isCanaryS_TRIN'] = isCanaryS_TRIN
+  d['isCanaryS_TOM'] = isCanaryS_TOM
   #####
   d['isNDXOkS_IWM'] = isNDXOkS_IWM
   d['isIBSOkS_IWM'] = isIBSOkS_IWM
@@ -601,7 +637,7 @@ def runTAA(yrStart, isSkipTitle=False):
   stWriteDf(ul.merge(
     d['isCanaryS_BTC'], d['isCanaryS_HYG'],
     d['isCanaryS_SPHB_LV'], d['isCanaryS_TIP'], d['isCanaryS_VIX_Raw'], d['isCanaryS_VIX'], d['isCanaryS_GSB'],
-    d['isCanaryS_TRIN'], d['voteCountS'], how='inner').tail())
+    d['isCanaryS_TOM'], d['isCanaryS_TRIN'], d['voteCountS'], how='inner').tail())
   st.header('IWM Filters')
   stWriteDf(ul.merge(d['isNDXOkS_IWM'],d['isIBSOkS_IWM'],d['ratio200S_IWM'].round(3),how='inner').tail())
   st.header('GLD/UUP Table')

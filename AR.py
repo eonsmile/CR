@@ -57,6 +57,7 @@ def runAlpha(yrStart, isSkipTitle=False):
 #  UPI: 50.50          UPI3y: 74.88          Sharpe: 4.58          Cagr: 45.3%          MaxDD: 4.3% (AHS drop SH, VT 0.16)
 #  UPI: 50.94          UPI3y: 75.57          Sharpe: 4.60          Cagr: 46.0%          MaxDD: 4.3% (BBS added)
 #    UPI: 50.97          UPI3y: 75.69          Sharpe: 4.60          Cagr: 46.0%          MaxDD: 4.3% (BBS time exit)
+#  UPI: 50.96          UPI3y: 74.75          Sharpe: 4.58          Cagr: 46.2%          MaxDD: 4.3% (TAA TOM)
 #####
   tickers = d.keys() - l
   if tickers:
