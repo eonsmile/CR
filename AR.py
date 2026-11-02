@@ -22,7 +22,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.2
   b=.07
-  l = ul.spl('TAA,COS,HMR,IBS,JMR,RSS,BBS,GMR,STK,WRS,SCI,VCA,VCA2,AHS,BTS,GEO,TNQ,WTS,ZBT')
+  l = ul.spl('TAA,COS,HMR,IBS,JMR,RSS,BBS,GMR,STK,WRS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,TNQ,WTS,ZBT')
   d = {
     'TAA': a,  # _TAA
     #####
@@ -42,7 +42,8 @@ def runAlpha(yrStart, isSkipTitle=False):
     # Hedges
     'SCI': b,  # *** review monthly ***
     'VCA': a,  # _ETC
-    'VCA2': a, # _ETC
+    'VCA2': b, # _ETC
+    'VCA3': b, # _ETC
     #####
     # Etc
     'AHS': b,  # *** review monthly ***
@@ -56,6 +57,9 @@ def runAlpha(yrStart, isSkipTitle=False):
 ######
 #  UPI: 50.96          UPI3y: 74.75          Sharpe: 4.58          Cagr: 46.2%          MaxDD: 4.3% (TAA TOM)
 #    UPI: 50.70          UPI3y: 73.89          Sharpe: 4.57          Cagr: 46.0%          MaxDD: 4.3% (Oct monthend)
+#  UPI: 50.91          UPI3y: 74.03          Sharpe: 4.58          Cagr: 46.1%          MaxDD: 4.3% (BBS to 3.5)
+#  UPI: 49.22          UPI3y: 67.36          Sharpe: 4.47          Cagr: 44.7%          MaxDD: 4.3% (VCA2 a→b)
+#  UPI: 49.83          UPI3y: 68.35          Sharpe: 4.51          Cagr: 45.2%          MaxDD: 4.3% (VCA3 @b + AFR)
 #####
   tickers = d.keys() - l
   if tickers:
@@ -125,6 +129,8 @@ if isRunSystems:
   runVCA(y)
   st.divider()
   runVCA2(y)
+  st.divider()
+  runVCA3(y)
   st.divider()
   #####
   # Etc

@@ -135,12 +135,22 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   return df
 
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  key = random.choice(ul.spl(os.getenv('CC_API_KEYS', '')))
-  z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&allData=true&api_key={key}"
-  j = requests.get(z).json()
-  data = j.get('Data')
-  if not isinstance(data, dict) or 'Data' not in data:
-    raise RuntimeError(f"cryptocompare histoday: {j.get('Message') or j}")
+  keys = [k for k in ul.spl(os.getenv('CC_API_KEYS', '')) if k]
+  if not keys:
+    raise RuntimeError('cryptocompare histoday: CC_API_KEYS empty')
+  random.shuffle(keys)
+  last = None
+  data = None
+  for key in keys:
+    z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&allData=true&api_key={key}"
+    j = requests.get(z).json()
+    data = j.get('Data')
+    if j.get('Response') == 'Success' and isinstance(data, dict) and data.get('Data'):
+      break
+    last = j.get('Message') or j
+    data = None
+  else:
+    raise RuntimeError(f"cryptocompare histoday: {last}")
   df = pd.DataFrame(data['Data'])
   df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
   df = df[df['date'] > '2010-7-16']

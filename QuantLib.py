@@ -114,7 +114,7 @@ def printCalendar(s):
       return (n + 1).prod() - 1
     return r.groupby(groups).apply(rprod)
   #####
-  r = s.pct_change()[1:]
+  r = s.ffill().pct_change(fill_method=None)[1:]
   df = pd.DataFrame(rgroup(r, r.index.strftime('%Y-%m-01')))
   df.columns = ['Returns']
   df.index = df.index.map(pendulum.parse)
@@ -991,8 +991,9 @@ def runWRS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runBBSCore(yrStart):
-  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3σ)<0.2;
+  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3.5σ)<0.2;
   # exit %B>0.8 or TS30 fallback (shorter fuse than 40; not primary TS like WRS7); no VT.
+  # 2026-10-31: BB std 3.0→3.5 (stricter %B entry / slower exit; sens OK 2008+).
   und = 'QQQ'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   #####
@@ -1001,10 +1002,10 @@ def runBBSCore(yrStart):
   lS = df['Low']
   cS = df['Close']
   atrS = ta.atr(hS, lS, cS, length=20)
-  bbDf = ta.bbands(cS, length=10, std=3)
-  upperS = bbDf['BBU_10_3.0']
-  lowerS = bbDf['BBL_10_3.0']
-  pbS = bbDf['BBP_10_3.0']  # %B
+  bbDf = ta.bbands(cS, length=10, std=3.5)
+  upperS = bbDf['BBU_10_3.5']
+  lowerS = bbDf['BBL_10_3.5']
+  pbS = bbDf['BBP_10_3.5']  # %B
   ratioS = (cS / EMA(cS, 100)).rename('Ratio')
   ratio2S = (atrS / atrS.rolling(101).median()).rename('Ratio 2')
   #####
@@ -1142,6 +1143,59 @@ def runVCA2(yrStart,isSkipTitle=False):
   st.header('Tables')
   tableS = ul.merge(d['dp'], d['vix1DS'].round(2), d['sma3S'].round(2),
                     d['spyS'],d['isAthS'].astype(int), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+# VCA3 — gold ATH ∩ VIX9D SMA3≤14 (Lab 2026-11-01); seated @b
+# ATH ∩ GLD↑ ∩ GLD/SMA50>1 ∩ VIX9D SMA3≤14 → VIXY hold1d
+#####
+def runVCA3Core(yrStart):
+  und='VIXY'
+  etc=ul.spl('SPY,GLD')
+  dp, dw, dfDict, _ = btSetup([und]+etc,yrStart=yrStart-1)
+  spyS = (dfDict['SPY']['Close']).rename('SPY')
+  gldS = (dfDict['GLD']['Close']).rename('GLD')
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+  #####
+  isAthS = (spyS == spyS.rolling(252).max()).rename('SPY ATH?')*1
+  isGLDUpS = (gldS.pct_change() > 0).rename('GLD↑?')*1
+  ratioS = (gldS / gldS.rolling(50).mean()).rename('Ratio')
+  vix9DS = applyDates(pl.getPriceHistory('VIX9D.INDX', yrStart=yrStart-1)['Close'], spyS).rename('VIX9D')
+  sma3S = vix9DS.rolling(3).mean().rename('VIX9D SMA3')
+  #####
+  dw[und] = cleanS(
+    ((isAthS == 1) & (isGLDUpS == 1) & (ratioS > 1) & (sma3S <= 14))*1,
+    isMonthlyRebal=True,
+  )
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['spyS']=spyS
+  d['gldS']=gldS
+  d['isAthS']=isAthS
+  d['isGLDUpS']=isGLDUpS
+  d['ratioS']=ratioS
+  d['vix9DS']=vix9DS
+  d['sma3S']=sma3S
+  return d
+
+def runVCA3(yrStart,isSkipTitle=False):
+  script = 'VCA3'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runVCA3Core(yrStart)
+  st.header('Tables')
+  tableS = ul.merge(d['dp'], d['spyS'], d['gldS'].round(2),
+                    d['isAthS'].astype(int), d['isGLDUpS'].astype(int),
+                    d['ratioS'].round(3), d['vix9DS'].round(2),
+                    d['sma3S'].round(2), how='inner')
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
