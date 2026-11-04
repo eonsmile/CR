@@ -185,56 +185,6 @@ def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   df.index.name = None
   return df[id]
 
-def getPriceHistoryTS(fileName, yrStart=SHARED_DICT['yrStart']):
-  """Load TradeStation OHLC dump from data/ts/{fileName}.
-
-  CSV columns: Date,Time,Open,High,Low,Close,Volume
-  Date = EasyLanguage YYYMMDD (YYY = years since 1900); Time = end-label HHMM (CT/exchange).
-  Index is end-labeled America/Chicago (same clock as TS chart Time).
-  """
-  path = os.path.join(os.path.dirname(__file__), 'data', 'ts', str(fileName))
-  if not os.path.isfile(path):
-    raise FileNotFoundError(path)
-  raw = pd.read_csv(path)
-  need = ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']
-  miss = [c for c in need if c not in raw.columns]
-  if miss:
-    raise ValueError(f'{fileName} missing columns: {miss}')
-  d = raw['Date'].astype(int)
-  t = raw['Time'].astype(int)
-  end = pd.to_datetime({
-    'year': 1900 + d // 10000,
-    'month': (d % 10000) // 100,
-    'day': d % 100,
-    'hour': t // 100,
-    'minute': t % 100,
-  })
-  end = end.dt.tz_localize('America/Chicago', ambiguous='NaT', nonexistent='shift_forward')
-  bad = end.isna()
-  if bad.any():
-    end2 = pd.to_datetime({
-      'year': 1900 + d // 10000,
-      'month': (d % 10000) // 100,
-      'day': d % 100,
-      'hour': t // 100,
-      'minute': t % 100,
-    }).dt.tz_localize('America/Chicago', ambiguous=True, nonexistent='shift_forward')
-    end = end.fillna(end2)
-  df = pd.DataFrame({
-    'Open': raw['Open'].astype(float).to_numpy(),
-    'High': raw['High'].astype(float).to_numpy(),
-    'Low': raw['Low'].astype(float).to_numpy(),
-    'Close': raw['Close'].astype(float).to_numpy(),
-    'Volume': raw['Volume'].astype(float).to_numpy(),
-  }, index=pd.DatetimeIndex(end, name='ts'))
-  df = df.sort_index()
-  df = df[~df.index.duplicated(keep='last')]
-  df = df[df.index.year >= int(yrStart)]
-  if len(df) == 0:
-    raise RuntimeError(f'{fileName} empty after yrStart={yrStart}')
-  return df
-
-
 def getPriceHistoryYahoo(und, yrStart=SHARED_DICT['yrStart']):
   dtStart = str(yrStart) + '-1-1'
   period = max(2, pendulum.now().year - yrStart + 1)

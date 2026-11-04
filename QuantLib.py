@@ -738,48 +738,6 @@ def runIBS(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runJMRCore(yrStart):
-  etc=['DXJ']
-  dp, dw, dfDict, hv = btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
-  #####
-  ibs_DXJ = getIbsS(dfDict['DXJ']).rename('IBS DXJ')
-  ibs_EWJ   = getIbsS(dfDict['EWJ']).rename('IBS EWJ')
-  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
-  isExitS  = ibs_DXJ > .7
-  stateS   = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
-  #####
-  dw['EWJ'] = stateS
-  dw['FXY'] = -dw['EWJ']
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dp2']=dp2
-  d['dw']=dw
-  d['dfDict']=dfDict
-  d['ibs_DXJ']=ibs_DXJ
-  d['ibs_EWJ']=ibs_EWJ
-  return d
-
-def runJMR(yrStart,isSkipTitle=False):
-  script = 'JMR'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runJMRCore(yrStart)
-  st.header('Table')
-  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-
 def runRSSCore(yrStart):
   und='SPY'
   dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
@@ -864,6 +822,83 @@ def runGMR(yrStart, isSkipTitle=False):
   tableS = ul.merge(
     d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
   stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runIBS2Core(yrStart):
+  # IWM IBS twin: entry IBS<0.1; exit IBS>0.8 | hibreak; TS6;
+  # VT 0.255 / maxWgt 1.5 — ql.bt MDD<15% (2026-11-04; was 0.258 at DD cap).
+  und = 'IWM'
+  volTgt = .255
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und],yrStart=yrStart-1)
+  #####
+  df = dfDict[und]
+  ibsS = getIbsS(df)
+  isEntryS = ibsS < .1
+  isExitS = (ibsS > .8) | (df['Close'] > df['High'].shift(1))
+  stateS = getStateS_timestop(isEntryS, isExitS, 6, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  dwAllOrNone(dw)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibsS']=ibsS
+  return d
+
+def runIBS2(yrStart,isSkipTitle=False):
+  script = 'IBS2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runIBS2Core(yrStart)
+  st.header('Table')
+  df = d['dfDict']['IWM']
+  df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
+  stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runJMRCore(yrStart):
+  etc=['DXJ']
+  dp, dw, dfDict, hv = btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  ibs_DXJ = getIbsS(dfDict['DXJ']).rename('IBS DXJ')
+  ibs_EWJ   = getIbsS(dfDict['EWJ']).rename('IBS EWJ')
+  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
+  isExitS  = ibs_DXJ > .7
+  stateS   = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  #####
+  dw['EWJ'] = stateS
+  dw['FXY'] = -dw['EWJ']
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dp2']=dp2
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibs_DXJ']=ibs_DXJ
+  d['ibs_EWJ']=ibs_EWJ
+  return d
+
+def runJMR(yrStart,isSkipTitle=False):
+  script = 'JMR'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJMRCore(yrStart)
+  st.header('Table')
+  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
+  stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -1346,106 +1381,6 @@ def runGEO(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-
-def runTNQCore(yrStart):
-  """TNQ D on TS NQ_10m.csv (end-label CT). Window 840-930, EOD 1500, quiet 0.10, entry+/-90.
-
-  1 contract; % = pnl$ / (20 x last Close). Warm-up 1y. Returns dp/dw/trades for runTNQ.
-  """
-  NQ_POINT_VALUE = 20.0
-  window_start, window_end, eod_ct = 840, 930, 1500
-  entry_thr, quiet_pct = 90.0, 0.10
-  y0 = int(yrStart)
-  warm = min(y0, max(2010, y0 - 1))
-  df = pl.getPriceHistoryTS('NQ_10m.csv', yrStart=warm)
-  cS = df['Close']
-  atr = ta.atr(df['High'], df['Low'], cS, length=14, mamode='sma')  # TS AvgTrueRange
-  po = EMA((cS - EMA(cS, 21)) / (3.0 * atr.replace(0.0, np.nan)) * 100.0, 3)
-
-  idx_ct = df.index.tz_convert('America/Chicago') if df.index.tz is not None else df.index.tz_localize('America/Chicago')
-  tS = pd.Series(idx_ct.hour * 100 + idx_ct.minute, index=df.index)
-  dates = pd.Series(idx_ct.date, index=df.index)
-  is_eod = (tS == eod_ct).to_numpy()
-  in_win = ((tS >= window_start) & (tS < window_end)).to_numpy()
-  prev = po.shift(1)
-  long_sig = ((prev <= entry_thr) & (po > entry_thr)).to_numpy()
-  short_sig = ((prev >= -entry_thr) & (po < -entry_thr)).to_numpy()
-  po_ok = (~po.isna() & ~prev.isna()).to_numpy()
-  quiet = (atr / df['Close'] * 100.0 < quiet_pct).fillna(False).to_numpy()
-  t_ct, dates_ct = tS.to_numpy(), dates.to_numpy()
-  opn, close = df['Open'].to_numpy(), df['Close'].to_numpy()
-  n = len(df)
-  pos = pending = 0
-  entry_px, entry_i = np.nan, -1
-  traded_day = None
-  trades, daily_pnl = [], {}
-  mult = float(NQ_POINT_VALUE)
-
-  def close_trade(i, px):
-    nonlocal pos, entry_px, entry_i
-    pts = (px - entry_px) * pos if entry_px else 0.0
-    pnl = float(pts) * mult
-    day = pd.Timestamp(dates_ct[i])
-    trades.append(dict(
-      date=day, side=int(pos),
-      entry=float(entry_px), exit=float(px), pts=float(pts),
-      **{'pnl$': round(pnl, 2)},
-      entry_t=int(t_ct[entry_i]) if entry_i >= 0 else -1,
-    ))
-    daily_pnl[day] = pnl
-    pos, entry_px, entry_i = 0, np.nan, -1
-
-  for i in range(1, n):
-    if dates_ct[i] != dates_ct[i - 1]:
-      traded_day = None
-    if pending != 0 and pos == 0:
-      if t_ct[i] <= eod_ct and dates_ct[i] == dates_ct[i - 1]:
-        pos, entry_px, entry_i = pending, float(opn[i]), i
-      pending = 0
-    if pos != 0 and is_eod[i]:
-      close_trade(i, close[i])
-      continue
-    if pos != 0 or traded_day == dates_ct[i]:
-      continue
-    if not po_ok[i] or not in_win[i] or quiet[i]:
-      continue
-    if long_sig[i]:
-      pending = 1
-      traded_day = dates_ct[i]
-    elif short_sig[i]:
-      pending = -1
-      traded_day = dates_ct[i]
-  if pos != 0:
-    close_trade(n - 1, close[-1])
-
-  days = pd.DatetimeIndex(pd.unique(pd.to_datetime(dates_ct))).tz_localize(None)
-  pnl = pd.Series(0.0, index=days, name='pnl$')
-  if daily_pnl:
-    pnl.update(pd.Series({pd.Timestamp(k): v for k, v in daily_pnl.items()}))
-  pnl = pnl[pnl.index.year >= y0]
-  trades = pd.DataFrame(trades)
-  if len(trades):
-    trades = trades[pd.to_datetime(trades['date']).dt.year >= y0].reset_index(drop=True)
-  notional = float(NQ_POINT_VALUE) * float(cS.iloc[-1])
-  r = (pnl / notional).clip(-0.25, 0.25)
-  if len(trades):
-    trades = trades.copy()
-    trades['r%'] = (trades['pnl$'] / notional * 100.0).round(1)
-  dp = (1 + r).cumprod().rename('TNQ').to_frame()
-  dw = dp * np.nan
-  dw.iloc[endpoints(dw), 0] = 1
-  return dict(dp=dp, dw=dw, trades=trades)
-
-def runTNQ(yrStart, isSkipTitle=False):
-  script = 'TNQ'
-  if not isSkipTitle:
-    st.header(script)
-  d = runTNQCore(yrStart)
-  st.header('Trades')
-  tr = d['trades']
-  if tr is not None and len(tr):
-    stWriteDf(tr.tail())
-  bt(script, d['dp'], d['dw'], yrStart)
 
 def runWTSCore(yrStart):
   # WEAT L/S: ratio10/50 + quiet3; next-open; VT 0.17 / maxWgt 1 (niche rulebook)

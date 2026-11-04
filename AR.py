@@ -21,8 +21,8 @@ def runAlpha(yrStart, isSkipTitle=False):
     st.header(script)
   #####
   a=.2
-  b=.07
-  l = ul.spl('TAA,COS,HMR,IBS,JMR,RSS,BBS,GMR,STK,WRS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,TNQ,WTS,ZBT')
+  b=.08
+  l = ul.spl('TAA,COS,HMR,IBS,RSS,BBS,GMR,IBS2,JMR,STK,WRS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,WTS,ZBT')
   d = {
     'TAA': a,  # _TAA
     #####
@@ -30,12 +30,13 @@ def runAlpha(yrStart, isSkipTitle=False):
     'COS': a,  # _MR
     'HMR': a,  # _HMR
     'IBS': a,  # _MR
-    'JMR': a,  # _MR
     'RSS': a,  # _MR
     #####
     # Tier B MRs
     'BBS': b,  # _MR
     'GMR': b,  # _MR
+    'IBS2': b,  # _MR — IWM; exit 0.8|hib TS6; VT 0.255 (ql.bt MDD<15%)
+    'JMR': b,  # _MR — settled @b 2026-11-04 (LOO soft for a; ART R weak)
     'STK': b,  # _MR
     'WRS': b,  # _MR
     #####
@@ -49,17 +50,14 @@ def runAlpha(yrStart, isSkipTitle=False):
     'AHS': b,  # *** review monthly ***
     'BTS': a,  # _BTS
     'GEO': b,  # *** review monthly ***
-    'TNQ': b,  # TradeStation
     'WTS': b,  # _ETC
     'ZBT': a,  # *** review monthly ***
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 50.96          UPI3y: 74.75          Sharpe: 4.58          Cagr: 46.2%          MaxDD: 4.3% (TAA TOM)
-#    UPI: 50.70          UPI3y: 73.89          Sharpe: 4.57          Cagr: 46.0%          MaxDD: 4.3% (Oct monthend)
-#  UPI: 50.91          UPI3y: 74.03          Sharpe: 4.58          Cagr: 46.1%          MaxDD: 4.3% (BBS to 3.5)
-#  UPI: 49.22          UPI3y: 67.36          Sharpe: 4.47          Cagr: 44.7%          MaxDD: 4.3% (VCA2 a→b)
-#  UPI: 49.83          UPI3y: 68.35          Sharpe: 4.51          Cagr: 45.2%          MaxDD: 4.3% (VCA3 @b + AFR)
+#  UPI: 49.19          UPI3y: 68.11          Sharpe: 4.45          Cagr: 43.2%          MaxDD: 4.1% (JMR a→b)
+#  UPI: 50.46          UPI3y: 70.92          Sharpe: 4.46          Cagr: 44.5%          MaxDD: 4.5% (IBS2 @b)
+#  UPI: 50.65          UPI3y: 69.99          Sharpe: 4.47          Cagr: 45.6%          MaxDD: 4.8% (b=0.08)
 #####
   tickers = d.keys() - l
   if tickers:
@@ -108,8 +106,6 @@ if isRunSystems:
   st.divider()
   runIBS(y)
   st.divider()
-  runJMR(y)
-  st.divider()
   runRSS(y)
   st.divider()
   #####
@@ -117,6 +113,10 @@ if isRunSystems:
   runBBS(y)
   st.divider()
   runGMR(y)
+  st.divider()
+  runIBS2(y)
+  st.divider()
+  runJMR(y)
   st.divider()
   runSTK(y)
   st.divider()
@@ -139,8 +139,6 @@ if isRunSystems:
   runBTS(y)
   st.divider()
   runGEO(y)
-  st.divider()
-  runTNQ(y)
   st.divider()
   runWTS(y)
   st.divider()
