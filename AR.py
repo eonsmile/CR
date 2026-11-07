@@ -28,15 +28,15 @@ def runAlpha(yrStart, isSkipTitle=False):
     #####
     # Tier A MRs
     'COS': a,  # _MR
-    'HMR': a,  # _HMR
     'IBS': a,  # _MR
     'RSS': a,  # _MR
     #####
     # Tier B MRs
     'BBS': b,  # _MR
     'GMR': b,  # _MR
+    'HMR': b,  # _HMR — harness: 2828.HK Tier-2 → @b
     'IBS2': b,  # _MR — IWM; exit 0.8|hib TS6; VT 0.255 (ql.bt MDD<15%)
-    'JMR': b,  # _MR — settled @b 2026-11-04 (LOO soft for a; ART R weak)
+    'JMR': b,  # _MR — harness: EWJ/FXY Tier-2 → @b
     'STK': b,  # _MR
     'WRS': b,  # _MR
     #####
@@ -48,16 +48,15 @@ def runAlpha(yrStart, isSkipTitle=False):
     #####
     # Etc
     'AHS': b,  # *** review monthly ***
-    'BTS': a,  # _BTS
+    'BTS': a,  # _BTS — BTC Tier-1; VT 0.20 / maxWgt 1.5 (MDD~14.6%)
     'GEO': b,  # *** review monthly ***
     'WTS': b,  # _ETC
     'ZBT': a,  # *** review monthly ***
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 49.19          UPI3y: 68.11          Sharpe: 4.45          Cagr: 43.2%          MaxDD: 4.1% (JMR a→b)
-#  UPI: 50.46          UPI3y: 70.92          Sharpe: 4.46          Cagr: 44.5%          MaxDD: 4.5% (IBS2 @b)
 #  UPI: 50.65          UPI3y: 69.99          Sharpe: 4.47          Cagr: 45.6%          MaxDD: 4.8% (b=0.08)
+#  UPI: 48.09          UPI3y: 67.38          Sharpe: 4.40          Cagr: 44.1%          MaxDD: 4.8% (HMR a→b; BTS@a vt0.20 max1.5; BTC Tier-1; sumW 2.44)
 #####
   tickers = d.keys() - l
   if tickers:

@@ -905,8 +905,10 @@ def runJMR(yrStart,isSkipTitle=False):
 
 def runSTKCore(yrStart):
   # SPY Connors 2009 3-bar H/L streak: long 3↓H&↓L + Ratio250>1 + Ratio5<1;
-  # short mirror; exit Ratio5 cross; same-close; 1x long / 2x short; no VT.
+  # short mirror; exit Ratio5 cross | TS9 fallback fuse (BBS-style; primary=SMA5);
+  # same-close; 1x long / 2x short; no VT.
   # Dense daily dw (like RSS) — cleanS monthly rebal mis-compounds L/S in bt().
+  # TS dig 2026-11-06: TS9 preferred vs TS8 (avoids 2011 day-8 crash cut); TS10 bounce-cut.
   und = 'SPY'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 2)
   df = dfDict[und]
@@ -925,7 +927,10 @@ def runSTKCore(yrStart):
   isExitS = ratio5S > 1
   isEntryShortS = isUp3S & (ratio250S < 1) & (ratio5S > 1)
   isExitShortS = ratio5S < 1
-  dw[und] = getStateS(isEntryS, isExitS) - 2 * getStateS(isEntryShortS, isExitShortS)
+  dw[und] = (
+    getStateS_timestop(isEntryS, isExitS, 9, isCleaned=False, isMonthlyRebal=False)
+    - 2 * getStateS_timestop(isEntryShortS, isExitShortS, 9, isCleaned=False, isMonthlyRebal=False)
+  )
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
@@ -1301,8 +1306,8 @@ def runAHS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runBTSCore(yrStart):
-  # BTC trend: >50DMA & >0.8x240d high; monthly; VT 0.205 / maxWgt 1.5 (size-limits MDD)
-  volTgt = .205
+  # BTC trend: >50DMA & >0.8x240d high; monthly; VT 0.20 / maxWgt 1.5 (harness Tier-1)
+  volTgt = .20
   maxWgt = 1.5
   cS = pl.getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
   ratioS = (cS / cS.rolling(50).mean()).rename('Ratio')
