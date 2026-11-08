@@ -478,7 +478,7 @@ def _getGSSSignalS(idx, prefixes=('christmas', 'new years'), n=3):
 # TAA
 #####
 def runTAACore(yrStart):
-  volTgt = .22
+  volTgt = .25 
   maxWgt = 1.5
   etc=ul.spl('HYG,SPHB,SPLV,TIP,TRIN.INDX,NDX.INDX')
   dp, dw, dfDict, hv = btSetup(ul.spl('SPY,IWM,IEI,GLD,UUP')+etc,yrStart=yrStart-1)
@@ -531,13 +531,13 @@ def runTAACore(yrStart):
   trinS = applyDates(dfDict['TRIN.INDX']['Close'], dp)
   isCanaryS_TRIN = (trinS.rolling(20).mean() < 1).rename('TRIN') * -1.0
 
-  # 9. HI (neg voter: SPY Close within 2% of 63d high → -1; dig 2026-11-08)
+  # 9. SPY_HI (neg voter: SPY Close within 2% of 63d high → -1 in the booth; dig 2026-11-08)
   spyHi63 = dfDict['SPY']['High'].rolling(63).max()
   isCanaryS_HI = applyDates(
-    dfDict['SPY']['Close'] >= spyHi63 * 0.98, dp).rename('HI') * -1.0
+    dfDict['SPY']['Close'] >= spyHi63 * 0.98, dp).rename('SPY_HI') * -1.0
 
   # Voting
-  voteDf = pd.DataFrame({
+  spyVoteDf = pd.DataFrame({
     'BTC': isCanaryS_BTC,
     'HYG': isCanaryS_HYG,
     'SPHB_LV': isCanaryS_SPHB_LV,
@@ -546,10 +546,10 @@ def runTAACore(yrStart):
     'GSB': isCanaryS_GSB,
     'TOM': isCanaryS_TOM,
     'TRIN': isCanaryS_TRIN,
-    'HI': isCanaryS_HI,
+    'SPY_HI': isCanaryS_HI,
   })
-  voteCountS = voteDf.sum(axis=1).rename('Votes')
-  dw['SPY'] = (voteCountS >= 3) * (voteCountS / 3)
+  spyVoteCountS = spyVoteDf.sum(axis=1).rename('SPY Votes')
+  dw['SPY'] = (spyVoteCountS >= 3) * (spyVoteCountS / 3)
 
   #####
   # IWM
@@ -570,25 +570,43 @@ def runTAACore(yrStart):
   eomS = getNYSEEomS(idx)
   dw['IEI'] = ((eomS >= 2) & (eomS <= 4))
 
-  #####
-  # GLD
-  #####
-  gldS = applyDates(dfDict['GLD']['Close'], dp)
-  ratio150S_GLD = (gldS / gldS.rolling(150).mean()).rename('GLD Ratio 150D')
+  ##############
+  # GLD canaries
+  ##############
+  m = lambda n: applyDates(n, dw) * 1.0
   df = dfDict['GLD']
-  hS = df['High']
-  lS = df['Low']
-  cS = df['Close']
+  hS, lS, cS = df['High'], df['Low'], df['Close']
+
+  # 1. r150 (Close > SMA150)
+  gldS = applyDates(cS, dp)
+  ratio150S_GLD = (gldS / gldS.rolling(150).mean()).rename('GLD Ratio 150D')
+  isCanaryS_GLD_r150 = m(ratio150S_GLD > 1).rename('r150')
+
+  # 2. GTS (breakout / IBS∩ADX thrust, minhold)
   ibsS = getIbsS(df)
   adxS = ta.adx(hS, lS, cS, length=5)['ADX_5']
   isEntryS = (cS > hS.rolling(3).max().shift()) | ((ibsS < .15) & (adxS > 30))
   isExitS = (cS > hS.shift()) | ((cS > cS.shift()) & (cS.shift() > cS.shift(2)))
   gtsSignalS = getStateS_minhold(isEntryS, isExitS, 1, isCleaned=False, isMonthlyRebal=False).rename('GTS Signal')
+  isCanaryS_GLD_GTS = m(gtsSignalS).rename('GTS')
 
+  # 3. GSS (Christmas / New Year window)
   gssSignalS = _getGSSSignalS(df.index)
-  m = lambda n: applyDates(n, dw) * 1
-  dw['GLD'] = m(ratio150S_GLD > 1) + m(gtsSignalS) + m(gssSignalS)
-  dw['GLD']/=2
+  isCanaryS_GLD_GSS = m(gssSignalS).rename('GSS')
+
+  # 4. GLD_HI (neg voter: GLD Close within 2% of 63d high → -1 in the booth; dig 2026-11-08)
+  gldHi63 = hS.rolling(63).max()
+  isCanaryS_GLD_HI = applyDates(cS >= gldHi63 * 0.98, dw).rename('GLD_HI') * -1.0
+
+  # Voting
+  gldVoteDf = pd.DataFrame({
+    'r150': isCanaryS_GLD_r150,
+    'GTS': isCanaryS_GLD_GTS,
+    'GSS': isCanaryS_GLD_GSS,
+    'GLD_HI': isCanaryS_GLD_HI,
+  })
+  gldVoteCountS = gldVoteDf.sum(axis=1).rename('GLD Votes')
+  dw['GLD'] = (gldVoteCountS >= 1) * (gldVoteCountS / 3)
 
   #####
   # UUP
@@ -607,8 +625,11 @@ def runTAACore(yrStart):
   d['dw']=dw
   d['stateDf']=stateDf
   d['btcS'] = btcS
-  d['voteDf'] = voteDf
-  d['voteCountS'] = voteCountS
+  #####
+  # SPY canaries
+  #####
+  d['spyVoteDf'] = spyVoteDf
+  d['spyVoteCountS'] = spyVoteCountS
   d['isCanaryS_BTC'] = isCanaryS_BTC
   d['isCanaryS_HYG'] = isCanaryS_HYG
   d['isCanaryS_SPHB_LV'] = isCanaryS_SPHB_LV
@@ -616,18 +637,27 @@ def runTAACore(yrStart):
   d['isCanaryS_VIX_Raw'] = isCanaryS_VIX_Raw
   d['isCanaryS_VIX'] = isCanaryS_VIX
   d['isCanaryS_GSB'] = isCanaryS_GSB
-  d['isCanaryS_TRIN'] = isCanaryS_TRIN
   d['isCanaryS_TOM'] = isCanaryS_TOM
+  d['isCanaryS_TRIN'] = isCanaryS_TRIN
   d['isCanaryS_HI'] = isCanaryS_HI
   #####
+  # IWM
   d['isNDXOkS_IWM'] = isNDXOkS_IWM
   d['isIBSOkS_IWM'] = isIBSOkS_IWM
   d['ratio200S_IWM'] = ratio200S_IWM
   #####
-  d['ratio150S_GLD']=ratio150S_GLD
+  # GLD canaries
+  d['gldVoteDf'] = gldVoteDf
+  d['gldVoteCountS'] = gldVoteCountS
+  d['isCanaryS_GLD_r150'] = isCanaryS_GLD_r150
+  d['isCanaryS_GLD_GTS'] = isCanaryS_GLD_GTS
+  d['isCanaryS_GLD_GSS'] = isCanaryS_GLD_GSS
+  d['isCanaryS_GLD_HI'] = isCanaryS_GLD_HI
+  d['ratio150S_GLD'] = ratio150S_GLD
   d['gtsSignal'] = gtsSignalS
   d['gssSignal'] = gssSignalS
   #####
+  # UUP
   d['ratio50S_UUP']=ratio50S_UUP
   return d
 
@@ -642,13 +672,19 @@ def runTAA(yrStart, isSkipTitle=False):
   stWriteDf(ul.merge(dp,d['btcS'],how='inner').tail())
   st.header('SPY Canaries')
   stWriteDf(ul.merge(
+    d['spyVoteCountS'],
     d['isCanaryS_BTC'], d['isCanaryS_HYG'],
     d['isCanaryS_SPHB_LV'], d['isCanaryS_TIP'], d['isCanaryS_VIX_Raw'], d['isCanaryS_VIX'], d['isCanaryS_GSB'],
-    d['isCanaryS_TOM'], d['isCanaryS_TRIN'], d['isCanaryS_HI'], d['voteCountS'], how='inner').tail())
-  st.header('IWM Filters')
+    d['isCanaryS_TOM'], d['isCanaryS_TRIN'], d['isCanaryS_HI'], how='inner').tail())
+  st.header('IWM')
   stWriteDf(ul.merge(d['isNDXOkS_IWM'],d['isIBSOkS_IWM'],d['ratio200S_IWM'].round(3),how='inner').tail())
-  st.header('GLD/UUP Table')
-  stWriteDf(ul.merge(d['ratio150S_GLD'].round(3), d['gtsSignal'], d['gssSignal'], d['ratio50S_UUP'].round(3), how='inner').tail())
+  st.header('GLD Canaries')
+  stWriteDf(ul.merge(
+    d['gldVoteCountS'],
+    d['isCanaryS_GLD_r150'], d['isCanaryS_GLD_GTS'], d['isCanaryS_GLD_GSS'],
+    d['isCanaryS_GLD_HI'], how='inner').tail())
+  st.header('UUP')
+  stWriteDf(d['ratio50S_UUP'].round(3).to_frame().tail())
   st.header('States')
   stWriteDf(d['stateDf'].tail())
   st.header('Weights')
