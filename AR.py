@@ -51,12 +51,13 @@ def runAlpha(yrStart, isSkipTitle=False):
     'BTS': a,  # _BTS — BTC Tier-1; VT 0.20 / maxWgt 1.5 (MDD~14.6%)
     'GEO': b,  # *** review monthly ***
     'WTS': b,  # _ETC
-    'ZBT': a,  # *** review monthly ***
+    'ZBT': b,  # *** review monthly *** — a→b 2026-11-08 (sparse sample; AFR nudge)
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 50.65          UPI3y: 69.99          Sharpe: 4.47          Cagr: 45.6%          MaxDD: 4.8% (b=0.08)
 #  UPI: 48.09          UPI3y: 67.38          Sharpe: 4.40          Cagr: 44.1%          MaxDD: 4.8% (HMR a→b; BTS@a vt0.20 max1.5; BTC Tier-1; sumW 2.44)
+#  UPI: 47.26          UPI3y: 65.85          Sharpe: 4.36          Cagr: 43.2%          MaxDD: 4.8% (ZBT a→b sparse; sumW 2.32)
+#  UPI: 48.80          UPI3y: 72.48          Sharpe: 4.45          Cagr: 43.7%          MaxDD: 4.4% (TAA HI N63/2% + vt0.22; sumW 2.32)
 #####
   tickers = d.keys() - l
   if tickers:
