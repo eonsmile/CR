@@ -946,6 +946,47 @@ def runJMR(yrStart,isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
+def runMTMCore(yrStart):
+  # MTUM signal → long QQQ. WPR7<-80 & IBS<.2; exit C>H[-1] | IBS>.9 | TS7; vt .32 / max1.5
+  # Seated @b 2026-11-11 (Lab MTM; ART 87.7 Strong). IBS entry .3→.2 2026-11-11.
+  und = 'QQQ'
+  etc = ['MTUM']
+  volTgt = .32
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und] + etc, yrStart=yrStart - 1)
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  df = dfDict['MTUM']
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=7)
+  ibsS = getIbsS(df)
+  isEntryS = (wprS < -80) & (ibsS < .2)
+  isExitS = (df['Close'] > df['High'].shift(1)) | (ibsS > .9)
+  stateS = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['wprS'] = wprS
+  d['ibsS'] = ibsS
+  return d
+
+def runMTM(yrStart, isSkipTitle=False):
+  script = 'MTM'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runMTMCore(yrStart)
+  st.header('Table')
+  stWriteDf(ul.merge(d['wprS'].rename('WPR7').round(1), d['ibsS'].rename('IBS').round(3), how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runSTKCore(yrStart):
   # SPY Connors 2009 3-bar H/L streak: long 3↓H&↓L + Ratio250>1 + Ratio5<1;
   # short mirror; exit Ratio5 cross | TS9 fallback fuse (BBS-style; primary=SMA5);

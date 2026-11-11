@@ -22,7 +22,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.2
   b=.08
-  l = ul.spl('TAA,COS,HMR,IBS,RSS,BBS,GMR,IBS2,JMR,STK,WRS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,WTS,ZBT')
+  l = ul.spl('TAA,COS,HMR,IBS,RSS,BBS,GMR,IBS2,JMR,MTM,STK,WRS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,WTS,ZBT')
   d = {
     'TAA': a,  # _TAA
     #####
@@ -31,12 +31,13 @@ def runAlpha(yrStart, isSkipTitle=False):
     'IBS': a,  # _MR
     'RSS': a,  # _MR
     #####
-    # Tier B MRs
+    # Tier B MRs (sorted)
     'BBS': b,  # _MR
     'GMR': b,  # _MR
     'HMR': b,  # _HMR — harness: 2828.HK Tier-2 → @b
     'IBS2': b,  # _MR — IWM; exit 0.8|hib TS6; VT 0.255 (ql.bt MDD<15%)
     'JMR': b,  # _MR — harness: EWJ/FXY Tier-2 → @b
+    'MTM': b,  # _MR — MTUM→QQQ WPR7∩IBS<.2; VT 0.32 / max1.5; seated 2026-11-11
     'STK': b,  # _MR
     'WRS': b,  # _MR
     #####
@@ -55,10 +56,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 48.09          UPI3y: 67.38          Sharpe: 4.40          Cagr: 44.1%          MaxDD: 4.8% (HMR a→b; BTS@a vt0.20 max1.5; BTC Tier-1; sumW 2.44)
-#  UPI: 47.26          UPI3y: 65.85          Sharpe: 4.36          Cagr: 43.2%          MaxDD: 4.8% (ZBT a→b sparse; sumW 2.32)
-#  UPI: 48.80          UPI3y: 72.48          Sharpe: 4.45          Cagr: 43.7%          MaxDD: 4.4% (TAA HI N63/2% + vt0.22; sumW 2.32)
-#  UPI: 50.28          UPI3y: 77.30          Sharpe: 4.42          Cagr: 42.1%          MaxDD: 4.2% (2026-11-08 17:01; TAA GLD booth+HI + vt0.25; sumW 2.32)
+#  UPI: 51.76          UPI3y: 77.25          Sharpe: 4.41          Cagr: 44.0%          MaxDD: 4.5% (2026-11-11 10:53; +MTM @b IBS<.2 VT0.32; sumW 2.40)
 
 #####
   tickers = d.keys() - l
@@ -111,7 +109,7 @@ if isRunSystems:
   runRSS(y)
   st.divider()
   #####
-  # Tier B MRs
+  # Tier B MRs (sorted)
   runBBS(y)
   st.divider()
   runGMR(y)
@@ -119,6 +117,8 @@ if isRunSystems:
   runIBS2(y)
   st.divider()
   runJMR(y)
+  st.divider()
+  runMTM(y)
   st.divider()
   runSTK(y)
   st.divider()
