@@ -692,9 +692,14 @@ def runTAA(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
+# Sleeve Core/run defs: keep definition order = AR.py presentation (run*) order.
+# Live AR (2026-11-12): TAA | COS,HMR,IBS,RSS | BBS,GMR,IBS2,JMR,MTM,STK,YPS |
+#   SCI,VCA,VCA2,VCA3 | AHS,BTS,GEO,WTS,ZBT.
+# Parked WRS → Lab/live-extras/WRSLib.py (not in this file).
+#####
 
 #####
-# Tier A MRs
+# Tier A MRs — AR order: COS, HMR, IBS, RSS (HMR runs here; weight still @b / _HMR)
 #####
 def runCOSCore(yrStart):
   und, size = 'SPY', 2
@@ -742,6 +747,47 @@ def runCOS(yrStart, isSkipTitle=False):
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dwIntraday'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+# HMR — AR presents with Tier A (after COS); weight @b / _HMR
+#####
+def runHMRCore(yrStart):
+  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
+  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
+  und = '2828.HK'
+  volTgt = .32
+  maxWgt = 1.0
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  df = dfDict[und]
+  ibsS = getIbsS(df)
+  ibs2S = getIbsS(df, n=2).rename('IBS2')
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
+  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
+  isExitS = ibsS > .50
+  stateS = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ibsS'] = ibsS
+  d['ibs2S'] = ibs2S
+  d['wprS'] = wprS
+  return d
+
+def runHMR(yrStart, isSkipTitle=False):
+  script = 'HMR'
+  if not isSkipTitle:
+    st.header(script)
+  d = runHMRCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['2828.HK']
+  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
+  stWriteDf(df2.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runIBSCore(yrStart):
@@ -824,8 +870,52 @@ def runRSS(yrStart,isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
-# Tier B MRs
+# Tier B MRs — AR order: BBS, GMR, IBS2, JMR, MTM, STK, YPS
 #####
+def runBBSCore(yrStart):
+  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3.5σ)<0.2;
+  # exit %B>0.8 or TS30 fallback (shorter fuse than 40; not primary TS like WRS7); no VT.
+  # 2026-10-31: BB std 3.0→3.5 (stricter %B entry / slower exit; sens OK 2008+).
+  und = 'QQQ'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  #####
+  df = dfDict[und]
+  hS = df['High']
+  lS = df['Low']
+  cS = df['Close']
+  atrS = ta.atr(hS, lS, cS, length=20)
+  bbDf = ta.bbands(cS, length=10, std=3.5)
+  upperS = bbDf['BBU_10_3.5']
+  lowerS = bbDf['BBL_10_3.5']
+  pbS = bbDf['BBP_10_3.5']  # %B
+  ratioS = (cS / EMA(cS, 100)).rename('Ratio')
+  ratio2S = (atrS / atrS.rolling(101).median()).rename('Ratio 2')
+  #####
+  isEntryS = (ratioS > 1) & (ratio2S < 1) & (pbS < 0.2)
+  isExitS = pbS > 0.8
+  dw[und] = getStateS_timestop(isEntryS, isExitS, 30, isCleaned=True, isMonthlyRebal=True)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['pbS'] = pbS
+  d['ratioS'] = ratioS
+  d['ratio2S'] = ratio2S
+  return d
+
+def runBBS(yrStart, isSkipTitle=False):
+  script = 'BBS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runBBSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), d['pbS'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
 def runGMRCore(yrStart):
   und = 'GDAXI.INDX'
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart-1)
@@ -1038,122 +1128,45 @@ def runSTK(yrStart, isSkipTitle=False):
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
-def runHMRCore(yrStart):
-  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
-  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
-  und = '2828.HK'
-  volTgt = .32
-  maxWgt = 1.0
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
-  df = dfDict[und]
-  ibsS = getIbsS(df)
-  ibs2S = getIbsS(df, n=2).rename('IBS2')
-  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
-  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
-  isExitS = ibsS > .50
-  stateS = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
+def runYPSCore(yrStart):
+  # XLY/XLP 1d ratio thrust > 1.75 x sd60 -> long SPY (ES) same close; TS5
+  # VT 0.29 / maxWgt 1.5 — ql.bt MDD 14.9% since 2017 (2020-03-16; .30 = 15.4%) (2026-11-11)
+  # Seated @b 2026-11-12 (swap WRS→YPS; ART 83.3 Strong).
+  und = 'SPY'
+  etc = ['XLY', 'XLP']
+  volTgt = .29
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = btSetup([und] + etc, yrStart=yrStart - 1)
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  yS = dfDict['XLY']['Close']
+  pS = dfDict['XLP']['Close']
+  relS = (np.log(yS).diff() - np.log(pS).diff()).rename('Rel')
+  thrS = (1.75 * relS.rolling(60).std().shift(1)).rename('Thr')
+  chgS = (yS / pS).pct_change().rename('XLY/XLP 1D')
+  isEntryS = chgS > thrS
+  isExitS = isEntryS & False
+  stateS = getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
   dw[und] = stateS
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ibs2S'] = ibs2S
-  d['wprS'] = wprS
+  d['chgS'] = chgS
+  d['thrS'] = thrS
   return d
 
-def runHMR(yrStart, isSkipTitle=False):
-  script = 'HMR'
-  if not isSkipTitle:
-    st.header(script)
-  d = runHMRCore(yrStart)
-  st.header('Table')
-  df = d['dfDict']['2828.HK']
-  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runWRSCore(yrStart):
-  # QQQ: WPR10<-80 & Ratio(EMA100/EMA100.shift3)>1 & Ratio2(C/(0.99*VWAP12))<1; exit WPR>-20 | prior high | TS7; no VT.
-  und = 'QQQ'
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
-  #####
-  df = dfDict[und]
-  cS = df['Close']
-  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=10)
-  emaS = EMA(cS, 100)
-  vS = df['Volume'].astype(float)
-  vwapS = (cS * vS).rolling(12, min_periods=12).sum() / vS.rolling(12, min_periods=12).sum()
-  ratioS = (emaS / emaS.shift(3)).rename('Ratio')
-  ratio2S = (cS / (0.99 * vwapS)).rename('Ratio 2')
-  #####
-  isEntryS = (wprS < -80) & (ratioS > 1) & (ratio2S < 1)
-  isExitS = (wprS > -20) | (cS > df['High'].shift(1))
-  dw[und] = getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)  
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['ratioS'] = ratioS
-  d['ratio2S'] = ratio2S
-  return d
-
-def runWRS(yrStart, isSkipTitle=False):
-  script = 'WRS'
+def runYPS(yrStart, isSkipTitle=False):
+  script = 'YPS'
   if not isSkipTitle:
     st.header(script)
   #####
-  d = runWRSCore(yrStart)
+  d = runYPSCore(yrStart)
   st.header('Table')
-  tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), how='inner')
-  stWriteDf(tableS.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runBBSCore(yrStart):
-  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3.5σ)<0.2;
-  # exit %B>0.8 or TS30 fallback (shorter fuse than 40; not primary TS like WRS7); no VT.
-  # 2026-10-31: BB std 3.0→3.5 (stricter %B entry / slower exit; sens OK 2008+).
-  und = 'QQQ'
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
-  #####
-  df = dfDict[und]
-  hS = df['High']
-  lS = df['Low']
-  cS = df['Close']
-  atrS = ta.atr(hS, lS, cS, length=20)
-  bbDf = ta.bbands(cS, length=10, std=3.5)
-  upperS = bbDf['BBU_10_3.5']
-  lowerS = bbDf['BBL_10_3.5']
-  pbS = bbDf['BBP_10_3.5']  # %B
-  ratioS = (cS / EMA(cS, 100)).rename('Ratio')
-  ratio2S = (atrS / atrS.rolling(101).median()).rename('Ratio 2')
-  #####
-  isEntryS = (ratioS > 1) & (ratio2S < 1) & (pbS < 0.2)
-  isExitS = pbS > 0.8
-  dw[und] = getStateS_timestop(isEntryS, isExitS, 30, isCleaned=True, isMonthlyRebal=True)
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['pbS'] = pbS
-  d['ratioS'] = ratioS
-  d['ratio2S'] = ratio2S
-  return d
-
-def runBBS(yrStart, isSkipTitle=False):
-  script = 'BBS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runBBSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), d['pbS'].round(3), how='inner')
-  stWriteDf(tableS.tail())
+  stWriteDf(ul.merge(d['chgS'].round(3), d['thrS'].round(3), how='inner').tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)

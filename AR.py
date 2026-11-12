@@ -22,7 +22,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   #####
   a=.2
   b=.08
-  l = ul.spl('TAA,COS,HMR,IBS,RSS,BBS,GMR,IBS2,JMR,MTM,STK,WRS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,WTS,ZBT')
+  l = ul.spl('TAA,COS,HMR,IBS,RSS,BBS,GMR,IBS2,JMR,MTM,STK,YPS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,WTS,ZBT')
   d = {
     'TAA': a,  # _TAA
     #####
@@ -34,29 +34,30 @@ def runAlpha(yrStart, isSkipTitle=False):
     # Tier B MRs (sorted)
     'BBS': b,  # _MR
     'GMR': b,  # _MR
-    'HMR': b,  # _HMR — harness: 2828.HK Tier-2 → @b
-    'IBS2': b,  # _MR — IWM; exit 0.8|hib TS6; VT 0.255 (ql.bt MDD<15%)
-    'JMR': b,  # _MR — harness: EWJ/FXY Tier-2 → @b
-    'MTM': b,  # _MR — MTUM→QQQ WPR7∩IBS<.2; VT 0.32 / max1.5; seated 2026-11-11
+    'HMR': b,  # _HMR
+    'IBS2': b,  # _MR
+    'JMR': b,  # _MR
+    'MTM': b,  # _MR
     'STK': b,  # _MR
-    'WRS': b,  # _MR
+    'YPS': b,  # _MR
     #####
     # Hedges
     'SCI': b,  # *** review monthly ***
     'VCA': a,  # _ETC
-    'VCA2': b, # _ETC
-    'VCA3': b, # _ETC
+    'VCA2': b,  # _ETC
+    'VCA3': b,  # _ETC
     #####
     # Etc
     'AHS': b,  # *** review monthly ***
-    'BTS': a,  # _BTS — BTC Tier-1; VT 0.20 / maxWgt 1.5 (MDD~14.6%)
+    'BTS': a,  # _BTS
     'GEO': b,  # *** review monthly ***
     'WTS': b,  # _ETC
-    'ZBT': b,  # *** review monthly *** — a→b 2026-11-08 (sparse sample; AFR nudge)
+    'ZBT': b,  # *** review monthly ***
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
 #  UPI: 51.76          UPI3y: 77.25          Sharpe: 4.41          Cagr: 44.0%          MaxDD: 4.5% (2026-11-11 10:53; +MTM @b IBS<.2 VT0.32; sumW 2.40)
+#  UPI: 52.44          UPI3y: 78.87          Sharpe: 4.54          Cagr: 44.3%          MaxDD: 4.4% (2026-11-12 10:53; WRS→YPS @b; sumW 2.40)
 
 #####
   tickers = d.keys() - l
@@ -78,7 +79,7 @@ def runAlpha(yrStart, isSkipTitle=False):
   for und in l:
     dp[und] = applyDates(ul.cachePersist('r', und), dp)
   #####
-  dp = dp.bfill() # can try to see whether works or not
+  dp = dp.bfill()
   bt(script, dp, dw, yrStart)
   #####
   st.header('Corrs')
@@ -95,11 +96,12 @@ chosenYear = 2017
 st.write('')
 y = int(chosenYear)
 if isRunSystems:
-  # TAA (juggernaut)
+  # Presentation order matches `l` / QuantLib Core order (not weight-tier order).
+  # TAA
   runTAA(y)
   st.divider()
   #####
-  # Tier A MRs
+  # MRs (COS/IBS/RSS @a; HMR @b — run early for page order)
   runCOS(y)
   st.divider()
   runHMR(y)
@@ -122,7 +124,7 @@ if isRunSystems:
   st.divider()
   runSTK(y)
   st.divider()
-  runWRS(y)
+  runYPS(y)
   st.divider()
   #####
   # Hedges
