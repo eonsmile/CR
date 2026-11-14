@@ -20,9 +20,10 @@ def runAlpha(yrStart, isSkipTitle=False):
   if not isSkipTitle:
     st.header(script)
   #####
+  # Within each group, scripts are alphabetically sorted (l / weights / run* match QuantLib).
   a=.2
   b=.08
-  l = ul.spl('TAA,COS,HMR,IBS,RSS,BBS,GMR,IBS2,JMR,MTM,STK,YPS,SCI,VCA,VCA2,VCA3,AHS,BTS,GEO,WTS,ZBT')
+  l = ul.spl('TAA,COS,IBS,RSS,BBS,GMR,HMR,IBS2,JMR,MTM,STK,YPS,SCI,VCA,VCA2,VCA3,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
   d = {
     'TAA': a,  # _TAA
     #####
@@ -31,7 +32,7 @@ def runAlpha(yrStart, isSkipTitle=False):
     'IBS': a,  # _MR
     'RSS': a,  # _MR
     #####
-    # Tier B MRs (sorted)
+    # Tier B MRs
     'BBS': b,  # _MR
     'GMR': b,  # _MR
     'HMR': b,  # _HMR
@@ -43,21 +44,27 @@ def runAlpha(yrStart, isSkipTitle=False):
     #####
     # Hedges
     'SCI': b,  # *** review monthly ***
-    'VCA': a,  # _ETC
-    'VCA2': b,  # _ETC
-    'VCA3': b,  # _ETC
+    'VCA': a,  # _HEDGES
+    'VCA2': b,  # _HEDGES
+    'VCA3': b,  # _HEDGES
+    #####
+    # Alt1
+    'BCS': a,  # _BCS
+    'NGS': b,  # _ALT1
+    'SIS': b,  # _ALT1
+    'WTS': b,  # _ALT1
     #####
     # Etc
     'AHS': b,  # *** review monthly ***
-    'BTS': a,  # _BTS
     'GEO': b,  # *** review monthly ***
-    'WTS': b,  # _ETC
     'ZBT': b,  # *** review monthly ***
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
 #  UPI: 51.76          UPI3y: 77.25          Sharpe: 4.41          Cagr: 44.0%          MaxDD: 4.5% (2026-11-11 10:53; +MTM @b IBS<.2 VT0.32; sumW 2.40)
 #  UPI: 52.44          UPI3y: 78.87          Sharpe: 4.54          Cagr: 44.3%          MaxDD: 4.4% (2026-11-12 10:53; WRS→YPS @b; sumW 2.40)
+#  UPI: 52.89          UPI3y: 79.63          Sharpe: 4.60          Cagr: 45.5%          MaxDD: 4.4% (2026-11-14 21:30; +STS @b VT0.315; sumW 2.48)
+#  (pending AFR) rename BTS→BCS, STS→SIS; +NGS @b; Alt1 section; sumW 2.56 (2026-11-15)
 
 #####
   tickers = d.keys() - l
@@ -96,25 +103,24 @@ chosenYear = 2017
 st.write('')
 y = int(chosenYear)
 if isRunSystems:
-  # Presentation order matches `l` / QuantLib Core order (not weight-tier order).
-  # TAA
+  # Presentation order matches `l` / QuantLib Core order.
   runTAA(y)
   st.divider()
   #####
-  # MRs (COS/IBS/RSS @a; HMR @b — run early for page order)
+  # Tier A MRs
   runCOS(y)
-  st.divider()
-  runHMR(y)
   st.divider()
   runIBS(y)
   st.divider()
   runRSS(y)
   st.divider()
   #####
-  # Tier B MRs (sorted)
+  # Tier B MRs
   runBBS(y)
   st.divider()
   runGMR(y)
+  st.divider()
+  runHMR(y)
   st.divider()
   runIBS2(y)
   st.divider()
@@ -137,14 +143,20 @@ if isRunSystems:
   runVCA3(y)
   st.divider()
   #####
+  # Alt1
+  runBCS(y)
+  st.divider()
+  runNGS(y)
+  st.divider()
+  runSIS(y)
+  st.divider()
+  runWTS(y)
+  st.divider()
+  #####
   # Etc
   runAHS(y)
   st.divider()
-  runBTS(y)
-  st.divider()
   runGEO(y)
-  st.divider()
-  runWTS(y)
   st.divider()
   runZBT(y)
   st.divider()

@@ -217,6 +217,15 @@ def getIbsS(df,n=1):
   ibsS.name = 'IBS'
   return ibsS
 
+def getSigmaSpikeS(cS, n=60, isShift=True, prefix=''):
+  # Adam Grimes SigmaSpike: r / rolling sd(n); default sd lagged 1 day
+  rS = cS.astype(float).pct_change()
+  sdS = rS.rolling(int(n)).std()
+  if isShift:
+    sdS = sdS.shift(1)
+  name = f'{prefix} SigmaSpike' if prefix else 'SigmaSpike'
+  return (rS / sdS).rename(name)
+
 def getNYSEEomS(idx):
   """Sessions-to-month-end on the real NYSE calendar (1 = last session).
 
@@ -693,13 +702,13 @@ def runTAA(yrStart, isSkipTitle=False):
 
 #####
 # Sleeve Core/run defs: keep definition order = AR.py presentation (run*) order.
-# Live AR (2026-11-12): TAA | COS,HMR,IBS,RSS | BBS,GMR,IBS2,JMR,MTM,STK,YPS |
-#   SCI,VCA,VCA2,VCA3 | AHS,BTS,GEO,WTS,ZBT.
+# Within each group, scripts are alphabetically sorted.
+# Groups: TAA | Tier-A MRs | Tier-B MRs | Hedges | Alt1 | Etc.
 # Parked WRS → Lab/live-extras/WRSLib.py (not in this file).
 #####
 
 #####
-# Tier A MRs — AR order: COS, HMR, IBS, RSS (HMR runs here; weight still @b / _HMR)
+# Tier A MRs
 #####
 def runCOSCore(yrStart):
   und, size = 'SPY', 2
@@ -747,47 +756,6 @@ def runCOS(yrStart, isSkipTitle=False):
   stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dwIntraday'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-#####
-# HMR — AR presents with Tier A (after COS); weight @b / _HMR
-#####
-def runHMRCore(yrStart):
-  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
-  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
-  und = '2828.HK'
-  volTgt = .32
-  maxWgt = 1.0
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
-  df = dfDict[und]
-  ibsS = getIbsS(df)
-  ibs2S = getIbsS(df, n=2).rename('IBS2')
-  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
-  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
-  isExitS = ibsS > .50
-  stateS = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ibs2S'] = ibs2S
-  d['wprS'] = wprS
-  return d
-
-def runHMR(yrStart, isSkipTitle=False):
-  script = 'HMR'
-  if not isSkipTitle:
-    st.header(script)
-  d = runHMRCore(yrStart)
-  st.header('Table')
-  df = d['dfDict']['2828.HK']
-  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
-  stWriteDf(df2.tail())
-  st.header('Weights')
-  dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runIBSCore(yrStart):
@@ -870,7 +838,7 @@ def runRSS(yrStart,isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
-# Tier B MRs — AR order: BBS, GMR, IBS2, JMR, MTM, STK, YPS
+# Tier B MRs
 #####
 def runBBSCore(yrStart):
   # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3.5σ)<0.2;
@@ -955,6 +923,44 @@ def runGMR(yrStart, isSkipTitle=False):
   tableS = ul.merge(
     d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
   stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runHMRCore(yrStart):
+  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
+  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
+  und = '2828.HK'
+  volTgt = .32
+  maxWgt = 1.0
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  df = dfDict[und]
+  ibsS = getIbsS(df)
+  ibs2S = getIbsS(df, n=2).rename('IBS2')
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
+  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
+  isExitS = ibsS > .50
+  stateS = getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ibsS'] = ibsS
+  d['ibs2S'] = ibs2S
+  d['wprS'] = wprS
+  return d
+
+def runHMR(yrStart, isSkipTitle=False):
+  script = 'HMR'
+  if not isSkipTitle:
+    st.header(script)
+  d = runHMRCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['2828.HK']
+  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
+  stWriteDf(df2.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -1339,15 +1345,155 @@ def runVCA3(yrStart,isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 #####
-# AHS
+# Alt1
 #####
-# Investlab https://investlab.substack.com/p/adaptive-hedge-a-cheaper-way-to-survive
-# Carlson   https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5334772
-# ICOM.LSE listed 2017-07-26; PriceLib switches from DJP splice on 2018-10-31
+def runBCSCore(yrStart):
+  # BTC trend: >50DMA & >0.8x240d high; monthly; VT 0.20 / maxWgt 1.5 (harness Tier-1)
+  # Renamed BTS→BCS 2026-11-15.
+  volTgt = .20
+  maxWgt = 1.5
+  cS = pl.getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
+  ratioS = (cS / cS.rolling(50).mean()).rename('Ratio')
+  ratio2S = (cS / cS.rolling(240).max()).rename('Ratio2')
+  dw = ((ratioS > 1) & (ratio2S > 0.8)).rename('BTC').to_frame()
+  dp = cS.rename('BTC').to_frame()
+  hv = getHV(dp, af=365)
+  dw = cleanS(dw, isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratioS'] = ratioS
+  d['ratio2S'] = ratio2S
+  return d
+
+def runBCS(yrStart, isSkipTitle=False):
+  script = 'BCS'
+  if not isSkipTitle:
+    st.header(script)
+  d = runBCSCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(d['dp'], d['ratioS'].round(3), d['ratio2S'].round(3), how='inner')
+  stWriteDf(tableS.tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runNGSCore(yrStart):
+  # UNG idio down SigmaSpike: zUNGS<-1.5 & zSPYS>=-1 & ratioS<1 (C/SMA200) -> short UNG same close; TS3
+  # VT 0.32 / maxWgt 1 — locked UNG 2017+ (2026-11-15). Seated @b (Alt1). Was NGX.
+  und = 'UNG'
+  volTgt = .32
+  maxWgt = 1.0
+  dp, dw, dfDict, hv = btSetup([und, 'SPY'], yrStart=yrStart - 1)
+  dp = dp[[und]]; dw = dw[[und]]; hv = hv[[und]]
+  #####
+  cS = dfDict[und]['Close']
+  zUNGS = getSigmaSpikeS(cS, prefix='UNG')
+  zSPYS = getSigmaSpikeS(dfDict['SPY']['Close'], prefix='SPY')
+  ratioS = (cS / cS.rolling(200).mean()).rename('Ratio')
+  isEntryS = applyDates((zUNGS < -1.5) & ~(zSPYS < -1) & (ratioS < 1), dw)
+  isExitS = isEntryS & False
+  stateS = getStateS_timestop(isEntryS, isExitS, 3, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = -stateS
+  dw = (dw * volTgt / hv).clip(-maxWgt, 0)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['zUNGS'] = zUNGS
+  d['zSPYS'] = zSPYS
+  d['ratioS'] = ratioS
+  return d
+
+def runNGS(yrStart, isSkipTitle=False):
+  script = 'NGS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runNGSCore(yrStart)
+  st.header('Table')
+  stWriteDf(ul.merge(d['dp'], d['zUNGS'].round(2), d['zSPYS'].round(2),
+                     d['ratioS'].round(3), how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runSISCore(yrStart):
+  # SLV SigmaSpike: 1d ret / sd60(lag1) > 1.5 -> long SLV same close; TS3
+  # VT 0.315 / maxWgt 1 — MDD 14.9% since 2017 (vt0.25 was 13.6%; ART 78.5) (2026-11-14)
+  # Seated @b 2026-11-14 (Alt1). Renamed STS→SIS 2026-11-15.
+  und = 'SLV'
+  volTgt = .315
+  maxWgt = 1.0
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  #####
+  cS = dfDict[und]['Close']
+  spikeS = getSigmaSpikeS(cS, prefix='SLV')
+  isEntryS = applyDates(spikeS > 1.5, dw)
+  isExitS = isEntryS & False
+  stateS = getStateS_timestop(isEntryS, isExitS, 3, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['spikeS'] = spikeS
+  return d
+
+def runSIS(yrStart, isSkipTitle=False):
+  script = 'SIS'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runSISCore(yrStart)
+  st.header('Table')
+  stWriteDf(ul.merge(d['dp'], d['spikeS'].round(2), how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
+
+def runWTSCore(yrStart):
+  # WEAT L/S: ratio10/50 + quiet3; next-open; VT 0.17 / maxWgt 1 (niche rulebook)
+  volTgt, maxWgt, quietN = .17, 1.0, 3
+  und = 'WEAT'
+  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
+  oS = dfDict[und]['Open']
+  cS = dfDict[und]['Close']
+  ratio10S = (cS / cS.shift(10)).rename('Ratio 10D')
+  ratio50S = (cS / cS.shift(50)).rename('Ratio 50D')
+  isLongS = ((ratio10S > 1) & (ratio50S < 1)).fillna(False)
+  isShortS = ((ratio10S < 1) & (ratio50S > 1)).fillna(False)
+  isQuiet3S = ((~isLongS & ~isShortS).rolling(quietN).sum() >= quietN).fillna(False)
+  #####
+  dp[und] = oS.shift(-1)
+  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
+  dw[und] = getStateS(isLongS, isShortS | isQuiet3S) - getStateS(isShortS, isLongS | isQuiet3S)
+  dw = cleanS(dw, isMonthlyRebal=True)
+  dw = dw * (volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['ratio10S'] = ratio10S
+  d['ratio50S'] = ratio50S
+  return d
+
+def runWTS(yrStart, isSkipTitle=False):
+  script = 'WTS'
+  if not isSkipTitle:
+    st.header(script)
+  d = runWTSCore(yrStart)
+  st.header('Table')
+  stWriteDf(ul.merge(d['dp'], d['ratio10S'].round(3), d['ratio50S'].round(3), how='inner').tail())
+  st.header('Weights')
+  dwTail(d['dw'])
+  bt(script, d['dp'], d['dw'], yrStart)
 
 #####
 # Etc
 #####
+# AHS — Investlab https://investlab.substack.com/p/adaptive-hedge-a-cheaper-way-to-survive
+#        Carlson   https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5334772
+#        ICOM.LSE listed 2017-07-26; PriceLib switches from DJP splice on 2018-10-31
 def runAHSCore(yrStart):
   # 2026-10-21: drop SH only; keep GLD; VT raised to size-limits MDD edge (<15%)
   volTgt, maxWgt = .16, 1.5
@@ -1398,37 +1544,6 @@ def runAHS(yrStart, isSkipTitle=False):
   stWriteDf(d['dp'].tail())
   st.header('Ratios')
   stWriteDf(d['ratioS'].round(3).tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
-def runBTSCore(yrStart):
-  # BTC trend: >50DMA & >0.8x240d high; monthly; VT 0.20 / maxWgt 1.5 (harness Tier-1)
-  volTgt = .20
-  maxWgt = 1.5
-  cS = pl.getPriceHistoryCrypto('BTC', yrStart=yrStart)['Close']
-  ratioS = (cS / cS.rolling(50).mean()).rename('Ratio')
-  ratio2S = (cS / cS.rolling(240).max()).rename('Ratio2')
-  dw = ((ratioS > 1) & (ratio2S > 0.8)).rename('BTC').to_frame()
-  dp = cS.rename('BTC').to_frame()
-  hv = getHV(dp, af=365)
-  dw = cleanS(dw, isMonthlyRebal=True)
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['ratioS'] = ratioS
-  d['ratio2S'] = ratio2S
-  return d
-
-def runBTS(yrStart, isSkipTitle=False):
-  script = 'BTS'
-  if not isSkipTitle:
-    st.header(script)
-  d = runBTSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['dp'], d['ratioS'].round(3), d['ratio2S'].round(3), how='inner')
-  stWriteDf(tableS.tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
@@ -1484,42 +1599,6 @@ def runGEO(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 
-def runWTSCore(yrStart):
-  # WEAT L/S: ratio10/50 + quiet3; next-open; VT 0.17 / maxWgt 1 (niche rulebook)
-  volTgt, maxWgt, quietN = .17, 1.0, 3
-  und = 'WEAT'
-  dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
-  oS = dfDict[und]['Open']
-  cS = dfDict[und]['Close']
-  ratio10S = (cS / cS.shift(10)).rename('Ratio 10D')
-  ratio50S = (cS / cS.shift(50)).rename('Ratio 50D')
-  isLongS = ((ratio10S > 1) & (ratio50S < 1)).fillna(False)
-  isShortS = ((ratio10S < 1) & (ratio50S > 1)).fillna(False)
-  isQuiet3S = ((~isLongS & ~isShortS).rolling(quietN).sum() >= quietN).fillna(False)
-  #####
-  dp[und] = oS.shift(-1)
-  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
-  dw[und] = getStateS(isLongS, isShortS | isQuiet3S) - getStateS(isShortS, isLongS | isQuiet3S)
-  dw = cleanS(dw, isMonthlyRebal=True)
-  dw = dw * (volTgt / hv).clip(0, maxWgt)
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['ratio10S'] = ratio10S
-  d['ratio50S'] = ratio50S
-  return d
-
-def runWTS(yrStart, isSkipTitle=False):
-  script = 'WTS'
-  if not isSkipTitle:
-    st.header(script)
-  d = runWTSCore(yrStart)
-  st.header('Table')
-  stWriteDf(ul.merge(d['dp'], d['ratio10S'].round(3), d['ratio50S'].round(3), how='inner').tail())
-  st.header('Weights')
-  dwTail(d['dw'])
-  bt(script, d['dp'], d['dw'], yrStart)
-
 def runZBTCore(yrStart):
   # Carson / Detrick official ZBT dates (table 25 Apr 2025)
   zbtDates = [
@@ -1554,6 +1633,8 @@ def runZBT(yrStart,isSkipTitle=False):
 
 #####
 
+
+#####
 
 def runAggregate(yrStart,strategies,weights,script,isBFill=False, isCorrs=False):
   st.header(script)
