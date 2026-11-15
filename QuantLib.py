@@ -11,6 +11,7 @@ import math
 import pendulum
 import pandas_ta_classic as ta
 import pandas_market_calendars
+from pathlib import Path
 
 ###########
 # Functions
@@ -148,6 +149,146 @@ def endpoints(df, offset=0):
   out = np.unique(date_idx)
   return out
 
+def getEiaWngsrReleaseDates(start, end):
+  """WNGSR release dates from calendars/eia_wngsr.txt (checked-in SoT).
+
+  Append one ISO date per line when EIA posts new schedule rows
+  (https://ir.eia.gov/ngs/schedule.html). Past the last pin date, falls back to
+  the holiday rule: Mon/Fri holiday → Thu; Tue/Wed holiday → Fri; Thu holiday → Wed.
+  """
+  import re
+  start, end = pd.Timestamp(start), pd.Timestamp(end)
+  start_d, end_d = start.date(), end.date()
+  pin_path = Path(__file__).resolve().parent / 'calendars' / 'eia_wngsr.txt'
+  pin = []
+  if pin_path.exists():
+    for line in pin_path.read_text(encoding='utf-8').splitlines():
+      s = line.strip()
+      if not s or s.startswith('#'):
+        continue
+      m = re.match(r'^(\d{4}-\d{2}-\d{2})$', s)
+      if m:
+        pin.append(pd.Timestamp(m.group(1)).date())
+  pin = sorted(set(pin))
+  out = [d for d in pin if start_d <= d <= end_d]
+  last_pin = pin[-1] if pin else None
+  if last_pin is not None and end_d <= last_pin:
+    return out
+
+  # look-ahead past pin: NYSE holiday rule only
+  rule_start = pd.Timestamp(last_pin) + pd.Timedelta(days=1) if last_pin else start
+  if rule_start > end:
+    return out
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  hol = set()
+  for rule in cal.regular_holidays.rules:
+    hol.update(pd.Timestamp(x).date() for x in rule.dates(rule_start, end))
+  hol.add(pd.Timestamp('2025-01-09').date())  # National Day of Mourning
+  by_thu = {}
+  for t in pd.date_range(rule_start, end, freq='D'):
+    if t.dayofweek != 3:
+      continue
+    mon = t - pd.Timedelta(days=t.dayofweek)
+    week = [(mon + pd.Timedelta(days=i)).date() for i in range(5)]
+    tue, wed, thu = week[1], week[2], week[3]
+    if thu in hol:
+      rel = (t - pd.Timedelta(days=1)).date()
+    elif tue in hol or wed in hol:
+      rel = (t + pd.Timedelta(days=1)).date()
+    else:
+      rel = thu
+    if last_pin is not None and rel <= last_pin:
+      continue
+    if rel < start_d or rel > end_d:
+      continue
+    by_thu[thu] = rel
+  out.extend(by_thu.values())
+  return sorted(set(out))
+
+def getIsPreEiaEntryS(idx):
+  """True on the last NYSE session strictly before each WNGSR release date.
+
+  Uses the NYSE calendar (not only printed idx) so look-ahead is correct when
+  the tape has not yet reached the true entry day.
+  """
+  idxIn = pd.DatetimeIndex(idx)
+  norm = idxIn.tz_localize(None) if idxIn.tz is not None else idxIn
+  norm = norm.normalize()
+  start = (norm[0] - pd.Timedelta(days=7)).strftime('%Y-%m-%d')
+  end = (norm[-1] + pd.Timedelta(days=21)).strftime('%Y-%m-%d')
+  releases = getEiaWngsrReleaseDates(start, end)
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  sessions = pd.DatetimeIndex([
+    pd.Timestamp(x).date() for x in cal.valid_days(start_date=start, end_date=end)
+  ])
+  out = pd.Series(False, index=idxIn, name='Pre EIA?')
+  # map normalized dates -> first matching label in idx (preserve original stamps)
+  by_day = {}
+  for ts, day in zip(idxIn, norm):
+    by_day.setdefault(pd.Timestamp(day).date(), ts)
+  for r in releases:
+    pos = sessions.searchsorted(pd.Timestamp(r), side='left') - 1
+    if pos < 0:
+      continue
+    entry = sessions[pos].date() if hasattr(sessions[pos], 'date') else pd.Timestamp(sessions[pos]).date()
+    if entry in by_day:
+      out.loc[by_day[entry]] = True
+  return out
+
+def getNYSEEomS(idx):
+  """Sessions-to-month-end on the real NYSE calendar (1 = last session).
+
+  Current month is ranked through getNYSEMonthEnd, not through last printed
+  price, so mid-month bars are not treated as EOM.
+  """
+  idx = pd.DatetimeIndex(idx)
+  if idx.tz is not None:
+    idx = idx.tz_localize(None)
+  idx = idx.normalize()
+  today = pd.Timestamp(pendulum.now('America/New_York').to_date_string())
+  curEom = pd.Timestamp(getNYSEMonthEnd(offset=0)).normalize()
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  spanStart = (pd.Timestamp(idx[0]) - pd.Timedelta(days=10)).strftime('%Y-%m-%d')
+  spanEnd = max(idx[-1], curEom, today).strftime('%Y-%m-%d')
+  sessions = pd.DatetimeIndex([
+    pd.Timestamp(x).date() for x in cal.schedule(start_date=spanStart, end_date=spanEnd).index
+  ])
+  s = pd.DataFrame({'ym': sessions.to_period('M')}, index=sessions)
+  curYm = curEom.to_period('M')
+  s = s.loc[(s['ym'] < curYm) | ((s['ym'] == curYm) & (s.index <= curEom))]
+  eom = s.groupby('ym').cumcount(ascending=False) + 1
+  return eom.reindex(idx).rename('EOM')
+
+def getNYSEHolidayDates(start, end, prefixes):
+  cal = pandas_market_calendars.get_calendar('NYSE')
+  start, end = pd.Timestamp(start), pd.Timestamp(end)
+  out = []
+  for rule in cal.regular_holidays.rules:
+    name = rule.name.lower()
+    if any(name.startswith(p) for p in prefixes):
+      out.extend(rule.dates(start, end))
+  if len(out) == 0:
+    return pd.DatetimeIndex([])
+  return pd.DatetimeIndex(pd.to_datetime(out)).normalize().unique().sort_values()
+
+def getNYSEMonthEnd(offset=0):
+  tz = 'America/New_York'
+  now = pendulum.now(tz)
+  monthStart = now.start_of('month').to_date_string()
+  monthEnd = now.end_of('month').to_date_string()
+  nyseCalendar = pandas_market_calendars.get_calendar('NYSE')
+  schedule = nyseCalendar.schedule(start_date=monthStart, end_date=monthEnd)
+  sessions = schedule.index
+  if len(sessions) == 0:
+    raise ValueError(f'No NYSE sessions found for {now.format("YYYY-MM")}')
+  targetIdx = (len(sessions) - 1) + offset
+  if targetIdx < 0 or targetIdx >= len(sessions):
+    raise ValueError(
+      f'offset {offset} is out of range for {now.format("YYYY-MM")} '
+      f'(valid offsets: {-len(sessions) + 1}..0)'
+    )
+  return pd.Timestamp(pd.Timestamp(sessions[targetIdx]).date())
+
 #############################################################################################
 
 #####
@@ -225,60 +366,6 @@ def getSigmaSpikeS(cS, n=60, isShift=True, prefix=''):
     sdS = sdS.shift(1)
   name = f'{prefix} SigmaSpike' if prefix else 'SigmaSpike'
   return (rS / sdS).rename(name)
-
-def getNYSEEomS(idx):
-  """Sessions-to-month-end on the real NYSE calendar (1 = last session).
-
-  Current month is ranked through getNYSEMonthEnd, not through last printed
-  price, so mid-month bars are not treated as EOM.
-  """
-  idx = pd.DatetimeIndex(idx)
-  if idx.tz is not None:
-    idx = idx.tz_localize(None)
-  idx = idx.normalize()
-  today = pd.Timestamp(pendulum.now('America/New_York').to_date_string())
-  curEom = pd.Timestamp(getNYSEMonthEnd(offset=0)).normalize()
-  cal = pandas_market_calendars.get_calendar('NYSE')
-  spanStart = (pd.Timestamp(idx[0]) - pd.Timedelta(days=10)).strftime('%Y-%m-%d')
-  spanEnd = max(idx[-1], curEom, today).strftime('%Y-%m-%d')
-  sessions = pd.DatetimeIndex([
-    pd.Timestamp(x).date() for x in cal.schedule(start_date=spanStart, end_date=spanEnd).index
-  ])
-  s = pd.DataFrame({'ym': sessions.to_period('M')}, index=sessions)
-  curYm = curEom.to_period('M')
-  s = s.loc[(s['ym'] < curYm) | ((s['ym'] == curYm) & (s.index <= curEom))]
-  eom = s.groupby('ym').cumcount(ascending=False) + 1
-  return eom.reindex(idx).rename('EOM')
-
-def getNYSEHolidayDates(start, end, prefixes):
-  cal = pandas_market_calendars.get_calendar('NYSE')
-  start, end = pd.Timestamp(start), pd.Timestamp(end)
-  out = []
-  for rule in cal.regular_holidays.rules:
-    name = rule.name.lower()
-    if any(name.startswith(p) for p in prefixes):
-      out.extend(rule.dates(start, end))
-  if len(out) == 0:
-    return pd.DatetimeIndex([])
-  return pd.DatetimeIndex(pd.to_datetime(out)).normalize().unique().sort_values()
-
-def getNYSEMonthEnd(offset=0):
-  tz = 'America/New_York'
-  now = pendulum.now(tz)
-  monthStart = now.start_of('month').to_date_string()
-  monthEnd = now.end_of('month').to_date_string()
-  nyseCalendar = pandas_market_calendars.get_calendar('NYSE')
-  schedule = nyseCalendar.schedule(start_date=monthStart, end_date=monthEnd)
-  sessions = schedule.index
-  if len(sessions) == 0:
-    raise ValueError(f'No NYSE sessions found for {now.format("YYYY-MM")}')
-  targetIdx = (len(sessions) - 1) + offset
-  if targetIdx < 0 or targetIdx >= len(sessions):
-    raise ValueError(
-      f'offset {offset} is out of range for {now.format("YYYY-MM")} '
-      f'(valid offsets: {-len(sessions) + 1}..0)'
-    )
-  return pd.Timestamp(pd.Timestamp(sessions[targetIdx]).date())
 
 def getStateS(isEntryS, isExitS, isCleaned=False, isMonthlyRebal=True):
   if len(isEntryS)!=len(isExitS):
@@ -1380,10 +1467,11 @@ def runBCS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runNGSCore(yrStart):
-  # UNG idio down SigmaSpike: zUNGS<-1.5 & zSPYS>=-1 & ratioS<1 (C/SMA200) -> short UNG same close; TS3
-  # VT 0.32 / maxWgt 1 — locked UNG 2017+ (2026-11-15). Seated @b (Alt1). Was NGX.
+  # UNG idio down SigmaSpike (TS3) OR session-before-EIA WNGSR Nov–Mar (TS1)
+  # Dense timestop per leg → OR → one cleanS (do not clean before OR).
+  # VT 0.24 / maxWgt 1 — pre-EIA path ~UPI2.88/DD14.7 since 2017. Seated @b 2026-11-15.
   und = 'UNG'
-  volTgt = .32
+  volTgt = .24
   maxWgt = 1.0
   dp, dw, dfDict, hv = btSetup([und, 'SPY'], yrStart=yrStart - 1)
   dp = dp[[und]]; dw = dw[[und]]; hv = hv[[und]]
@@ -1392,9 +1480,15 @@ def runNGSCore(yrStart):
   zUNGS = getSigmaSpikeS(cS, prefix='UNG')
   zSPYS = getSigmaSpikeS(dfDict['SPY']['Close'], prefix='SPY')
   ratioS = (cS / cS.rolling(200).mean()).rename('Ratio')
-  isEntryS = applyDates((zUNGS < -1.5) & ~(zSPYS < -1) & (ratioS < 1), dw)
-  isExitS = isEntryS & False
-  stateS = getStateS_timestop(isEntryS, isExitS, 3, isCleaned=True, isMonthlyRebal=True)
+  isEntryAS = applyDates((zUNGS < -1.5) & ~(zSPYS < -1) & (ratioS < 1), dw).fillna(False)
+  isPreEiaS = getIsPreEiaEntryS(dw.index)  # last session before WNGSR (Thu default + holidays)
+  isWinterS = pd.Series(dw.index.month, index=dw.index).isin([11, 12, 1, 2, 3])
+  isEntryBS = (isPreEiaS & isWinterS).fillna(False)
+  stateS = (
+    (getStateS_timestop(isEntryAS, isEntryAS & False, 3) > 0)
+    | (getStateS_timestop(isEntryBS, isEntryBS & False, 1) > 0)
+  ).astype(float)
+  stateS = cleanS(stateS, isMonthlyRebal=True)
   dw[und] = -stateS
   dw = (dw * volTgt / hv).clip(-maxWgt, 0)
   d = dict()
@@ -1403,6 +1497,7 @@ def runNGSCore(yrStart):
   d['zUNGS'] = zUNGS
   d['zSPYS'] = zSPYS
   d['ratioS'] = ratioS
+  d['isPreEiaS'] = isPreEiaS
   return d
 
 def runNGS(yrStart, isSkipTitle=False):
@@ -1413,7 +1508,8 @@ def runNGS(yrStart, isSkipTitle=False):
   d = runNGSCore(yrStart)
   st.header('Table')
   stWriteDf(ul.merge(d['dp'], d['zUNGS'].round(2), d['zSPYS'].round(2),
-                     d['ratioS'].round(3), how='inner').tail())
+                     d['ratioS'].round(3), d['isPreEiaS'].astype(int),
+                     how='inner').tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
