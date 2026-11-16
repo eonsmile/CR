@@ -51,7 +51,7 @@ def runAlpha(yrStart, isSkipTitle=False):
     # Alt1
     'BCS': a,  # _BCS
     'NGS': b,  # _ALT1
-    'SIS': b,  # _ALT1
+    'SIS': b,  # _ALT1; spike∨ChinaLongHoliday VT0.32 nPost=1 (2026-11-16)
     'WTS': b,  # _ALT1
     #####
     # Etc
@@ -61,11 +61,9 @@ def runAlpha(yrStart, isSkipTitle=False):
   }
   st.write(f"Total weights: {np.sum(list(d.values())):.2f}")
 ######
-#  UPI: 51.76          UPI3y: 77.25          Sharpe: 4.41          Cagr: 44.0%          MaxDD: 4.5% (2026-11-11 10:53; +MTM @b IBS<.2 VT0.32; sumW 2.40)
-#  UPI: 52.44          UPI3y: 78.87          Sharpe: 4.54          Cagr: 44.3%          MaxDD: 4.4% (2026-11-12 10:53; WRS→YPS @b; sumW 2.40)
-#  UPI: 52.89          UPI3y: 79.63          Sharpe: 4.60          Cagr: 45.5%          MaxDD: 4.4% (2026-11-14 21:30; +STS @b VT0.315; sumW 2.48)
 #  UPI: 54.21          UPI3y: 81.88          Sharpe: 4.67          Cagr: 46.2%          MaxDD: 4.4% (2026-11-15 06:15; +NGS @b VT0.32; BCS/SIS rename; Alt1; sumW 2.56)
-#  (pending restamp) NGS→NGS2 OR @b VT0.24: spike TS3 ∨ pre-EIA WNGSR Nov–Mar TS1; stand ~UPI2.88/8.8%/DD14.7 (2026-11-15)
+#  UPI: 55.13          UPI3y: 81.88          Sharpe: 4.70          Cagr: 46.5%          MaxDD: 4.4% (2026-11-15 16:25; NGS OR @b VT0.24 pre-EIA; Alt1; sumW 2.56)
+#  UPI: 55.58          UPI3y: 82.67          Sharpe: 4.72          Cagr: 46.7%          MaxDD: 4.4% (2026-11-15 18:54; WNGSR calendar rebuild; NGS OR @b VT0.24; sumW 2.56)
 
 #####
   tickers = d.keys() - l

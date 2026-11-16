@@ -149,14 +149,70 @@ def endpoints(df, offset=0):
   out = np.unique(date_idx)
   return out
 
+def getChinaLongHolidayDenseS(idx, minGapDays=5):
+  """China long-holiday dense on/off series on the NYSE index (SIS leg).
+
+  Dense = one bool per bar (in or out every day), not a sparse list of
+  entry/exit dates. Long holiday = two consecutive XSHG sessions
+  ≥ minGapDays calendar days apart (weekend = 3; one-day holiday beside a
+  weekend = 4). L = last XSHG session before the gap; F = first after.
+  Long SLV from NYSE close on/after L through the bar before NYSE close
+  on/after F (nPost=1).
+
+  Look-ahead: XSHG/NYSE calendars are loaded past idx[-1] (and
+  XSHG_EXTRA_CLOSURES for years the library has not baked in), so a gap is
+  known on L — and earlier once the State Council override list includes that
+  year — without waiting for future SLV bars. pandas_market_calendars does not
+  auto-update 2027+ China holidays; extend XSHG_EXTRA_CLOSURES +
+  XSHG_VERIFIED_THRU each Nov/Dec from the gov.cn notice or the sleeve errors
+  past the verified year.
+  """
+  idxIn = pd.DatetimeIndex(idx)
+  norm = idxIn.tz_localize(None) if idxIn.tz is not None else idxIn
+  norm = norm.normalize()
+  if int(norm[-1].year) > XSHG_VERIFIED_THRU:
+    ul.iExit(
+      f'getChinaLongHolidayDenseS: XSHG calendar not verified past '
+      f'{XSHG_VERIFIED_THRU}; add State Council closures and bump '
+      f'XSHG_VERIFIED_THRU'
+    )
+  start = (norm[0] - pd.Timedelta(days=30)).strftime('%Y-%m-%d')
+  # Past last tape bar so upcoming L/F are visible mid-approach / mid-holiday.
+  end = (max(norm[-1], pd.Timestamp(f'{XSHG_VERIFIED_THRU}-12-31'))
+         + pd.Timedelta(days=400)).strftime('%Y-%m-%d')
+  nyse = pd.DatetimeIndex(
+    pandas_market_calendars.get_calendar('NYSE').valid_days(
+      start_date=start, end_date=end
+    )
+  ).tz_localize(None)
+  out = pd.Series(False, index=idxIn, name='ChinaLongHoliday?')
+  by_day = {}
+  for ts, day in zip(idxIn, norm):
+    by_day.setdefault(pd.Timestamp(day).normalize(), ts)
+  for L, F in getXshgClosures(start, end, minGapDays):
+    iIn = int(nyse.searchsorted(L))
+    iOut = int(nyse.searchsorted(F))
+    if iIn >= len(nyse) or iOut >= len(nyse):
+      continue
+    dIn, dOut = nyse[iIn], nyse[iOut]
+    if dOut <= dIn:
+      continue
+    for day in nyse[(nyse >= dIn) & (nyse < dOut)]:
+      key = pd.Timestamp(day).normalize()
+      if key in by_day:
+        out.loc[by_day[key]] = True
+  return out
+
 def getEiaWngsrReleaseDates(start, end):
   """WNGSR release dates from calendars/eia_wngsr.txt (checked-in SoT).
 
   Append one ISO date per line when EIA posts new schedule rows
   (https://ir.eia.gov/ngs/schedule.html). Past the last pin date, falls back to
-  the holiday rule: Mon/Fri holiday → Thu; Tue/Wed holiday → Fri; Thu holiday → Wed.
+  the federal-holiday rule (not NYSE): Thu holiday → Wed; Tue holiday → Fri;
+  Wed/Mon alone stay Thu. Pin file is the SoT for history through ~2027.
   """
   import re
+  from pandas.tseries.holiday import USFederalHolidayCalendar
   start, end = pd.Timestamp(start), pd.Timestamp(end)
   start_d, end_d = start.date(), end.date()
   pin_path = Path(__file__).resolve().parent / 'calendars' / 'eia_wngsr.txt'
@@ -175,14 +231,12 @@ def getEiaWngsrReleaseDates(start, end):
   if last_pin is not None and end_d <= last_pin:
     return out
 
-  # look-ahead past pin: NYSE holiday rule only
+  # look-ahead past pin: federal holiday rule (matches pin rebuild)
   rule_start = pd.Timestamp(last_pin) + pd.Timedelta(days=1) if last_pin else start
   if rule_start > end:
     return out
-  cal = pandas_market_calendars.get_calendar('NYSE')
-  hol = set()
-  for rule in cal.regular_holidays.rules:
-    hol.update(pd.Timestamp(x).date() for x in rule.dates(rule_start, end))
+  hol = set(pd.Timestamp(x).date() for x in USFederalHolidayCalendar().holidays(
+    start=rule_start, end=end))
   hol.add(pd.Timestamp('2025-01-09').date())  # National Day of Mourning
   by_thu = {}
   for t in pd.date_range(rule_start, end, freq='D'):
@@ -190,11 +244,12 @@ def getEiaWngsrReleaseDates(start, end):
       continue
     mon = t - pd.Timedelta(days=t.dayofweek)
     week = [(mon + pd.Timedelta(days=i)).date() for i in range(5)]
-    tue, wed, thu = week[1], week[2], week[3]
+    tue, thu = week[1], week[3]
+    fri = week[4]
     if thu in hol:
       rel = (t - pd.Timedelta(days=1)).date()
-    elif tue in hol or wed in hol:
-      rel = (t + pd.Timedelta(days=1)).date()
+    elif tue in hol:
+      rel = fri
     else:
       rel = thu
     if last_pin is not None and rel <= last_pin:
@@ -288,6 +343,33 @@ def getNYSEMonthEnd(offset=0):
       f'(valid offsets: {-len(sessions) + 1}..0)'
     )
   return pd.Timestamp(pd.Timestamp(sessions[targetIdx]).date())
+
+# XSHG long closures not yet in pandas_market_calendars (plain weekdays otherwise).
+# Source: State Council holiday notices (gov.cn). Bump XSHG_VERIFIED_THRU when extended.
+XSHG_EXTRA_CLOSURES = [  # (L last XSHG session before closure, F first session after)
+  ('2027-02-04', '2027-02-15'),  # Spring Festival
+  ('2027-04-30', '2027-05-06'),  # Labour Day
+  ('2027-09-30', '2027-10-08'),  # National Day
+]
+XSHG_VERIFIED_THRU = 2027
+
+def getXshgClosures(start, end, minGapDays=5):
+  """(L, F) pairs where XSHG sessions are ≥ minGapDays calendar days apart.
+
+  Uses pandas_market_calendars XSHG, then punches out XSHG_EXTRA_CLOSURES so
+  years the library has not updated (e.g. 2027 LNY) still form a long gap.
+  """
+  cal = pandas_market_calendars.get_calendar('XSHG')
+  sessions = pd.DatetimeIndex(
+    cal.valid_days(start_date=start, end_date=end)
+  ).tz_localize(None)
+  for a, b in XSHG_EXTRA_CLOSURES:
+    aT, bT = pd.Timestamp(a), pd.Timestamp(b)
+    sessions = sessions[~((sessions > aT) & (sessions < bT))]
+  if len(sessions) < 2:
+    return []
+  gapS = pd.Series(sessions[1:] - sessions[:-1], index=sessions[:-1])
+  return [(a, a + g) for a, g in gapS[gapS >= pd.Timedelta(days=minGapDays)].items()]
 
 #############################################################################################
 
@@ -1515,25 +1597,30 @@ def runNGS(yrStart, isSkipTitle=False):
   bt(script, d['dp'], d['dw'], yrStart)
 
 def runSISCore(yrStart):
-  # SLV SigmaSpike: 1d ret / sd60(lag1) > 1.5 -> long SLV same close; TS3
-  # VT 0.315 / maxWgt 1 — MDD 14.9% since 2017 (vt0.25 was 13.6%; ART 78.5) (2026-11-14)
-  # Seated @b 2026-11-14 (Alt1). Renamed STS→SIS 2026-11-15.
+  # SLV SigmaSpike (TS3) OR ChinaLongHoliday (XSHG gap≥5; L→F NYSE closes, nPost=1)
+  # Dense per leg → OR → one cleanS. VT 0.32 / maxWgt 1. Seated @b Alt1.
+  # Spike freeze 2026-11-14; ChinaLongHoliday merge 2026-11-16 (nPost=1 exit).
   und = 'SLV'
-  volTgt = .315
+  volTgt = .32
   maxWgt = 1.0
   dp, dw, dfDict, hv = btSetup([und], yrStart=yrStart - 1)
   #####
   cS = dfDict[und]['Close']
   spikeS = getSigmaSpikeS(cS, prefix='SLV')
-  isEntryS = applyDates(spikeS > 1.5, dw)
-  isExitS = isEntryS & False
-  stateS = getStateS_timestop(isEntryS, isExitS, 3, isCleaned=True, isMonthlyRebal=True)
+  isEntryAS = applyDates(spikeS > 1.5, dw).fillna(False)
+  isChinaLongHolidayS = getChinaLongHolidayDenseS(dw.index)
+  stateS = (
+    (getStateS_timestop(isEntryAS, isEntryAS & False, 3) > 0)
+    | isChinaLongHolidayS
+  ).astype(float)
+  stateS = cleanS(stateS, isMonthlyRebal=True)
   dw[und] = stateS
   dw = (dw * volTgt / hv).clip(0, maxWgt)
   d = dict()
   d['dp'] = dp
   d['dw'] = dw
   d['spikeS'] = spikeS
+  d['isChinaLongHolidayS'] = isChinaLongHolidayS
   return d
 
 def runSIS(yrStart, isSkipTitle=False):
@@ -1543,7 +1630,10 @@ def runSIS(yrStart, isSkipTitle=False):
   #####
   d = runSISCore(yrStart)
   st.header('Table')
-  stWriteDf(ul.merge(d['dp'], d['spikeS'].round(2), how='inner').tail())
+  stWriteDf(ul.merge(
+    d['dp'], d['spikeS'].round(2), d['isChinaLongHolidayS'].astype(int),
+    how='inner'
+  ).tail())
   st.header('Weights')
   dwTail(d['dw'])
   bt(script, d['dp'], d['dw'], yrStart)
