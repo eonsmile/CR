@@ -1,5 +1,13 @@
+import sys
+from pathlib import Path
+
+# Local Py3 run: Apps/CR/app.py → parents[2]=Py3. Published repo/CR.py: skip (libs sit beside CR.py).
+_py3 = Path(__file__).resolve().parents[2]
+if (_py3 / 'UtilLib.py').is_file() and str(_py3) not in sys.path:
+  sys.path.insert(0, str(_py3))
+
 import streamlit as st
-import QuantLib as ql
+import StratLib as sl
 import UtilLib as ul
 import pandas as pd
 import pendulum
@@ -70,16 +78,16 @@ def getCoreWeightsDf():
   return df,lastUpdate
 
 def runCore(yrStart):
-  ql.runTPP(yrStart)
+  sl.runTPP(yrStart)
   st.divider()
-  ql.runRSS(yrStart)
+  sl.runRSS(yrStart)
   st.divider()
-  ql.runIBS(yrStart)
+  sl.runIBS(yrStart)
   st.divider()
   strategies = ul.spl('TPP,RSS,IBS')
   weights = [1/3,1/3,1/3]
   script = 'Core'
-  ql.runAggregate(yrStart, strategies, weights, script, isCorrs=True)
+  sl.runAggregate(yrStart, strategies, weights, script, isCorrs=True)
 
 ######
 # Init
@@ -118,5 +126,3 @@ if ul.stCheckPW('password_CR'):
     bt2008()
   elif st.session_state.button_clicked=='2017':
     bt2017()
-
-

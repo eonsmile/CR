@@ -134,7 +134,24 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = rtPatch2828(df)
   return df
 
+def _cryptoDayCacheKey(und, yrStart):
+  # Same-day cache after 08:05 HKT; key includes HKT date so next day restarts.
+  d = pendulum.now('Asia/Hong_Kong').format('YYYYMMDD')
+  return f"ccHist_{und}_{int(yrStart)}_{d}"
+
+def _isCryptoDayCacheOpen():
+  # Daily crypto histoday cache arms at 08:05 Asia/Hong_Kong.
+  now = pendulum.now('Asia/Hong_Kong')
+  return now.hour * 60 + now.minute >= 8 * 60 + 5
+
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
+  # Same-day CACHE_DIR stamp (und+yrStart) after 08:05 HKT — skip CC API on reruns;
+  # next HKT calendar day misses and refetches. Pre-08:05 always hits the API.
+  cacheKey = _cryptoDayCacheKey(und, yrStart)
+  if _isCryptoDayCacheOpen():
+    hit = ul.cachePersist('r', cacheKey, expireMins=36 * 60)
+    if hit is not None:
+      return hit
   keys = [k for k in ul.spl(os.getenv('CC_API_KEYS', '')) if k]
   if not keys:
     raise RuntimeError('cryptocompare histoday: CC_API_KEYS empty')
@@ -159,22 +176,9 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
+  if _isCryptoDayCacheOpen():
+    ul.cachePersist('w', cacheKey, df)
   return df
-
-'''
-def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  dtStart = f"{max(yrStart, 2010)}-1-1"
-  url = f"https://eodhd.com/api/eod/{und}-USD.CC?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}"
-  df = pd.DataFrame(requests.get(url).json())
-  df['date'] = pd.to_datetime(df['date'])
-  df = df[df['date'] > '2010-7-16']
-  df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
-  df = df.set_index('date')
-  df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df.sort_values(by=['date']).round(10)
-  return df
-'''
-
 
 def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
   dtStart = f"{yrStart}-01-01"
@@ -231,3 +235,21 @@ def rtPatch2828(df, und='2828.HK'):
     return df
   df = pd.concat([df, pd.DataFrame([row], index=[pd.Timestamp(today)])])
   return df[~df.index.duplicated(keep='last')].sort_index()
+
+##########
+# Snippets
+##########
+# Old EODHD crypto histoday (replaced by CryptoCompare + same-day cache).
+'''
+def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
+  dtStart = f"{max(yrStart, 2010)}-1-1"
+  url = f"https://eodhd.com/api/eod/{und}-USD.CC?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}"
+  df = pd.DataFrame(requests.get(url).json())
+  df['date'] = pd.to_datetime(df['date'])
+  df = df[df['date'] > '2010-7-16']
+  df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
+  df = df.set_index('date')
+  df.columns = ul.spl('Open,High,Low,Close,Volume')
+  df = df.sort_values(by=['date']).round(10)
+  return df
+'''
