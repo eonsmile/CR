@@ -39,27 +39,31 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
   if not isSkipTitle:
     st.header(script)
   #####
-  # Within each group, scripts are alphabetically sorted (l / weights / run* match QuantLib).
+  # Within each group, scripts are alphabetically sorted (l / weights / run* match StratLib).
   a=.2
   b=.08
-  l = ul.spl('TAA,COS,IBS,BBS,GMR,HMR,IBS2,JMR,MTM,RSS,STK,YPS,SCI,VCA,VCA2,VCA3,VCA4,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
+  l = ul.spl('TAA,COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS,COS2,GMR,HMR,JMR,SCI,VCA,VCA2,VCA3,VCA4,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
+
   d = {
+    # Momentum
     'TAA': a,  # _TAA
     #####
-    # Tier A MRs
+    # US Broad MRs
     'COS': a,  # _MR
-    'IBS': a,  # _MR
-    #####
-    # Tier B MRs
-    'BBS': b,  # _MR
-    'GMR': b,  # _MR
-    'HMR': b,  # _HMR
+    'CUT': b,  # _MR
+    'IBS': b,  # _MR
     'IBS2': b,  # _MR
-    'JMR': b,  # _MR
-    'MTM': b,  # _MR
-    'RSS': b,  # _MR; demoted a→b 2026-11-18 (LOO Rank% outside OVERRIDE 50%)
+    'IGQ': b,  # _MR    
+    'MTQ': b,  # _MR
+    'RSS': b,  # _MR
     'STK': b,  # _MR
     'YPS': b,  # _MR
+    #####
+    # Other MRs
+    'COS2': b,  # _MR2
+    'GMR': b,  # _MR2
+    'HMR': b,  # _HMR
+    'JMR': b,  # _MR2
     #####
     # Hedges
     'SCI': b,  # *** review monthly ***
@@ -69,7 +73,7 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
     'VCA4': b,  # _HEDGES
     #####
     # Alt1
-    'BCS': b,  # _BCS; demoted a→b 2026-11-17 (+VCA4)
+    'BCS': b,  # _BCS
     'NGS': b,  # _ALT1
     'SIS': b,  # _ALT1
     'WTS': b,  # _ALT1
@@ -132,33 +136,38 @@ st.write('')
 y = int(chosenYear)
 if isRunSystems:
   # Presentation order matches `l` / StratLib Core order.
+  # Momentum
   sl.runTAA(y)
   st.divider()
   #####
-  # Tier A MRs
+  # US Broad MRs
   sl.runCOS(y)
+  st.divider()
+  sl.runCUT(y)
   st.divider()
   sl.runIBS(y)
   st.divider()
-  #####
-  # Tier B MRs
-  sl.runBBS(y)
-  st.divider()
-  sl.runGMR(y)
-  st.divider()
-  sl.runHMR(y)
-  st.divider()
   sl.runIBS2(y)
   st.divider()
-  sl.runJMR(y)
+  sl.runIGQ(y)
   st.divider()
-  sl.runMTM(y)
+  sl.runMTQ(y)
   st.divider()
   sl.runRSS(y)
   st.divider()
   sl.runSTK(y)
   st.divider()
   sl.runYPS(y)
+  st.divider()
+  #####
+  # Other MRs
+  sl.runCOS2(y)
+  st.divider()
+  sl.runGMR(y)
+  st.divider()
+  sl.runHMR(y)
+  st.divider()
+  sl.runJMR(y)
   st.divider()
   #####
   # Hedges

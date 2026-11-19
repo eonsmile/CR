@@ -17,8 +17,12 @@ from pathlib import Path
 import QuantLib as ql
 
 #########
-# Scripts
+# Scripts — AR live order (AR.py `l` / run*):
+# TAA | US Broad MRs: COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS
+# | Other MRs: COS2,GMR,HMR,JMR | SCI,VCA,VCA2,VCA3,VCA4 | BCS,NGS,SIS,WTS | AHS,GEO,ZBT
+# (+ TPP not in AR, kept first)
 #########
+
 
 #####
 # TPP (not in AR)
@@ -367,12 +371,12 @@ def runTAA(yrStart, isSkipTitle=False):
 #####
 # Sleeve Core/run defs: keep definition order = AR.py presentation (run*) order.
 # Within each group, scripts are alphabetically sorted.
-# Groups: TAA | Tier-A MRs | Tier-B MRs | Hedges | Alt1 | Etc.
+# Groups: Momentum (TAA) | US Broad MRs | Other MRs | Hedges | Alt1 | Etc.
 # Parked WRS → Lab/live-extras/WRSLib.py (not in this file).
 #####
 
 #####
-# Tier A MRs
+# US Broad MRs
 #####
 def runCOSCore(yrStart):
   und, size = 'SPY', 2
@@ -422,6 +426,42 @@ def runCOS(yrStart, isSkipTitle=False):
   ql.dwTail(d['dwIntraday'])
   ql.bt(script, d['dp'], d['dw'], yrStart)
 
+def runCUTCore(yrStart):
+  # QQQ Cutler RSI3 cross<10 → exit C>priorC | TS5; VT 0.32 / maxWgt 1.5.
+  # Seated @b 2026-11-18 (Lab CUT freeze; Harness PASS 2017+).
+  und = 'QQQ'
+  volTgt = .32
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart - 1)
+  #####
+  df = dfDict[und]
+  cS = df['Close']
+  cutS = ql.getCutlerRsiS(cS, n=3)
+  isEntryS = (cutS < 10) & (cutS.shift(1) >= 10)
+  isExitS = cS > cS.shift(1)
+  stateS = ql.getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['cutS'] = cutS
+  return d
+
+def runCUT(yrStart, isSkipTitle=False):
+  script = 'CUT'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runCUTCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['QQQ']
+  ql.stWriteDf(ul.merge(df['Close'].round(2), d['cutS'].round(1), how='inner').tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
 def runIBSCore(yrStart):
   und = 'QQQ'
   volTgt = .225
@@ -455,6 +495,128 @@ def runIBS(yrStart,isSkipTitle=False):
   df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
   df2 = ul.merge(df2, d['stateS'].ffill(), how='inner')
   ql.stWriteDf(df2.tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runIBS2Core(yrStart):
+  # IWM IBS twin: entry IBS<0.1; exit IBS>0.8 | hibreak; TS6;
+  # VT 0.255 / maxWgt 1.5 — ql.bt MDD<15% (2026-11-04; was 0.258 at DD cap).
+  und = 'IWM'
+  volTgt = .255
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = ql.btSetup([und],yrStart=yrStart-1)
+  #####
+  df = dfDict[und]
+  ibsS = ql.getIbsS(df)
+  isEntryS = ibsS < .1
+  isExitS = (ibsS > .8) | (df['Close'] > df['High'].shift(1))
+  stateS = ql.getStateS_timestop(isEntryS, isExitS, 6, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  ql.dwAllOrNone(dw)
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibsS']=ibsS
+  return d
+
+def runIBS2(yrStart,isSkipTitle=False):
+  script = 'IBS2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runIBS2Core(yrStart)
+  st.header('Table')
+  df = d['dfDict']['IWM']
+  df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
+  ql.stWriteDf(df2.tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runIGQCore(yrStart):
+  # IGV signal → long QQQ. 5d<-7%; exit IGV C>priorH | TS5; VT 0.32 / maxWgt 1.5.
+  # Seated @b 2026-11-19 (Lab IGQ freeze).
+  und = 'QQQ'
+  sig = 'IGV'
+  volTgt = .32
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = ql.btSetup([und, sig], yrStart=yrStart - 1)
+  dp = dp.drop(sig, axis=1)
+  dw = dw.drop(sig, axis=1)
+  hv = hv.drop(sig, axis=1)
+  #####
+  df = dfDict[sig]
+  cS = df['Close']
+  r5S = cS.pct_change(5).rename('IGV 5d')
+  isEntryS = r5S < -0.07
+  isExitS = cS > df['High'].shift(1)
+  stateS = ql.getStateS_timestop(isEntryS, isExitS, 5, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['r5S'] = r5S
+  return d
+
+def runIGQ(yrStart, isSkipTitle=False):
+  script = 'IGQ'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runIGQCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['IGV']
+  ql.stWriteDf(ul.merge(
+    df['Close'].round(2), df['High'].round(2),
+    (100 * d['r5S']).round(2).rename('5d%'),
+    how='inner',
+  ).tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runMTQCore(yrStart):
+  # MTUM signal → long QQQ. WPR7<-80 & IBS<.2; exit C>H[-1] | IBS>.9 | TS7; vt .32 / max1.5
+  # Seated @b 2026-11-11 as MTM; renamed MTQ 2026-11-19. IBS entry .3→.2 2026-11-11.
+  und = 'QQQ'
+  etc = ['MTUM']
+  volTgt = .32
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = ql.btSetup([und] + etc, yrStart=yrStart - 1)
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  df = dfDict['MTUM']
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=7)
+  ibsS = ql.getIbsS(df)
+  isEntryS = (wprS < -80) & (ibsS < .2)
+  isExitS = (df['Close'] > df['High'].shift(1)) | (ibsS > .9)
+  stateS = ql.getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['wprS'] = wprS
+  d['ibsS'] = ibsS
+  return d
+
+def runMTQ(yrStart, isSkipTitle=False):
+  script = 'MTQ'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runMTQCore(yrStart)
+  st.header('Table')
+  ql.stWriteDf(ul.merge(d['wprS'].rename('WPR7').round(1), d['ibsS'].rename('IBS').round(3), how='inner').tail())
   st.header('Weights')
   ql.dwTail(d['dw'])
   ql.bt(script, d['dp'], d['dw'], yrStart)
@@ -501,255 +663,9 @@ def runRSS(yrStart,isSkipTitle=False):
   ql.dwTail(d['dw'])
   ql.bt(script, d['dp'], d['dw'], yrStart)
 
-#####
-# Tier B MRs
-#####
-def runBBSCore(yrStart):
-  # QQQ: ratioS=C/EMA100>1 & ratio2S=ATR20/med101(ATR)<1 & %B(BB10,3.5σ)<0.2;
-  # exit %B>0.8 or TS30 fallback (shorter fuse than 40; not primary TS like WRS7); no VT.
-  # 2026-10-31: BB std 3.0→3.5 (stricter %B entry / slower exit; sens OK 2008+).
-  und = 'QQQ'
-  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart - 1)
-  #####
-  df = dfDict[und]
-  hS = df['High']
-  lS = df['Low']
-  cS = df['Close']
-  atrS = ta.atr(hS, lS, cS, length=20)
-  bbDf = ta.bbands(cS, length=10, std=3.5)
-  upperS = bbDf['BBU_10_3.5']
-  lowerS = bbDf['BBL_10_3.5']
-  pbS = bbDf['BBP_10_3.5']  # %B
-  ratioS = (cS / ql.EMA(cS, 100)).rename('Ratio')
-  ratio2S = (atrS / atrS.rolling(101).median()).rename('Ratio 2')
-  #####
-  isEntryS = (ratioS > 1) & (ratio2S < 1) & (pbS < 0.2)
-  isExitS = pbS > 0.8
-  dw[und] = ql.getStateS_timestop(isEntryS, isExitS, 30, isCleaned=True, isMonthlyRebal=True)
-  #####
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['pbS'] = pbS
-  d['ratioS'] = ratioS
-  d['ratio2S'] = ratio2S
-  return d
-
-def runBBS(yrStart, isSkipTitle=False):
-  script = 'BBS'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runBBSCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(d['ratioS'].round(3), d['ratio2S'].round(3), d['pbS'].round(3), how='inner')
-  ql.stWriteDf(tableS.tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
-def runGMRCore(yrStart):
-  und = 'GDAXI.INDX'
-  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart-1)
-  #####
-  df = ql.applyDates(dfDict[und],dp)
-  oS = df['Open']
-  cS = df['Close']
-  ibsS = ql.getIbsS(df)
-  ret3S = (cS / cS.shift(3) - 1).rename('Ret 3D')
-  ratio100S = (cS / cS.rolling(100).mean()).rename('Ratio 100D')
-  ratio10S = (cS / cS.rolling(10).mean()).rename('Ratio 10D')
-  #####
-  isEntryS =(ret3S < -0.01) & (ibsS < .2) & (ratio100S > 1)
-  isExitS = ratio10S > 1
-  #####
-  dp[und] = oS.shift(-1)
-  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
-  dw[und] = ql.getStateS_timestop(isEntryS, isExitS, 11, isCleaned=True, isMonthlyRebal=True)
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['oS']=oS
-  d['cS']=cS
-  d['ibsS']=ibsS
-  d['ret3S']=ret3S
-  d['ratio100S']=ratio100S
-  d['ratio10S']=ratio10S
-  return d
-
-def runGMR(yrStart, isSkipTitle=False):
-  script = 'GMR'
-  if not isSkipTitle:
-    st.header(script)
-  d=runGMRCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(
-    d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
-  ql.stWriteDf(tableS.tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
-def runHMRCore(yrStart):
-  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
-  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
-  und = '2828.HK'
-  volTgt = .32
-  maxWgt = 1.0
-  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart - 1)
-  df = dfDict[und]
-  ibsS = ql.getIbsS(df)
-  ibs2S = ql.getIbsS(df, n=2).rename('IBS2')
-  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
-  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
-  isExitS = ibsS > .50
-  stateS = ql.getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['ibsS'] = ibsS
-  d['ibs2S'] = ibs2S
-  d['wprS'] = wprS
-  return d
-
-def runHMR(yrStart, isSkipTitle=False):
-  script = 'HMR'
-  if not isSkipTitle:
-    st.header(script)
-  d = runHMRCore(yrStart)
-  st.header('Table')
-  df = d['dfDict']['2828.HK']
-  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
-  ql.stWriteDf(df2.tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
-def runIBS2Core(yrStart):
-  # IWM IBS twin: entry IBS<0.1; exit IBS>0.8 | hibreak; TS6;
-  # VT 0.255 / maxWgt 1.5 — ql.bt MDD<15% (2026-11-04; was 0.258 at DD cap).
-  und = 'IWM'
-  volTgt = .255
-  maxWgt = 1.5
-  dp, dw, dfDict, hv = ql.btSetup([und],yrStart=yrStart-1)
-  #####
-  df = dfDict[und]
-  ibsS = ql.getIbsS(df)
-  isEntryS = ibsS < .1
-  isExitS = (ibsS > .8) | (df['Close'] > df['High'].shift(1))
-  stateS = ql.getStateS_timestop(isEntryS, isExitS, 6, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  ql.dwAllOrNone(dw)
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['dfDict']=dfDict
-  d['ibsS']=ibsS
-  return d
-
-def runIBS2(yrStart,isSkipTitle=False):
-  script = 'IBS2'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runIBS2Core(yrStart)
-  st.header('Table')
-  df = d['dfDict']['IWM']
-  df2 = ul.merge(df['Close'].round(2), df['High'].round(2), df['Low'].round(2), d['ibsS'].round(3), how='inner')
-  ql.stWriteDf(df2.tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
-def runJMRCore(yrStart):
-  etc=['DXJ']
-  dp, dw, dfDict, hv = ql.btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
-  dp2 = dp.copy()
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
-  #####
-  ibs_DXJ = ql.getIbsS(dfDict['DXJ']).rename('IBS DXJ')
-  ibs_EWJ   = ql.getIbsS(dfDict['EWJ']).rename('IBS EWJ')
-  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
-  isExitS  = ibs_DXJ > .7
-  stateS   = ql.getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
-  #####
-  dw['EWJ'] = stateS
-  dw['FXY'] = -dw['EWJ']
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dp2']=dp2
-  d['dw']=dw
-  d['dfDict']=dfDict
-  d['ibs_DXJ']=ibs_DXJ
-  d['ibs_EWJ']=ibs_EWJ
-  return d
-
-def runJMR(yrStart,isSkipTitle=False):
-  script = 'JMR'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d=runJMRCore(yrStart)
-  st.header('Table')
-  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
-  ql.stWriteDf(df2.tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
-def runMTMCore(yrStart):
-  # MTUM signal → long QQQ. WPR7<-80 & IBS<.2; exit C>H[-1] | IBS>.9 | TS7; vt .32 / max1.5
-  # Seated @b 2026-11-11 (Lab MTM; ART 87.7 Strong). IBS entry .3→.2 2026-11-11.
-  und = 'QQQ'
-  etc = ['MTUM']
-  volTgt = .32
-  maxWgt = 1.5
-  dp, dw, dfDict, hv = ql.btSetup([und] + etc, yrStart=yrStart - 1)
-  for und2 in etc:
-    dp = dp.drop(und2, axis=1)
-    dw = dw.drop(und2, axis=1)
-    hv = hv.drop(und2, axis=1)
-  #####
-  df = dfDict['MTUM']
-  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=7)
-  ibsS = ql.getIbsS(df)
-  isEntryS = (wprS < -80) & (ibsS < .2)
-  isExitS = (df['Close'] > df['High'].shift(1)) | (ibsS > .9)
-  stateS = ql.getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
-  dw[und] = stateS
-  dw = (dw * volTgt / hv).clip(0, maxWgt)
-  d = dict()
-  d['dp'] = dp
-  d['dw'] = dw
-  d['dfDict'] = dfDict
-  d['wprS'] = wprS
-  d['ibsS'] = ibsS
-  return d
-
-def runMTM(yrStart, isSkipTitle=False):
-  script = 'MTM'
-  if not isSkipTitle:
-    st.header(script)
-  #####
-  d = runMTMCore(yrStart)
-  st.header('Table')
-  ql.stWriteDf(ul.merge(d['wprS'].rename('WPR7').round(1), d['ibsS'].rename('IBS').round(3), how='inner').tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
 def runSTKCore(yrStart):
   # SPY Connors 2009 3-bar H/L streak: long 3↓H&↓L + Ratio250>1 + Ratio5<1;
-  # short mirror; exit Ratio5 cross | TS9 fallback fuse (BBS-style; primary=SMA5);
+  # short mirror; exit Ratio5 cross | TS9 fallback fuse (primary=SMA5);
   # same-close; 1x long / 2x short; no VT.
   # Dense daily dw (like RSS) — ql.cleanS monthly rebal mis-compounds L/S in ql.bt().
   # TS dig 2026-11-06: TS9 preferred vs TS8 (avoids 2011 day-8 crash cut); TS10 bounce-cut.
@@ -837,6 +753,195 @@ def runYPS(yrStart, isSkipTitle=False):
   d = runYPSCore(yrStart)
   st.header('Table')
   ql.stWriteDf(ul.merge(d['chgS'].round(3), d['thrS'].round(3), how='inner').tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+#####
+# Other MRs
+#####
+def runCOS2Core(yrStart):
+  # SMH Ret1D<-2% ∩ ratio>1 → SOXL close→next open (all sessions).
+  # Fixed size 1/3 (3× und ≈ 1× notionally). Seated @b 2026-11-19.
+  # Dict mirrors COS (+ ret1S, ratioS). Signal SMH; trade SOXL.
+  und, size = 'SOXL', 1 / 3
+  etc = ['SMH']
+  _, _, dfDict, _ = ql.btSetup([und] + etc, yrStart=yrStart - 1)
+  #####
+  soxlDf = dfDict[und]
+  smhDf = dfDict['SMH']
+  oS, cS = soxlDf['Open'], soxlDf['Close']
+  ret1S = ql.applyDates(smhDf['Close'].pct_change(), cS).rename('SMH Ret 1D')
+  ratioS = ql.applyDates(
+    smhDf['Close'] / smhDf['Close'].rolling(200).mean(), cS).rename('Ratio')
+  stateS = ((ret1S < -0.02) & (ratioS > 1)).fillna(False).rename('State')
+  df = ul.merge(
+    ql.applyDates(smhDf['Close'], cS).rename('SMH Close'),
+    oS.rename('SOXL Open'),
+    cS.rename('SOXL Close'),
+    how='inner')
+  #####
+  openIdx = soxlDf.index + pd.Timedelta(hours=9, minutes=30)
+  closeIdx = soxlDf.index + pd.Timedelta(hours=16)
+  px = pd.concat([
+    pd.Series(oS.values, index=openIdx, name=und),
+    pd.Series(cS.values, index=closeIdx, name=und),
+  ]).sort_index().to_frame()
+  dwI = pd.DataFrame(0.0, index=px.index, columns=[und])
+  dwI.loc[closeIdx[stateS.values], und] = size
+  dwI.loc[dwI.index.year < yrStart] = 0
+  #####
+  r = (stateS.astype(float).shift(1) * size * (oS / cS.shift(1) - 1)).fillna(0)
+  r.loc[r.index.year < yrStart] = 0
+  dp = (1 + r).cumprod().rename('COS2').to_frame()
+  dw = dp * np.nan
+  dw.iloc[ql.endpoints(dw), 0] = 1
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dpIntraday'] = px
+  d['dwIntraday'] = dwI
+  d['df'] = df
+  d['ret1S'] = ret1S
+  d['ratioS'] = ratioS
+  d['stateS'] = stateS.astype(float)
+  return d
+
+def runCOS2(yrStart, isSkipTitle=False):
+  script = 'COS2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runCOS2Core(yrStart)
+  st.header('Table')
+  tableS = ul.merge(
+    d['df']['SMH Close'].round(2),
+    d['df']['SOXL Open'].round(2),
+    d['df']['SOXL Close'].round(2),
+    d['ret1S'].round(3), d['ratioS'].round(3), d['stateS'], how='inner')
+  ql.stWriteDf(tableS.tail())
+  st.header('Weights')
+  ql.dwTail(d['dwIntraday'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runGMRCore(yrStart):
+  und = 'GDAXI.INDX'
+  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart-1)
+  #####
+  df = ql.applyDates(dfDict[und],dp)
+  oS = df['Open']
+  cS = df['Close']
+  ibsS = ql.getIbsS(df)
+  ret3S = (cS / cS.shift(3) - 1).rename('Ret 3D')
+  ratio100S = (cS / cS.rolling(100).mean()).rename('Ratio 100D')
+  ratio10S = (cS / cS.rolling(10).mean()).rename('Ratio 10D')
+  #####
+  isEntryS =(ret3S < -0.01) & (ibsS < .2) & (ratio100S > 1)
+  isExitS = ratio10S > 1
+  #####
+  dp[und] = oS.shift(-1)
+  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
+  dw[und] = ql.getStateS_timestop(isEntryS, isExitS, 11, isCleaned=True, isMonthlyRebal=True)
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dw']=dw
+  d['oS']=oS
+  d['cS']=cS
+  d['ibsS']=ibsS
+  d['ret3S']=ret3S
+  d['ratio100S']=ratio100S
+  d['ratio10S']=ratio10S
+  return d
+
+def runGMR(yrStart, isSkipTitle=False):
+  script = 'GMR'
+  if not isSkipTitle:
+    st.header(script)
+  d=runGMRCore(yrStart)
+  st.header('Table')
+  tableS = ul.merge(
+    d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
+  ql.stWriteDf(tableS.tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runHMRCore(yrStart):
+  # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
+  # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
+  und = '2828.HK'
+  volTgt = .32
+  maxWgt = 1.0
+  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart - 1)
+  df = dfDict[und]
+  ibsS = ql.getIbsS(df)
+  ibs2S = ql.getIbsS(df, n=2).rename('IBS2')
+  wprS = ta.willr(df['High'], df['Low'], df['Close'], length=14).rename('WPR')
+  isEntryS = (ibsS < .20) & (ibs2S < .4) & (wprS < -70)
+  isExitS = ibsS > .50
+  stateS = ql.getStateS_timestop(isEntryS, isExitS, 4, isCleaned=True, isMonthlyRebal=True)
+  dw[und] = stateS
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dfDict'] = dfDict
+  d['ibsS'] = ibsS
+  d['ibs2S'] = ibs2S
+  d['wprS'] = wprS
+  return d
+
+def runHMR(yrStart, isSkipTitle=False):
+  script = 'HMR'
+  if not isSkipTitle:
+    st.header(script)
+  d = runHMRCore(yrStart)
+  st.header('Table')
+  df = d['dfDict']['2828.HK']
+  df2 = ul.merge(df['Close'].round(2), d['ibsS'].round(3), d['ibs2S'].round(3), d['wprS'].round(1), how='inner')
+  ql.stWriteDf(df2.tail())
+  st.header('Weights')
+  ql.dwTail(d['dw'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runJMRCore(yrStart):
+  etc=['DXJ']
+  dp, dw, dfDict, hv = ql.btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
+  dp2 = dp.copy()
+  for und2 in etc:
+    dp = dp.drop(und2, axis=1)
+    dw = dw.drop(und2, axis=1)
+    hv = hv.drop(und2, axis=1)
+  #####
+  ibs_DXJ = ql.getIbsS(dfDict['DXJ']).rename('IBS DXJ')
+  ibs_EWJ   = ql.getIbsS(dfDict['EWJ']).rename('IBS EWJ')
+  isEntryS = (ibs_DXJ < .15) & (ibs_EWJ < .3)
+  isExitS  = ibs_DXJ > .7
+  stateS   = ql.getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
+  #####
+  dw['EWJ'] = stateS
+  dw['FXY'] = -dw['EWJ']
+  #####
+  d=dict()
+  d['dp']=dp
+  d['dp2']=dp2
+  d['dw']=dw
+  d['dfDict']=dfDict
+  d['ibs_DXJ']=ibs_DXJ
+  d['ibs_EWJ']=ibs_EWJ
+  return d
+
+def runJMR(yrStart,isSkipTitle=False):
+  script = 'JMR'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d=runJMRCore(yrStart)
+  st.header('Table')
+  df2 = ul.merge(d['dp2'],d['ibs_DXJ'].round(3), d['ibs_EWJ'].round(3), how='inner')
+  ql.stWriteDf(df2.tail())
   st.header('Weights')
   ql.dwTail(d['dw'])
   ql.bt(script, d['dp'], d['dw'], yrStart)
@@ -1092,9 +1197,9 @@ def runBCS(yrStart, isSkipTitle=False):
 def runNGSCore(yrStart):
   # UNG idio down SigmaSpike (TS3) OR session-before-EIA WNGSR Nov–Mar (TS1)
   # Dense timestop per leg → OR → one ql.cleanS (do not clean before OR).
-  # VT 0.24 / maxWgt 1 — pre-EIA path ~UPI2.88/DD14.7 since 2017. Seated @b 2026-11-15.
+  # VT 0.32 / maxWgt 1 — was 0.24 (OR MDD-edge); raised 2026-11-18 (2017+ MDD~13.6 PASS).
   und = 'UNG'
-  volTgt = .24
+  volTgt = .32
   maxWgt = 1.0
   dp, dw, dfDict, hv = ql.btSetup([und, 'SPY'], yrStart=yrStart - 1)
   dp = dp[[und]]; dw = dw[[und]]; hv = hv[[und]]
@@ -1224,7 +1329,7 @@ def runWTS(yrStart, isSkipTitle=False):
 def runAHSCore(yrStart):
   # 2026-10-21: drop SH only; keep GLD; VT raised to size-limits MDD edge (<15%)
   # 2026-11-18: month-flat when isGLDNearHHV63S (TAA GLD-booth cousin abrasion)
-  volTgt, maxWgt = .16, 1.5
+  volTgt, maxWgt = .18, 1.5
   unds = ul.spl('TLT,ICOM.LSE,GLD,UUP')
   lbs = (3, 6, 12)
   dp, dw, dfDict, hv = ql.btSetup(unds, yrStart=yrStart - 1)
@@ -1336,12 +1441,15 @@ def runGEO(yrStart, isSkipTitle=False):
 
 def runZBTCore(yrStart):
   # Carson / Detrick official ZBT dates (table 25 Apr 2025)
+  # 2026-11-19: VT0.32 / maxWgt1.5 (Simon; dig preferred fixed2 — confidence cut).
   zbtDates = [
     '2009-03-18','2011-10-14','2013-10-08','2015-10-08','2019-01-07','2023-03-31',
     '2023-11-03','2025-04-25',
   ]
   und = 'QQQ'
-  dp, dw, dfDict, _ = ql.btSetup([und],yrStart=yrStart-1)
+  volTgt = .32
+  maxWgt = 1.5
+  dp, dw, dfDict, hv = ql.btSetup([und],yrStart=yrStart-1)
   #####
   eom = ql.getNYSEEomS(dp.index).fillna(0) == 1
   sigM = pd.to_datetime(zbtDates).to_period('M')
@@ -1349,6 +1457,7 @@ def runZBTCore(yrStart):
   isEntryS = eom & m.isin(sigM)
   isExitS = eom & m.isin(sigM + 3) & ~isEntryS
   dw[und] = ql.getStateS(isEntryS, isExitS, isCleaned=True, isMonthlyRebal=True)
+  dw = (dw * volTgt / hv).clip(0, maxWgt)
   d=dict()
   d['dp']=dp
   d['dw']=dw

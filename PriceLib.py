@@ -14,8 +14,6 @@ import warnings
 import os
 import random
 
-#df2 = getPriceHistory('ITA', yrStart=yrStart)
-#df2[['Close']].to_csv('tmp.csv', index_label='Date', date_format='%#m/%#d/%Y')
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
   dtStart=str(yrStart)+ '-1-1'
@@ -38,80 +36,13 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = df.sort_values(by=['date']).round(10)
   #####
   def m(df,fn,sub=''):
-    df2 = pd.read_csv(f"data/{sub}{fn}", index_col=0, parse_dates=True, date_format='%m/%d/%Y')
+    df2 = pd.read_csv(f"Data/{sub}{fn}", index_col=0, parse_dates=True, date_format='%m/%d/%Y')
     for col in ['Open', 'High', 'Low', 'Volume']:
       df2[col] = df2['Close'] * (0 if col == 'Volume' else 1)
     return ul.extend(df, df2)
 
-  ###########################################################################
-  # DECOMMISSIONED underlyings: no longer used by alpha. CSVs live in
-  # data/Archive/. Logic is identical to original except the CSV path.
-  ###########################################################################
-  if und in ul.spl('EUDF.XETRA,IPRE.XETRA,COM,INFL,IBIT,'
-                   'DFNS.LSE,DRAM,ENCO.LSE,GCOW,HFGM,JEGA.LSE,ORR,PFIX,'
-                   'RARE.LSE,ROBO,ROLL.LSE,TAIL,'
-                   'COPX,GRID,WTAI.LSE,REMX,9888.HK,9988.HK,DBMF,PFMN.TO'):
-    if und == 'EUDF.XETRA':
-      dtStart = '2025-3-31'
-    elif und == 'IPRE.XETRA':
-      dtStart = '2018-12-28'
-    # COM
-    elif und=='INFL':
-      dtStart = '2021-1-29'
-    elif und=='DFNS.LSE':
-      dtStart='2023-4-28'
-    elif und=='DRAM':
-      dtStart='2026-4-30'
-    elif und=='ENCO.LSE':
-      dtStart='2021-8-31'
-    elif und=='GCOW':
-      dtStart='2016-2-29'
-    elif und=='HFGM':
-      dtStart='2025-4-30'
-    elif und == 'JEGA.LSE':
-      dtStart = '2023-12-29'
-    elif und=='ORR':
-      dtStart = '2025-1-31'
-    elif und=='PFIX':
-      dtStart='2021-5-28'
-    elif und=='RARE.LSE':
-      dtStart='2024-4-30'
-    elif und=='ROBO':
-      dtStart = '2013-10-31'
-    elif und=='ROLL.LSE':
-      dtStart = '2020-12-29'
-    elif und=='TAIL':
-      dtStart = '2017-4-28'
-    elif und=='IBIT':
-      dtStart = '2024-1-11'
-    elif und=='COPX':
-      dtStart='2010-4-30'
-    elif und=='GRID':
-      dtStart='2009-11-30'
-    elif und=='WTAI.LSE':
-      dtStart = '2018-12-31'
-    elif und=='REMX':
-      dtStart='2010-10-29'
-    elif und=='9888.HK':
-      dtStart = '2021-3-23'
-    elif und=='9988.HK':
-      dtStart = '2019-11-26'
-    elif und=='DBMF':
-      dtStart = '2019-5-31'
-    elif und == 'PFMN.TO':
-      dtStart = '2019-7-31'
-    else:
-      dtStart = None
-    if dtStart is not None: df = df.loc[df.index >= dtStart]
-    df = m(df, f"{und}.csv", sub='Archive/')
-    return df
-  elif und == 'DFND.SW':
-    return m(df, 'ITA.csv', sub='Archive/')
-  elif und == 'BDRY':
-    return m(df, 'BDI.csv', sub='Archive/')
-  ###########################################################################
-  # END decommissioned
-  ###########################################################################
+  # Decommissioned Archive patchovers moved 2026-11-18 → Lab/data/Archive/
+  # (CSVs + PriceLib_decommissioned.py). Live CSV patchovers only below.
 
   if und in ul.spl('GDXJ,NATO.LSE,NUCL.LSE,ICOM.LSE'):
     if und=='GDXJ':
@@ -134,24 +65,25 @@ def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
     df = rtPatch2828(df)
   return df
 
-def _cryptoDayCacheKey(und, yrStart):
-  # Same-day cache after 08:05 HKT; key includes HKT date so next day restarts.
-  d = pendulum.now('Asia/Hong_Kong').format('YYYYMMDD')
-  return f"ccHist_{und}_{int(yrStart)}_{d}"
-
-def _isCryptoDayCacheOpen():
-  # Daily crypto histoday cache arms at 08:05 Asia/Hong_Kong.
+def _isCryptoPost805():
+  # Cutover 08:05 Asia/Hong_Kong — fresh histoday once after this, else pre-805 window.
   now = pendulum.now('Asia/Hong_Kong')
   return now.hour * 60 + now.minute >= 8 * 60 + 5
 
+def _cryptoDayCacheKey(und, yrStart):
+  # Two stamps per HKT day: pre805 (00:00–08:04) and day (from 08:05).
+  # First miss in a window hits CC once; further calls reuse CACHE_DIR until the other window / next day.
+  d = pendulum.now('Asia/Hong_Kong').format('YYYYMMDD')
+  win = 'day' if _isCryptoPost805() else 'pre805'
+  return f"ccHist_{und}_{int(yrStart)}_{d}_{win}"
+
 def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  # Same-day CACHE_DIR stamp (und+yrStart) after 08:05 HKT — skip CC API on reruns;
-  # next HKT calendar day misses and refetches. Pre-08:05 always hits the API.
+  # CryptoCompare histoday: at most one API load per und+yrStart per window —
+  # pre-08:05 HKT, then again after 08:05 for the rest of that HKT day. Key rolls with date.
   cacheKey = _cryptoDayCacheKey(und, yrStart)
-  if _isCryptoDayCacheOpen():
-    hit = ul.cachePersist('r', cacheKey, expireMins=36 * 60)
-    if hit is not None:
-      return hit
+  hit = ul.cachePersist('r', cacheKey, expireMins=36 * 60)
+  if hit is not None:
+    return hit
   keys = [k for k in ul.spl(os.getenv('CC_API_KEYS', '')) if k]
   if not keys:
     raise RuntimeError('cryptocompare histoday: CC_API_KEYS empty')
@@ -176,8 +108,7 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   df = df.set_index('date')
   df.columns = ul.spl('Open,High,Low,Close,Volume')
   df = df.sort_values(by=['date']).round(10)
-  if _isCryptoDayCacheOpen():
-    ul.cachePersist('w', cacheKey, df)
+  ul.cachePersist('w', cacheKey, df)
   return df
 
 def getPriceHistoryFred(id, yrStart=SHARED_DICT['yrStart']):
@@ -235,21 +166,3 @@ def rtPatch2828(df, und='2828.HK'):
     return df
   df = pd.concat([df, pd.DataFrame([row], index=[pd.Timestamp(today)])])
   return df[~df.index.duplicated(keep='last')].sort_index()
-
-##########
-# Snippets
-##########
-# Old EODHD crypto histoday (replaced by CryptoCompare + same-day cache).
-'''
-def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
-  dtStart = f"{max(yrStart, 2010)}-1-1"
-  url = f"https://eodhd.com/api/eod/{und}-USD.CC?api_token={st.secrets['eodhd_api_key']}&fmt=json&from={dtStart}"
-  df = pd.DataFrame(requests.get(url).json())
-  df['date'] = pd.to_datetime(df['date'])
-  df = df[df['date'] > '2010-7-16']
-  df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
-  df = df.set_index('date')
-  df.columns = ul.spl('Open,High,Low,Close,Volume')
-  df = df.sort_values(by=['date']).round(10)
-  return df
-'''

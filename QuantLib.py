@@ -209,7 +209,7 @@ def getChinaLongHolidayDenseS(idx, minGapDays=5):
   return out
 
 def getEiaWngsrReleaseDates(start, end):
-  """WNGSR release dates from calendars/eia_wngsr.txt (checked-in SoT).
+  """WNGSR release dates from Calendars/eia_wngsr.txt (checked-in SoT).
 
   Append one ISO date per line when EIA posts new schedule rows
   (https://ir.eia.gov/ngs/schedule.html). Past the last pin date, falls back to
@@ -220,7 +220,7 @@ def getEiaWngsrReleaseDates(start, end):
   from pandas.tseries.holiday import USFederalHolidayCalendar
   start, end = pd.Timestamp(start), pd.Timestamp(end)
   start_d, end_d = start.date(), end.date()
-  pin_path = Path(__file__).resolve().parent / 'calendars' / 'eia_wngsr.txt'
+  pin_path = Path(__file__).resolve().parent / 'Calendars' / 'eia_wngsr.txt'
   pin = []
   if pin_path.exists():
     for line in pin_path.read_text(encoding='utf-8').splitlines():
@@ -400,30 +400,15 @@ def cleanS(s, isMonthlyRebal=True):
 def EMA(s, n):
   return s.ewm(span=n, min_periods=n, adjust=False).mean().rename('EMA')
 
-def getCrsiS(closeS, rsiPeriods=3, streakPeriods=2, rankPeriods=100):
-  def wilderRsi(s, n):
-    d = s.diff()
-    up = d.clip(lower=0)
-    dn = (-d).clip(lower=0)
-    au = up.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
-    ad = dn.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
-    return 100 - (100 / (1 + au / ad))
-  #####
-  signs = np.sign(closeS.diff().fillna(0).to_numpy())
-  streak = np.zeros(len(signs))
-  for i in range(1, len(signs)):
-    if signs[i] > 0:
-      streak[i] = streak[i - 1] + 1 if streak[i - 1] > 0 else 1
-    elif signs[i] < 0:
-      streak[i] = streak[i - 1] - 1 if streak[i - 1] < 0 else -1
-  streakS = pd.Series(streak, index=closeS.index)
-  #####
-  rocS = closeS.pct_change() * 100
-  def percentRank(x):
-    return 100.0 * np.sum(x[:-1] < x[-1]) / (len(x) - 1)
-  rankS = rocS.rolling(rankPeriods + 1).apply(percentRank, raw=True)
-  #####
-  return ((wilderRsi(closeS, rsiPeriods) + wilderRsi(streakS, streakPeriods) + rankS) / 3).rename('CRSI')
+def getCutlerRsiS(closeS, n=3):
+  # Cutler RSI: SMA of gains/losses (not Wilder RMA).
+  # pandas_ta_classic.ta.rsi is Wilder-only — no Cutler/mamode hook; use ta.sma on up/down.
+  d = closeS.diff()
+  up = d.clip(lower=0)
+  dn = (-d).clip(lower=0)
+  au = ta.sma(up, length=n)
+  ad = ta.sma(dn, length=n)
+  return (100.0 - (100.0 / (1.0 + au / ad.replace(0, np.nan)))).rename(f'CutlerRSI{n}')
 
 def getHV(s, n=32, af=252):
   if isinstance(s, pd.DataFrame):
