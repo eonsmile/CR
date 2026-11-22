@@ -19,7 +19,8 @@ import QuantLib as ql
 #########
 # Scripts — AR live order (AR.py `l` / run*):
 # TAA | US Broad MRs: COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS
-# | Other MRs: COS2,GMR,HMR,JMR | SCI,VCA,VCA2,VCA3,VCA4 | BCS,NGS,SIS,WTS | AHS,GEO,ZBT
+# | Other MRs: COS2,HMR,JMR | SCI,VCA,VCA2,VCA3,VCA4 | BCS,NGS,SIS,WTS | AHS,GEO,ZBT
+# (GMR shelved 2026-11-21 → Lab/live-extras/GMRLib.py)
 # (+ TPP not in AR, kept first)
 #########
 
@@ -825,49 +826,6 @@ def runCOS2(yrStart, isSkipTitle=False):
   ql.dwTail(d['dwIntraday'])
   ql.bt(script, d['dp'], d['dw'], yrStart)
 
-def runGMRCore(yrStart):
-  und = 'GDAXI.INDX'
-  dp, dw, dfDict, hv = ql.btSetup([und], yrStart=yrStart-1)
-  #####
-  df = ql.applyDates(dfDict[und],dp)
-  oS = df['Open']
-  cS = df['Close']
-  ibsS = ql.getIbsS(df)
-  ret3S = (cS / cS.shift(3) - 1).rename('Ret 3D')
-  ratio100S = (cS / cS.rolling(100).mean()).rename('Ratio 100D')
-  ratio10S = (cS / cS.rolling(10).mean()).rename('Ratio 10D')
-  #####
-  isEntryS =(ret3S < -0.01) & (ibsS < .2) & (ratio100S > 1)
-  isExitS = ratio10S > 1
-  #####
-  dp[und] = oS.shift(-1)
-  dp.loc[dp.index[-1], und] = dp.loc[dp.index[-2], und]
-  dw[und] = ql.getStateS_timestop(isEntryS, isExitS, 11, isCleaned=True, isMonthlyRebal=True)
-  #####
-  d=dict()
-  d['dp']=dp
-  d['dw']=dw
-  d['oS']=oS
-  d['cS']=cS
-  d['ibsS']=ibsS
-  d['ret3S']=ret3S
-  d['ratio100S']=ratio100S
-  d['ratio10S']=ratio10S
-  return d
-
-def runGMR(yrStart, isSkipTitle=False):
-  script = 'GMR'
-  if not isSkipTitle:
-    st.header(script)
-  d=runGMRCore(yrStart)
-  st.header('Table')
-  tableS = ul.merge(
-    d['oS'], d['cS'],d['ibsS'].round(3), d['ret3S'].round(3),d['ratio100S'].round(3), d['ratio10S'].round(3), how='inner')
-  ql.stWriteDf(tableS.tail())
-  st.header('Weights')
-  ql.dwTail(d['dw'])
-  ql.bt(script, d['dp'], d['dw'], yrStart)
-
 def runHMRCore(yrStart):
   # 2828.HK: IBS<0.20 & IBS2<0.4 & WPR14<-70; exit IBS>0.50 or 4d; VT 0.32 / maxWgt 1
   # (vs fixed-1: 2017 nearly flat; 2008 DD 32.6%→18.9%). Prior 0.36/1.5 sat on 1.5 cap.
@@ -907,6 +865,10 @@ def runHMR(yrStart, isSkipTitle=False):
   ql.bt(script, d['dp'], d['dw'], yrStart)
 
 def runJMRCore(yrStart):
+  # EWJ/−FXY: DXJ IBS<.15 ∩ EWJ IBS<.3; exit DXJ IBS>.7 | TS7; VT 0.32 / maxWgt 1 on EWJ
+  # (was fixed ±1 — HV usually <0.32 so clip binds; align with HMR size)
+  volTgt = .32
+  maxWgt = 1.0
   etc=['DXJ']
   dp, dw, dfDict, hv = ql.btSetup(ul.spl('EWJ,FXY')+etc,yrStart=yrStart-1)
   dp2 = dp.copy()
@@ -922,6 +884,7 @@ def runJMRCore(yrStart):
   stateS   = ql.getStateS_timestop(isEntryS, isExitS, 7, isCleaned=True, isMonthlyRebal=True)
   #####
   dw['EWJ'] = stateS
+  dw['EWJ'] = (dw['EWJ'] * volTgt / hv['EWJ']).clip(0, maxWgt)
   dw['FXY'] = -dw['EWJ']
   #####
   d=dict()

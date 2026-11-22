@@ -13,6 +13,7 @@ import curl_cffi
 import warnings
 import os
 import random
+import time
 
 
 def getPriceHistory(und, yrStart=SHARED_DICT['yrStart']):
@@ -90,16 +91,28 @@ def getPriceHistoryCrypto(und, yrStart=SHARED_DICT['yrStart']):
   random.shuffle(keys)
   last = None
   data = None
-  for key in keys:
+  # ConnectionReset / timeout / rate-limit: rotate key + retry.
+  for attempt in range(max(3, len(keys))):
+    key = keys[attempt % len(keys)]
     z = f"https://min-api.cryptocompare.com/data/v2/histoday?fsym={und}&tsym=USD&allData=true&api_key={key}"
-    j = requests.get(z).json()
+    try:
+      j = requests.get(z, timeout=30).json()
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+      last = f"{type(e).__name__}: {e}"
+      time.sleep(1.5)
+      continue
     data = j.get('Data')
     if j.get('Response') == 'Success' and isinstance(data, dict) and data.get('Data'):
       break
     last = j.get('Message') or j
     data = None
+    time.sleep(0.5)
   else:
-    raise RuntimeError(f"cryptocompare histoday: {last}")
+    # CC dead — Yahoo last resort so AR/TAA don't crash on 10054 / rate-limit.
+    df = getPriceHistoryYahoo(f'{und}-USD', yrStart=yrStart)
+    df = df[df.index > pd.Timestamp('2010-7-16')]
+    ul.cachePersist('w', cacheKey, df)
+    return df
   df = pd.DataFrame(data['Data'])
   df['date'] = [pendulum.from_timestamp(s).naive() for s in df['time']]
   df = df[df['date'] > '2010-7-16']

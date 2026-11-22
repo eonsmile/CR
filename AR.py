@@ -42,7 +42,7 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
   # Within each group, scripts are alphabetically sorted (l / weights / run* match StratLib).
   a=.2
   b=.08
-  l = ul.spl('TAA,COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS,COS2,GMR,HMR,JMR,SCI,VCA,VCA2,VCA3,VCA4,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
+  l = ul.spl('TAA,COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS,COS2,HMR,JMR,SCI,VCA,VCA2,VCA3,VCA4,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
 
   d = {
     # Momentum
@@ -61,7 +61,6 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
     #####
     # Other MRs
     'COS2': b,  # _MR2
-    'GMR': b,  # _MR2
     'HMR': b,  # _HMR
     'JMR': b,  # _MR2
     #####
@@ -162,8 +161,6 @@ if isRunSystems:
   #####
   # Other MRs
   sl.runCOS2(y)
-  st.divider()
-  sl.runGMR(y)
   st.divider()
   sl.runHMR(y)
   st.divider()
