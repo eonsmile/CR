@@ -18,8 +18,8 @@ import QuantLib as ql
 
 #########
 # Scripts — AR live order (AR.py `l` / run*):
-# TAA | US Broad MRs: COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS
-# | Other MRs: COS2,HMR,JMR | SCI,VCA,VCA2,VCA3,VCA4 | BCS,NGS,SIS,WTS | AHS,GEO,ZBT
+# TAA | US Broad MRs: COS,COS2,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS
+# | Other MRs: COS3,HMR,JMR | SCI,VCA,VCA2,VCA3,VCA4 | BCS,NGS,SIS,WTS | AHS,GEO,ZBT
 # (GMR shelved 2026-11-21 → Lab/live-extras/GMRLib.py)
 # (+ TPP not in AR, kept first)
 #########
@@ -380,29 +380,18 @@ def runTAA(yrStart, isSkipTitle=False):
 # US Broad MRs
 #####
 def runCOSCore(yrStart):
+  # Mon/Tue Connors DD | last5 downs ∩ ratio>1 ∩ ¬Fri → SPY ON ×2. Seated @a.
   und, size = 'SPY', 2
   df = pl.getPriceHistory(und, yrStart=yrStart - 1)
   o, c = df['Open'], df['Close']
   ibsS = ql.getIbsS(df)
+  ratioS = (c / c.rolling(200).mean()).rename('Ratio')
+  eomS = ql.getNYSEEomS(df.index)
   ddS = ((c < o) & (o < c.shift(2)) & (ibsS < .3) & (df.index.dayofweek <= 1)).fillna(False)
-  seasonalS = ((df.index.day == 25) & (c < c.shift(1))).fillna(False)
+  seasonalS = ((eomS <= 5) & (c < c.shift(1)) & (ratioS > 1) & (df.index.dayofweek != 4)).fillna(False)
   stateS = (ddS | seasonalS).rename('State')
   #####
-  openIdx = df.index + pd.Timedelta(hours=9, minutes=30)
-  closeIdx = df.index + pd.Timedelta(hours=16)
-  px = pd.concat([
-    pd.Series(o.values, index=openIdx, name=und),
-    pd.Series(c.values, index=closeIdx, name=und),
-  ]).sort_index().to_frame()
-  dwI = pd.DataFrame(0.0, index=px.index, columns=[und])
-  dwI.loc[closeIdx[stateS.values], und] = size
-  dwI.loc[dwI.index.year < yrStart] = 0
-  #####
-  r = (stateS.astype(float).shift(1) * size * (o / c.shift(1) - 1)).fillna(0)
-  r.loc[r.index.year < yrStart] = 0
-  dp = (1 + r).cumprod().rename('COS').to_frame()
-  dw = dp * np.nan
-  dw.iloc[ql.endpoints(dw), 0] = 1
+  dp, dw, px, dwI = ql.getOnCloseNextOpen(und, o, c, stateS, size, 'COS', yrStart)
   #####
   d = dict()
   d['dp'] = dp
@@ -410,6 +399,8 @@ def runCOSCore(yrStart):
   d['dpIntraday'] = px
   d['dwIntraday'] = dwI
   d['df'] = df
+  d['ibsS'] = ibsS
+  d['ratioS'] = ratioS
   d['stateS'] = stateS.astype(float)
   return d
 
@@ -421,7 +412,63 @@ def runCOS(yrStart, isSkipTitle=False):
   d = runCOSCore(yrStart)
   st.header('Table')
   tableS = ul.merge(
-    d['df']['Open'].round(2), d['df']['Close'].round(2), d['stateS'], how='inner')
+    d['df']['Open'].round(2), d['df']['Close'].round(2),
+    d['ibsS'].round(3), d['ratioS'].round(3), d['stateS'], how='inner')
+  ql.stWriteDf(tableS.tail())
+  st.header('Weights')
+  ql.dwTail(d['dwIntraday'])
+  ql.bt(script, d['dp'], d['dw'], yrStart)
+
+def runCOS2Core(yrStart):
+  # ATM-rush: dVOLI>dVIX ∩ dVOLI>2.5% ∩ ¬Fri → SPY close→next open ×2.
+  # Fixed 2 (Q+no VT). ¬Fri unlocks fixed2 MDD PASS (keep-Fri fixed2 FAIL ~17%).
+  # Seated @b 2026-11-22. ^VOLI via Yahoo (from mid-2013).
+  und, size, thr = 'SPY', 2, .025
+  spyDf = pl.getPriceHistory(und, yrStart=yrStart - 1)
+  oS, cS = spyDf['Open'], spyDf['Close']
+  voliS = ql.applyDates(
+    pl.getPriceHistoryYahoo('^VOLI', yrStart=yrStart - 1)['Close'], cS).rename('VOLI')
+  vixS = ql.applyDates(
+    pl.getPriceHistory('VIX.INDX', yrStart=yrStart - 1)['Close'], cS).rename('VIX')
+  dVoliS = voliS.pct_change().rename('dVOLI')
+  dVixS = vixS.pct_change().rename('dVIX')
+  stateS = (
+    (dVoliS > dVixS) & (dVoliS > thr) & (spyDf.index.dayofweek != 4)
+  ).fillna(False).rename('State')
+  df = ul.merge(
+    voliS.rename('VOLI'),
+    vixS.rename('VIX'),
+    oS.rename('SPY Open'),
+    cS.rename('SPY Close'),
+    how='inner')
+  #####
+  dp, dw, px, dwI = ql.getOnCloseNextOpen(und, oS, cS, stateS, size, 'COS2', yrStart)
+  #####
+  d = dict()
+  d['dp'] = dp
+  d['dw'] = dw
+  d['dpIntraday'] = px
+  d['dwIntraday'] = dwI
+  d['df'] = df
+  d['dVoliS'] = dVoliS
+  d['dVixS'] = dVixS
+  d['stateS'] = stateS.astype(float)
+  return d
+
+def runCOS2(yrStart, isSkipTitle=False):
+  script = 'COS2'
+  if not isSkipTitle:
+    st.header(script)
+  #####
+  d = runCOS2Core(yrStart)
+  st.header('Table')
+  tableS = ul.merge(
+    d['df']['VOLI'].round(2),
+    d['df']['VIX'].round(2),
+    d['df']['SPY Open'].round(2),
+    d['df']['SPY Close'].round(2),
+    d['dVoliS'].round(3), d['dVixS'].round(3),
+    d['stateS'], how='inner')
   ql.stWriteDf(tableS.tail())
   st.header('Weights')
   ql.dwTail(d['dwIntraday'])
@@ -761,9 +808,9 @@ def runYPS(yrStart, isSkipTitle=False):
 #####
 # Other MRs
 #####
-def runCOS2Core(yrStart):
-  # SMH Ret1D<-2% ∩ ratio>1 → SOXL close→next open (all sessions).
-  # Fixed size 1/3 (3× und ≈ 1× notionally). Seated @b 2026-11-19.
+def runCOS3Core(yrStart):
+  # SMH Ret1D<-2% ∩ ratio>1 ∩ ¬Fri → SOXL close→next open.
+  # Fixed size 1/3 (3× und ≈ 1× notionally). ¬Fri aligned with COS/COS2. Seated @b.
   # Dict mirrors COS (+ ret1S, ratioS). Signal SMH; trade SOXL.
   und, size = 'SOXL', 1 / 3
   etc = ['SMH']
@@ -775,28 +822,16 @@ def runCOS2Core(yrStart):
   ret1S = ql.applyDates(smhDf['Close'].pct_change(), cS).rename('SMH Ret 1D')
   ratioS = ql.applyDates(
     smhDf['Close'] / smhDf['Close'].rolling(200).mean(), cS).rename('Ratio')
-  stateS = ((ret1S < -0.02) & (ratioS > 1)).fillna(False).rename('State')
+  stateS = (
+    (ret1S < -0.02) & (ratioS > 1) & (soxlDf.index.dayofweek != 4)
+  ).fillna(False).rename('State')
   df = ul.merge(
     ql.applyDates(smhDf['Close'], cS).rename('SMH Close'),
     oS.rename('SOXL Open'),
     cS.rename('SOXL Close'),
     how='inner')
   #####
-  openIdx = soxlDf.index + pd.Timedelta(hours=9, minutes=30)
-  closeIdx = soxlDf.index + pd.Timedelta(hours=16)
-  px = pd.concat([
-    pd.Series(oS.values, index=openIdx, name=und),
-    pd.Series(cS.values, index=closeIdx, name=und),
-  ]).sort_index().to_frame()
-  dwI = pd.DataFrame(0.0, index=px.index, columns=[und])
-  dwI.loc[closeIdx[stateS.values], und] = size
-  dwI.loc[dwI.index.year < yrStart] = 0
-  #####
-  r = (stateS.astype(float).shift(1) * size * (oS / cS.shift(1) - 1)).fillna(0)
-  r.loc[r.index.year < yrStart] = 0
-  dp = (1 + r).cumprod().rename('COS2').to_frame()
-  dw = dp * np.nan
-  dw.iloc[ql.endpoints(dw), 0] = 1
+  dp, dw, px, dwI = ql.getOnCloseNextOpen(und, oS, cS, stateS, size, 'COS3', yrStart)
   #####
   d = dict()
   d['dp'] = dp
@@ -809,12 +844,12 @@ def runCOS2Core(yrStart):
   d['stateS'] = stateS.astype(float)
   return d
 
-def runCOS2(yrStart, isSkipTitle=False):
-  script = 'COS2'
+def runCOS3(yrStart, isSkipTitle=False):
+  script = 'COS3'
   if not isSkipTitle:
     st.header(script)
   #####
-  d = runCOS2Core(yrStart)
+  d = runCOS3Core(yrStart)
   st.header('Table')
   tableS = ul.merge(
     d['df']['SMH Close'].round(2),

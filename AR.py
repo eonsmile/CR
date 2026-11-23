@@ -42,7 +42,7 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
   # Within each group, scripts are alphabetically sorted (l / weights / run* match StratLib).
   a=.2
   b=.08
-  l = ul.spl('TAA,COS,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS,COS2,HMR,JMR,SCI,VCA,VCA2,VCA3,VCA4,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
+  l = ul.spl('TAA,COS,COS2,CUT,IBS,IBS2,IGQ,MTQ,RSS,STK,YPS,COS3,HMR,JMR,SCI,VCA,VCA2,VCA3,VCA4,BCS,NGS,SIS,WTS,AHS,GEO,ZBT')
 
   d = {
     # Momentum
@@ -50,6 +50,7 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
     #####
     # US Broad MRs
     'COS': a,  # _MR
+    'COS2': b,  # _MR
     'CUT': b,  # _MR
     'IBS': b,  # _MR
     'IBS2': b,  # _MR
@@ -60,7 +61,7 @@ def runAlpha(yrStart, isSkipTitle=False, note=None, isStampArMd=None):
     'YPS': b,  # _MR
     #####
     # Other MRs
-    'COS2': b,  # _MR2
+    'COS3': b,  # _MR2
     'HMR': b,  # _HMR
     'JMR': b,  # _MR2
     #####
@@ -142,6 +143,8 @@ if isRunSystems:
   # US Broad MRs
   sl.runCOS(y)
   st.divider()
+  sl.runCOS2(y)
+  st.divider()
   sl.runCUT(y)
   st.divider()
   sl.runIBS(y)
@@ -160,7 +163,7 @@ if isRunSystems:
   st.divider()
   #####
   # Other MRs
-  sl.runCOS2(y)
+  sl.runCOS3(y)
   st.divider()
   sl.runHMR(y)
   st.divider()

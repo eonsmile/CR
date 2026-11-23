@@ -438,6 +438,31 @@ def getIsGLDNearHHV63S(df, thr, lb=63):
   hiS = df['High'].rolling(int(lb)).max()
   return (df['Close'] >= hiS * float(thr)).rename('GLD Near HHV63?')
 
+def getOnCloseNextOpen(und, oS, cS, stateS, size, name, yrStart):
+  # Same-day close → next open overnight (COS / COS2 / COS3 fill).
+  # size: scalar or Series on stateS index. Returns dp, dw, dpIntraday, dwIntraday.
+  isOnS = stateS.fillna(False).astype(bool)
+  if np.isscalar(size):
+    sizeS = pd.Series(float(size), index=isOnS.index)
+  else:
+    sizeS = size.reindex(isOnS.index).fillna(0).astype(float)
+  wS = (isOnS.astype(float) * sizeS)
+  openIdx = cS.index + pd.Timedelta(hours=9, minutes=30)
+  closeIdx = cS.index + pd.Timedelta(hours=16)
+  px = pd.concat([
+    pd.Series(oS.values, index=openIdx, name=und),
+    pd.Series(cS.values, index=closeIdx, name=und),
+  ]).sort_index().to_frame()
+  dwI = pd.DataFrame(0.0, index=px.index, columns=[und])
+  dwI.loc[closeIdx[isOnS.values], und] = sizeS.loc[isOnS].values
+  dwI.loc[dwI.index.year < yrStart] = 0
+  r = (wS.shift(1) * (oS / cS.shift(1) - 1)).fillna(0)
+  r.loc[r.index.year < yrStart] = 0
+  dp = (1 + r).cumprod().rename(name).to_frame()
+  dw = dp * np.nan
+  dw.iloc[endpoints(dw), 0] = 1
+  return dp, dw, px, dwI
+
 def getSigmaSpikeS(cS, n=60, isShift=True, prefix=''):
   # Adam Grimes SigmaSpike: r / rolling sd(n); default sd lagged 1 day
   rS = cS.astype(float).pct_change()
